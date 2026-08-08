@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#D6392F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>GRS 보수ON — 보수공사 접수·트래킹</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<script>
+/* PWA: 호스팅(https) 배포 시 앱 설치 지원 — 파일로 열 때는 자동 비활성 */
+if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+window.deferredPrompt=null;
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); window.deferredPrompt=e; try{render()}catch(err){} });
+function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt(); window.deferredPrompt=null; } }
+</script>
+<style>
+  :root{
+    --red:#D6392F; --red-dark:#B32B22; --red-bg:#FCEBEA;
+    --ink:#1F2430; --sub:#6B7280; --line:#E5E7EB; --bg:#F4F5F7; --card:#FFFFFF;
+    --green:#1E8E5A; --green-bg:#E6F4EC; --amber:#B45309; --amber-bg:#FEF3E2;
+    --blue:#2563EB; --blue-bg:#EAF0FE; --gray-bg:#EEF0F3;
+    --radius:14px; --shadow:0 1px 3px rgba(16,24,40,.08),0 1px 2px rgba(16,24,40,.04);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;font-size:14px}
+  input,select,textarea{font-family:inherit;font-size:15px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;background:#fff}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--red);outline-offset:-1px;border-color:var(--red)}
+  label{font-size:13px;font-weight:700;color:var(--sub);display:block;margin:14px 0 6px}
+
+  header{background:var(--red);color:#fff;position:sticky;top:0;z-index:50;box-shadow:var(--shadow)}
+  .hd-top{display:flex;align-items:center;gap:10px;padding:12px 16px;max-width:960px;margin:0 auto}
+  .logo{font-weight:800;font-size:18px;letter-spacing:-.3px;white-space:nowrap}
+  .logo small{font-weight:500;font-size:11px;opacity:.85;display:block;letter-spacing:0}
+  .hd-spacer{flex:1}
+  .whoami{font-size:12px;font-weight:700;background:rgba(255,255,255,.18);border-radius:99px;padding:6px 12px;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+  .role-sel{width:auto;max-width:150px;border:none;border-radius:10px;padding:8px 10px;font-size:13px;font-weight:700;color:var(--red-dark);background:#fff}
+  .bell{position:relative;padding:8px;border-radius:10px;color:#fff;font-size:20px;line-height:1}
+  .bell:active{background:rgba(255,255,255,.2)}
+  .bell .cnt{position:absolute;top:2px;right:0;background:#FFD028;color:#7A2E00;font-size:10px;font-weight:800;border-radius:9px;min-width:17px;height:17px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+  nav{display:flex;max-width:960px;margin:0 auto;overflow-x:auto}
+  nav button{color:rgba(255,255,255,.75);font-weight:700;padding:10px 14px;border-bottom:3px solid transparent;white-space:nowrap;font-size:14px}
+  nav button.on{color:#fff;border-bottom-color:#FFD028}
+
+  main{max-width:960px;margin:0 auto;padding:16px 14px 90px}
+
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;margin-bottom:12px}
+  .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;border-radius:99px;padding:3px 10px;white-space:nowrap}
+  .b-red{background:var(--red-bg);color:var(--red-dark)} .b-green{background:var(--green-bg);color:var(--green)}
+  .b-amber{background:var(--amber-bg);color:var(--amber)} .b-blue{background:var(--blue-bg);color:var(--blue)}
+  .b-gray{background:var(--gray-bg);color:var(--sub)}
+  .b-overdue{background:var(--red);color:#fff}
+  .urgent{background:#7C1D18;color:#fff}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  .tile{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 12px;text-align:center}
+  .tile .n{font-size:26px;font-weight:800;letter-spacing:-1px}
+  .tile .t{font-size:12px;color:var(--sub);font-weight:700;margin-top:2px}
+  .tile.alert .n{color:var(--red)}
+  .h2{font-size:15px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+  .stagebar{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px}
+  .stagebar .nm{width:88px;color:var(--sub);font-weight:700;flex-shrink:0}
+  .stagebar .tr{flex:1;background:var(--gray-bg);border-radius:6px;height:14px;overflow:hidden}
+  .stagebar .fl{height:100%;background:var(--red);border-radius:6px;min-width:2px}
+  .stagebar .v{width:24px;text-align:right;font-weight:800}
+
+  .filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;-webkit-overflow-scrolling:touch}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:99px;padding:6px 13px;font-weight:700;font-size:13px;color:var(--sub);white-space:nowrap}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .search{margin-bottom:10px}
+  .req{display:block;width:100%;text-align:left}
+  .req .row1{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+  .req .id{font-size:12px;color:var(--sub);font-weight:700}
+  .req h3{font-size:15px;font-weight:800;margin-bottom:2px}
+  .req .meta{font-size:12.5px;color:var(--sub)}
+  .req .row2{display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:8px}
+  .minibar{flex:1;display:flex;gap:3px}
+  .minibar i{flex:1;height:5px;border-radius:3px;background:var(--gray-bg)}
+  .minibar i.done{background:var(--green)} .minibar i.cur{background:var(--red)}
+  .dday{font-size:12px;font-weight:800}
+
+  .back{color:var(--sub);font-weight:700;margin-bottom:10px;font-size:14px}
+  .stepper{display:flex;margin:14px 0 4px}
+  .step{flex:1;text-align:center;position:relative;font-size:10.5px;font-weight:700;color:var(--sub)}
+  .step .dot{width:24px;height:24px;border-radius:50%;background:var(--gray-bg);color:var(--sub);display:flex;align-items:center;justify-content:center;margin:0 auto 4px;font-size:12px;font-weight:800;position:relative;z-index:2}
+  .step::before{content:'';position:absolute;top:12px;left:-50%;width:100%;height:2px;background:var(--gray-bg);z-index:1}
+  .step:first-child::before{display:none}
+  .step.done .dot{background:var(--green);color:#fff} .step.done::before{background:var(--green)}
+  .step.cur .dot{background:var(--red);color:#fff;box-shadow:0 0 0 4px var(--red-bg)} .step.cur::before{background:var(--green)}
+  .step.cur{color:var(--red-dark)}
+  .sec{border-top:1px solid var(--line);padding:14px 0}
+  .sec:last-child{padding-bottom:0}
+  .sec .st{font-weight:800;font-size:14px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .kv{display:flex;font-size:14px;margin-bottom:5px}
+  .kv b{width:92px;color:var(--sub);font-weight:700;flex-shrink:0;font-size:13px}
+  .photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .photos img{width:86px;height:86px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--red);color:#fff;font-weight:800;border-radius:10px;padding:11px 16px;font-size:14px}
+  .btn:active{background:var(--red-dark)}
+  .btn:disabled{opacity:.5}
+  .btn.sec2{background:var(--gray-bg);color:var(--ink)}
+  .btn.grn{background:var(--green)}
+  .btn.sm{padding:7px 12px;font-size:13px}
+  .btn.blk{width:100%;margin-top:10px}
+  .file-add{border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--sub);font-weight:700;font-size:13px;width:100%}
+  .note{font-size:12.5px;color:var(--sub);background:var(--gray-bg);border-radius:8px;padding:8px 10px;margin-top:8px}
+  .warn{background:var(--red-bg);color:var(--red-dark);font-weight:700}
+
+  .cmt{background:var(--gray-bg);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .cmt .who{font-size:12px;font-weight:800;margin-bottom:2px}
+  .cmt .who span{color:var(--sub);font-weight:500;margin-left:6px}
+  .hist{position:relative;padding-left:18px}
+  .hist::before{content:'';position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--line)}
+  .hitem{position:relative;padding-bottom:12px;font-size:13px}
+  .hitem::before{content:'';position:absolute;left:-17px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--red)}
+  .hitem .ts{color:var(--sub);font-size:11.5px}
+
+  .panel{position:fixed;inset:0;background:rgba(15,18,25,.45);z-index:100;display:none}
+  .panel.open{display:block}
+  .panel-in{position:absolute;right:0;top:0;bottom:0;width:min(360px,92vw);background:#fff;padding:16px;overflow-y:auto}
+  .panel-in h2{font-size:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
+  .noti{border-left:4px solid var(--line);padding:9px 12px;margin-bottom:8px;background:var(--gray-bg);border-radius:0 10px 10px 0;font-size:13.5px}
+  .noti.over{border-left-color:var(--red);background:var(--red-bg)}
+  .noti .ts{font-size:11.5px;color:var(--sub);margin-top:2px}
+
+  .modal{position:fixed;inset:0;background:rgba(15,18,25,.5);z-index:110;display:none;align-items:flex-end;justify-content:center}
+  .modal.open{display:flex}
+  .modal-in{background:#fff;border-radius:18px 18px 0 0;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;padding:20px 18px 26px}
+  .modal-in h2{font-size:17px;margin-bottom:4px}
+  .modal-in .sub{font-size:13px;color:var(--sub)}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-weight:700;font-size:14px;padding:11px 20px;border-radius:99px;z-index:200;box-shadow:var(--shadow);display:none;white-space:nowrap}
+
+  .role-note{background:var(--blue-bg);color:var(--blue);font-size:12.5px;font-weight:700;border-radius:10px;padding:9px 12px;margin-bottom:12px}
+  .empty{text-align:center;color:var(--sub);padding:40px 0;font-weight:700}
+  .sysbar{background:#7A2E00;color:#FFE9B8;font-size:12.5px;font-weight:700;text-align:center;padding:7px 12px}
+  .sysbar.err{background:var(--red-dark);color:#fff}
+
+  /* ===== 로그인 ===== */
+  #login{position:fixed;inset:0;background:linear-gradient(160deg,var(--red) 0%,#A32218 100%);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+  #login.open{display:flex}
+  .login-card{background:#fff;border-radius:20px;padding:28px 22px;width:100%;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  .login-card .lg{text-align:center;margin-bottom:6px;font-size:24px;font-weight:800;color:var(--red-dark);letter-spacing:-.5px}
+  .login-card .ds{text-align:center;font-size:13px;color:var(--sub);margin-bottom:18px}
+  .rolebtns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .rolebtn{border:2px solid var(--line);border-radius:12px;padding:12px 4px;text-align:center;font-weight:800;font-size:13px;background:#fff}
+  .rolebtn .em{font-size:22px;display:block;margin-bottom:4px}
+  .rolebtn.on{border-color:var(--red);background:var(--red-bg);color:var(--red-dark)}
+  .login-err{color:var(--red-dark);font-size:13px;font-weight:700;margin-top:10px;text-align:center;display:none}
+
+  .spin{display:inline-block;width:16px;height:16px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  /* ===== 서명 ===== */
+  .sgwrap{border:2px dashed var(--line);border-radius:12px;background:#fff;margin-top:8px;position:relative}
+  .sgwrap canvas{display:block;width:100%;height:190px;border-radius:12px;touch-action:none}
+  .sghint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#C9CDD4;font-weight:800;pointer-events:none;font-size:15px}
+  .signimg{background:#fff;border:1px solid var(--line);border-radius:10px;max-width:260px;width:100%;margin-top:6px}
+
+  /* ===== 채팅 ===== */
+  .roomrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left}
+  .roomrow .rmain{flex:1;min-width:0}
+  .roomrow .rname{font-weight:800;font-size:15px}
+  .roomrow .rlast{font-size:12.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .roomrow .rts{font-size:11px;color:var(--sub);flex-shrink:0}
+  #chatMsgs{height:calc(100vh - 330px);min-height:240px;overflow-y:auto;background:var(--gray-bg);border-radius:12px;padding:12px;margin-top:10px}
+  .msg{max-width:80%;margin-bottom:8px;padding:8px 12px;border-radius:14px;font-size:14px;width:fit-content;word-break:break-word}
+  .msg.me{margin-left:auto;background:var(--red);color:#fff;border-bottom-right-radius:4px}
+  .msg.them{background:#fff;border:1px solid var(--line);border-bottom-left-radius:4px}
+  .msg .mwho{font-size:11px;font-weight:800;color:var(--blue);margin-bottom:2px}
+  .msg .mts{font-size:10px;opacity:.6;margin-top:3px;text-align:right}
+
+  /* ===== 점포 검색 선택 ===== */
+  .spwrap{position:relative}
+  .spdrop{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--line);border-radius:10px;max-height:230px;overflow-y:auto;z-index:60;box-shadow:0 8px 24px rgba(16,24,40,.14);display:none}
+  .spitem{padding:10px 13px;font-size:14px;border-bottom:1px solid var(--gray-bg);cursor:pointer}
+  .spitem:last-child{border-bottom:none}
+  .spitem:active,.spitem:hover{background:var(--gray-bg)}
+  .spcnt{padding:7px 13px;font-size:11.5px;color:var(--sub);font-weight:700;background:var(--gray-bg)}
+
+  /* ===== 완료보고서 인쇄 ===== */
+  #printArea{display:none}
+  @media print{
+    body>*{display:none !important}
+    #printArea{display:block !important;font-size:12pt;color:#000}
+    @page{size:A4;margin:15mm}
+  }
+  @media(max-width:520px){ .tiles{grid-template-columns:repeat(2,1fr)} .logo small{display:none} .whoami{max-width:110px} }
+</style>
+</head>
+<body>
+
+<div id="sysbar"></div>
+
+<!-- ===== 로그인 화면 ===== -->
+<div id="login">
+  <div class="login-card">
+    <div class="lg">GRS 보수ON</div>
+    <div class="ds">롯데GRS 직영점 보수공사 접수·트래킹</div>
+    <label>소속 선택</label>
+    <div class="rolebtns">
+      <button class="rolebtn" data-r="store" onclick="pickRole('store')"><span class="em">🏪</span>점포</button>
+      <button class="rolebtn" data-r="vendor" onclick="pickRole('vendor')"><span class="em">🔧</span>토마토세븐</button>
+      <button class="rolebtn" data-r="hq" onclick="pickRole('hq')"><span class="em">🏢</span>본사담당</button>
+    </div>
+    <div id="loginStoreWrap" style="display:none">
+      <label>점포명</label>
+      <div class="spwrap">
+        <input id="lgStore" placeholder="🔍 점포명 검색 또는 입력" autocomplete="off"
+          oninput="spFilter('lgStore')" onfocus="spFilter('lgStore')" onblur="spHide('lgStore')">
+        <div class="spdrop" id="lgStoreDrop"></div>
+      </div>
+      <datalist id="storeList"></datalist>
+    </div>
+    <div id="loginNameWrap" style="display:none">
+      <label>이름 (담당자)</label>
+      <input id="lgName" placeholder="예) 홍길동">
+    </div>
+    <label>접속코드</label>
+    <input id="lgCode" type="password" placeholder="소속별 접속코드 입력" autocomplete="off">
+    <button class="btn blk" id="lgBtn" onclick="doLogin()">입장하기</button>
+    <div class="login-err" id="lgErr"></div>
+    <div class="note" style="margin-top:14px">접속코드는 본사 보수담당자에게 문의하세요.</div>
+  </div>
+</div>
+
+<header>
+  <div class="hd-top">
+    <div class="logo">GRS 보수ON<small>롯데GRS 직영점 보수공사 관리</small></div>
+    <div class="hd-spacer"></div>
+    <span class="whoami" id="whoami" style="display:none"></span>
+    <select class="role-sel" id="roleSel" style="display:none" onchange="setRole(this.value)">
+      <option value="hq">🏢 본사담당</option>
+      <option value="store">🏪 점포</option>
+      <option value="vendor">🔧 토마토세븐</option>
+    </select>
+    <button class="bell" onclick="togglePanel(true)">🔔<span class="cnt" id="notiCnt" style="display:none">0</span></button>
+  </div>
+  <nav id="nav"></nav>
+</header>
+
+<main id="main"></main>
+
+<div class="panel" id="panel" onclick="if(event.target===this)togglePanel(false)">
+  <div class="panel-in">
+    <h2>알림 <button class="btn sec2 sm" onclick="togglePanel(false)">닫기</button></h2>
+    <div id="notiList"></div>
+  </div>
+</div>
+
+<div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="modal-in" id="modalIn"></div>
+</div>
+<div class="toast" id="toast"></div>
+<div id="printArea"></div>
+
+<!-- Firebase (modular SDK — 이름 지정 데이터베이스 지원) -->
+<script type="module">
+try{
+  const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
+  const { getAuth, signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
+  const { getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, arrayUnion } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
+  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, arrayUnion };
+}catch(e){ window.FB_LOAD_ERROR = e.message; }
+window.dispatchEvent(new Event('fb-ready'));
+</script>
+
+<script>
+/* =========================================================================
+   GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
+
+   ★ 운영 설정 방법 ★
+   1) console.firebase.google.com 에서 무료 프로젝트 생성
+   2) Firestore Database 만들기 + Authentication 익명 로그인 사용 설정
+   3) 프로젝트 설정 > 웹앱 추가 후 발급되는 firebaseConfig를
+      아래 FIREBASE_CONFIG = null 자리에 붙여넣기
+   4) 이 파일을 링크(호스팅)나 파일 그대로 점포·업체에 배포
+
+   FIREBASE_CONFIG가 null이면 "데모 모드"로 동작합니다
+   (샘플 데이터, 저장 안 됨, 역할 자유 전환).
+========================================================================= */
+
+/* ▼▼▼▼▼▼▼▼▼▼ 여기에 firebaseConfig 붙여넣기 ▼▼▼▼▼▼▼▼▼▼ */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyASEFGMirbr9jL92PKV-h_-keByzIRwixw",
+  authDomain: "grs-bosu.firebaseapp.com",
+  projectId: "grs-bosu",
+  storageBucket: "grs-bosu.firebasestorage.app",
+  messagingSenderId: "468430849098",
+  appId: "1:468430849098:web:4655742c764151efb292b3",
+  measurementId: "G-RY1MM1DWGK"
+};
+/* 예시:
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSy....",
+  authDomain: "grs-bosuon.firebaseapp.com",
+  projectId: "grs-bosuon",
+  storageBucket: "grs-bosuon.appspot.com",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef"
+};
+*/
+/* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+
+/* 초기 접속코드 — 운영 시작 후 본사 '설정' 탭에서 변경 가능 */
+const DEFAULT_CODES = { hq:'GRS-ADMIN-2026', store:'GRS-STORE-2026', vendor:'TOMATO7-2026' };
+const DEFAULT_SLA = { SURVEY:3, ESTIMATE:3, REVIEW:2, SCHEDULE:7, CONSTRUCT:14 };
+const DEFAULT_STORES = ['롯데리아 강남역점','롯데리아 홍대점','엔제리너스 잠실롯데월드점','크리스피크림 명동점','롯데리아 부산서면점','엔제리너스 판교테크노밸리점'];
+
+/* 표준노임단가 (대한건설협회 시중노임단가, 2026.01 기준 — 본사 설정에서 엑셀로 갱신 가능) */
+const DEFAULT_LABOR = [["작업반장",215907],["보통인부",172068],["특별인부",226122],["조력공",179028],["제도사",237324],["비계공",281939],["형틀목공",275790],["철근공",268187],["철공",239808],["철판공",221481],["철골공",252641],["용접공",282536],["콘크리트공",273540],["보링공",232562],["착암공",222306],["화약취급공",272448],["할석공",241932],["포설공",221015],["포장공",273308],["잠수부",387342],["조적공",270807],["견출공",250903],["건축목공",277642],["창호공",247188],["유리공",253539],["방수공",228286],["미장공",277276],["타일공",290939],["도장공",263017],["내장공",256883],["도배공",227614],["연마공",210772],["석공",268908],["줄눈공",211653],["판넬조립공",243121],["지붕잇기공",233250],["벌목부",253243],["조경공",235204],["배관공(수도)",262580],["배관공",247897],["보일러공",240120],["위생공",218908],["덕트공",202472],["보온공",217012],["인력운반공",180193],["궤도공",218933],["건설기계조장",210909],["건설기계운전사",283297],["화물차운전사",238936],["일반기계운전사",173995],["기계설비공",241698],["플랜트배관공",320480],["플랜트제관공",266029],["플랜트특수용접공",337247],["플랜트용접공",292640],["플랜트기계설치공",230376],["플랜트특별인부",213074],["플랜트케이블전공",264269],["플랜트계장공",204377],["플랜트보온공",250140],["제철축로공",362985],["비파괴시험공",214553],["특급품질관리원",199588],["고급품질관리원",197788],["중급품질관리원",177841],["초급품질관리원",149081],["지적기사",275711],["지적산업기사",245000],["지적기능사",178874],["내선전공",273676],["특고압케이블전공",440616],["고압케이블전공",373640],["저압케이블전공",304156],["송전활선전공",675173],["송전전공",638460],["배전활선전공",562439],["배전전공",414968],["플랜트전공",269759],["계장공",319449],["철도신호공",310041],["통신내선공",284880],["통신설비공",315528],["통신외선공",408942],["통신케이블공",436224],["무선안테나공",356809],["석면해체공",204181]];
+const DEFAULT_LABOR_NOTE = '2026년 1월 기준';
+const LABOR_ALIAS = {'목공':'건축목공','전공':'내선전공','전기공':'내선전공','설비공':'기계설비공','페인트공':'도장공','잡부':'보통인부','인부':'보통인부','샷시공':'창호공','씽크공':'기계설비공'};
+
+const LIVE = !!FIREBASE_CONFIG;
+/* Firestore 데이터베이스 ID — 기본 "(default)"가 아닌 이름을 지정해 만들었다면 그 이름을 적으세요 */
+const FIRESTORE_DB_ID = 'default';
+const DAY = 86400000;
+const now = () => Date.now();
+const fmtD = ts => { const d=new Date(ts); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`; };
+const fmtDT = ts => { const d=new Date(ts); return fmtD(ts)+` ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+const daysAgo = n => now() - n*DAY;
+const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const rnd4 = () => Math.random().toString(36).slice(2,6).toUpperCase();
+const pad2 = n => String(n).padStart(2,'0');
+const tsToDateInput = ts => { const d=new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
+const tsToDtInput = ts => { const d=new Date(ts); return `${tsToDateInput(ts)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
+
+const STAGES = ['SURVEY','ESTIMATE','REVIEW','SCHEDULE','CONSTRUCT','DONE']; // 실측 → 견적 → 검토 → 공사일정 → 공사 → 완료
+const STAGE_NM = { ESTIMATE:'견적 등록', REVIEW:'견적 검토', SURVEY:'실측 일정', SCHEDULE:'공사 일정', CONSTRUCT:'공사 진행', DONE:'완료' };
+const STAGE_BADGE = { ESTIMATE:'b-amber', REVIEW:'b-blue', SURVEY:'b-amber', SCHEDULE:'b-amber', CONSTRUCT:'b-blue', DONE:'b-green' };
+const STAGE_WAIT = { ESTIMATE:'토마토세븐 견적 대기', REVIEW:'본사 검토 대기', SURVEY:'실측일정 등록 대기', SCHEDULE:'공사일정 등록 대기', CONSTRUCT:'공사 진행중', DONE:'처리 완료' };
+const STAGE_OWNER = { ESTIMATE:'토마토세븐', REVIEW:'본사담당', SURVEY:'토마토세븐', SCHEDULE:'토마토세븐', CONSTRUCT:'토마토세븐' };
+const ROLE_NM = { hq:'본사담당', store:'점포', vendor:'토마토세븐' };
+
+const state = {
+  user:null,            // {role, name, store}
+  view:'dash', detailId:null, filter:'ALL', q:'',
+  cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE },
+  reqs:[], ready:false, dbError:null,
+  chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:''
+};
+const filesCache = {};   // reqId -> [{kind,name,data,ts}]
+
+/* ================= 저장소 계층 (Firestore / 데모 메모리) ================= */
+let fs=null;
+function waitFB(ms=12000){
+  return new Promise((res,rej)=>{
+    const check = ()=>{ if(window.FB) res(); else rej(new Error(window.FB_LOAD_ERROR||'SDK 로드 실패 — 인터넷 연결을 확인하세요')); };
+    if(window.FB || window.FB_LOAD_ERROR) return check();
+    const t = setTimeout(check, ms);
+    window.addEventListener('fb-ready', ()=>{ clearTimeout(t); check(); }, {once:true});
+  });
+}
+const store = {
+  async init(onReqs){
+    if(LIVE){
+      await waitFB();
+      const app = FB.initializeApp(FIREBASE_CONFIG);
+      await FB.signInAnonymously(FB.getAuth(app));
+      fs = FB.getFirestore(app, FIRESTORE_DB_ID);
+      // 설정 문서 구독
+      FB.onSnapshot(FB.doc(fs,'config','app'), d=>{
+        if(d.exists()){
+          const c=d.data();
+          state.cfg.codes = Object.assign({...DEFAULT_CODES}, c.codes||{});
+          state.cfg.sla = Object.assign({...DEFAULT_SLA}, c.sla||{});
+          if(Array.isArray(c.stores)&&c.stores.length) state.cfg.stores=c.stores;
+          if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor;
+          if(c.laborNote) state.cfg.laborNote=c.laborNote;
+        }
+        fillStoreList(); if(state.ready) render();
+      }, err=>console.warn('config',err));
+      // 접수건 실시간 구독
+      FB.onSnapshot(FB.query(FB.collection(fs,'requests'), FB.orderBy('createdAt','desc'), FB.limit(500)), snap=>{
+        state.reqs = snap.docs.map(d=>d.data());
+        state.ready = true; state.dbError=null;
+        onReqs();
+      }, err=>{ state.dbError = err.code||String(err); state.ready=true; onReqs(); });
+    } else {
+      seed(); seedChats();
+      state.ready = true;
+      onReqs();
+    }
+  },
+  async saveConfig(patch){
+    Object.assign(state.cfg, patch);
+    if(LIVE) await FB.setDoc(FB.doc(fs,'config','app'), state.cfg, {merge:true});
+  },
+  async saveRequest(r){
+    if(LIVE) await FB.setDoc(FB.doc(fs,'requests',r.id), r);
+    else { state.reqs.unshift(r); }
+  },
+  async updateRequest(id, patch, histEntry, comment){
+    if(LIVE){
+      const upd = {...patch};
+      if(histEntry) upd.history = FB.arrayUnion(histEntry);
+      if(comment) upd.comments = FB.arrayUnion(comment);
+      await FB.updateDoc(FB.doc(fs,'requests',id), upd);
+    } else {
+      const r = state.reqs.find(x=>x.id===id);
+      Object.assign(r, patch);
+      if(histEntry) r.history.push(histEntry);
+      if(comment) r.comments.push(comment);
+    }
+  },
+  async addFile(reqId, file){ // file={kind,name,data,ts}
+    if(LIVE) await FB.addDoc(FB.collection(fs,'requests',reqId,'files'), file);
+    if(!filesCache[reqId]) filesCache[reqId]=[];
+    filesCache[reqId].push(file);
+  },
+  async getFiles(reqId){
+    if(filesCache[reqId]) return filesCache[reqId];
+    if(LIVE){
+      const snap = await FB.getDocs(FB.query(FB.collection(fs,'requests',reqId,'files'), FB.orderBy('ts')));
+      filesCache[reqId] = snap.docs.map(d=>d.data());
+    } else filesCache[reqId] = filesCache[reqId]||[];
+    return filesCache[reqId];
+  },
+  /* ---- 채팅 ---- */
+  subscribeRooms(cb){
+    if(LIVE) return FB.onSnapshot(FB.query(FB.collection(fs,'chats'), FB.orderBy('lastTs','desc'), FB.limit(100)),
+      snap=>cb(snap.docs.map(d=>({id:d.id, ...d.data()}))), err=>console.warn('rooms',err));
+    demoChats.roomCb = cb; cb(demoRoomMetas()); return ()=>{demoChats.roomCb=null};
+  },
+  subscribeMsgs(room, cb){
+    if(LIVE) return FB.onSnapshot(FB.query(FB.collection(fs,'chats',room,'messages'), FB.orderBy('ts'), FB.limit(300)),
+      snap=>cb(snap.docs.map(d=>d.data())), err=>console.warn('msgs',err));
+    demoChats.msgCb = {room, cb}; cb((demoChats.msgs[room]||[]).slice()); return ()=>{demoChats.msgCb=null};
+  },
+  async sendMsg(room, msg){
+    if(LIVE){
+      await FB.addDoc(FB.collection(fs,'chats',room,'messages'), msg);
+      await FB.setDoc(FB.doc(fs,'chats',room), {name:room, lastMsg:msg.text, lastTs:msg.ts, lastBy:msg.author}, {merge:true});
+    } else {
+      if(!demoChats.msgs[room]) demoChats.msgs[room]=[];
+      demoChats.msgs[room].push(msg);
+      demoChats.meta[room] = {name:room, lastMsg:msg.text, lastTs:msg.ts, lastBy:msg.author};
+      if(demoChats.msgCb && demoChats.msgCb.room===room) demoChats.msgCb.cb(demoChats.msgs[room].slice());
+      if(demoChats.roomCb) demoChats.roomCb(demoRoomMetas());
+    }
+  }
+};
+/* 데모 채팅 데이터 */
+const demoChats = { msgs:{}, meta:{}, roomCb:null, msgCb:null };
+function demoRoomMetas(){ return Object.values(demoChats.meta).sort((a,b)=>b.lastTs-a.lastTs); }
+function seedChats(){
+  demoChats.msgs['전체'] = [
+    {ts:daysAgo(1), author:'본사담당(보수팀)', role:'hq', text:'8월부터 보수 접수는 이 앱으로 일원화됩니다. 접수 후 진행상황은 접수목록에서 실시간 확인 가능합니다.'},
+    {ts:daysAgo(0.5), author:'토마토세븐(관제)', role:'vendor', text:'금주 실측 일정은 순차 등록 중입니다. 긴급 건은 채팅으로 알려주세요.'}
+  ];
+  demoChats.meta['전체'] = {name:'전체', lastMsg:'금주 실측 일정은 순차 등록 중입니다…', lastTs:daysAgo(0.5), lastBy:'토마토세븐(관제)'};
+  demoChats.msgs['롯데리아 강남역점'] = [
+    {ts:daysAgo(0.3), author:'점포(롯데리아 강남역점)', role:'store', text:'배수구 건 오늘도 역류가 심한데 실측 언제쯤 가능할까요?'},
+    {ts:daysAgo(0.2), author:'토마토세븐(김기사)', role:'vendor', text:'견적 승인되는 대로 내일 오전 방문 가능합니다!'}
+  ];
+  demoChats.meta['롯데리아 강남역점'] = {name:'롯데리아 강남역점', lastMsg:'견적 승인되는 대로 내일 오전 방문 가능합니다!', lastTs:daysAgo(0.2), lastBy:'토마토세븐(김기사)'};
+}
+
+/* ================= 데모 데이터 ================= */
+function seed(){
+  const svg = (t,c)=>'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="${c}"/><text x="100" y="105" font-size="15" font-family="sans-serif" fill="#fff" text-anchor="middle" font-weight="bold">${t}</text></svg>`);
+  const mk = o => Object.assign({comments:[],history:[],estimates:[],urgency:'보통',photoCount:0}, o);
+  const h=(ts,actor,action)=>({ts,actor,action});
+  const e=(ts,fileName,amount,st)=>({ts,fileName,amount,status:st||'검토대기'});
+  const S = state.cfg.stores;
+  state.reqs = [
+    mk({ id:'R-2608-A1B2', store:S[0], title:'주방 배수구 막힘 및 누수', desc:'주방 트렌치 배수 역류로 바닥 물고임 발생. 영업 지장 있음.', urgency:'긴급',
+      createdAt:daysAgo(9), stage:'SURVEY', stageAt:daysAgo(9), photoCount:2,
+      history:[h(daysAgo(9),'점포(강남역점)','보수공사 접수 (사진 2장)')],
+      comments:[{ts:daysAgo(8),author:'본사담당',role:'hq',text:'긴급 건입니다. 견적 우선 처리 부탁드립니다.'}] }),
+    mk({ id:'R-2607-C3D4', store:S[1], title:'매장 출입문 자동문 고장', desc:'자동문 센서 오작동으로 수동 개폐 중.',
+      createdAt:daysAgo(6), stage:'REVIEW', stageAt:daysAgo(4), photoCount:1,
+      surveyDate:daysAgo(5), surveyAt:daysAgo(5.5), surveyDone:true,
+      estimates:[e(daysAgo(4),'자동문센서교체_견적서.pdf',1850000)],
+      history:[h(daysAgo(6),'점포(홍대점)','보수공사 접수'), h(daysAgo(4),'토마토세븐','견적서 업로드 (1,850,000원)')] }),
+    mk({ id:'R-2607-E5F6', store:S[2], title:'천장 누수 (매장 홀)', desc:'우천 시 천장 석고보드로 누수. 얼룩 확산 중.', urgency:'긴급',
+      createdAt:daysAgo(12), stage:'CONSTRUCT', stageAt:daysAgo(1), photoCount:1,
+      surveyDate:daysAgo(8), surveyAt:daysAgo(9), surveyDone:true,
+      constStart:daysAgo(-1), constEnd:daysAgo(-2), scheduleAt:daysAgo(1),
+      estimates:[e(daysAgo(7),'천장누수보수_견적서.pdf',3200000,'승인')],
+      review:{at:daysAgo(5),decision:'승인',opinion:'금액 적정. 방수층 보증 2년 명시 조건으로 승인합니다.'},
+      history:[h(daysAgo(12),'점포(잠실점)','보수공사 접수'), h(daysAgo(7),'토마토세븐','견적서 업로드'), h(daysAgo(5),'본사담당','견적 승인')] }),
+    mk({ id:'R-2607-G7H8', store:S[3], title:'외부 간판 LED 부분 소등', desc:'간판 우측 1/3 LED 소등. 야간 시인성 저하.',
+      createdAt:daysAgo(15), stage:'SCHEDULE', stageAt:daysAgo(3), photoCount:1,
+      estimates:[e(daysAgo(11),'간판LED보수_견적서.pdf',960000,'승인')],
+      review:{at:daysAgo(9),decision:'승인',opinion:'승인. 야간작업 여부 확인 요망.'},
+      surveyDate:daysAgo(4), surveyAt:daysAgo(8), surveyDone:true,
+      history:[h(daysAgo(15),'점포(명동점)','보수공사 접수'), h(daysAgo(11),'토마토세븐','견적서 업로드'), h(daysAgo(9),'본사담당','견적 승인'), h(daysAgo(8),'토마토세븐','실측일정 등록'), h(daysAgo(3),'토마토세븐','실측 완료')] }),
+    mk({ id:'R-2606-K1L2', store:S[5], title:'주방 후드 모터 교체', desc:'후드 흡입력 저하, 모터 소음 심함.',
+      createdAt:daysAgo(34), stage:'DONE', stageAt:daysAgo(8), completedAt:daysAgo(8), photoCount:1,
+      estimates:[e(daysAgo(30),'후드모터교체_견적서.pdf',1450000,'승인')],
+      review:{at:daysAgo(28),decision:'승인',opinion:'승인.'},
+      surveyDate:daysAgo(25), surveyAt:daysAgo(27), surveyDone:true,
+      constStart:daysAgo(10), constEnd:daysAgo(9), scheduleAt:daysAgo(13),
+      history:[h(daysAgo(34),'점포(판교점)','보수공사 접수'), h(daysAgo(30),'토마토세븐','견적서 업로드'), h(daysAgo(28),'본사담당','견적 승인'), h(daysAgo(27),'토마토세븐','실측일정 등록'), h(daysAgo(25),'토마토세븐','실측 완료'), h(daysAgo(13),'토마토세븐','공사일정 등록'), h(daysAgo(8),'토마토세븐','공사 완료 처리')] }),
+    mk({ id:'R-2607-M3N4', store:S[2], title:'카운터 상판 들뜸 보수', desc:'카운터 인조대리석 상판 접합부 들뜸.',
+      createdAt:daysAgo(8), stage:'ESTIMATE', stageAt:daysAgo(3), photoCount:1,
+      surveyDate:daysAgo(6), surveyAt:daysAgo(7), surveyDone:true,
+      estimates:[e(daysAgo(5),'카운터보수_견적서_v1.pdf',2400000,'보완요청')],
+      review:{at:daysAgo(3),decision:'보완요청',opinion:'동일 공사 대비 금액 과다. 자재 단가 내역 첨부하여 재견적 요청합니다.'},
+      history:[h(daysAgo(8),'점포(잠실점)','보수공사 접수'), h(daysAgo(5),'토마토세븐','견적서 업로드'), h(daysAgo(3),'본사담당','견적 보완요청 → 재견적 대기')] }),
+  ];
+  filesCache['R-2608-A1B2']=[{kind:'photo',name:'p1',data:svg('배수구 사진','#4A5568'),ts:daysAgo(9)},{kind:'photo',name:'p2',data:svg('바닥 누수','#2D3748'),ts:daysAgo(9)}];
+  filesCache['R-2607-C3D4']=[{kind:'photo',name:'p1',data:svg('자동문','#553C9A'),ts:daysAgo(6)}];
+  filesCache['R-2607-E5F6']=[{kind:'photo',name:'p1',data:svg('천장 누수','#2C5282'),ts:daysAgo(12)}];
+  filesCache['R-2607-G7H8']=[{kind:'photo',name:'p1',data:svg('간판 LED','#744210'),ts:daysAgo(15)}];
+  filesCache['R-2606-K1L2']=[{kind:'photo',name:'p1',data:svg('후드 모터','#702459'),ts:daysAgo(34)},{kind:'done',name:'d1',data:svg('교체 완료','#22543D'),ts:daysAgo(8)}];
+  filesCache['R-2607-M3N4']=[{kind:'photo',name:'p1',data:svg('카운터','#4C3B2A'),ts:daysAgo(8)}];
+}
+
+/* ================= 이미지 압축 ================= */
+function compressImage(file, maxW=1000, quality=0.65){
+  return new Promise((res,rej)=>{
+    const rd = new FileReader();
+    rd.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxW/img.width);
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        res(cv.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = rej;
+      img.src = ev.target.result;
+    };
+    rd.onerror = rej;
+    rd.readAsDataURL(file);
+  });
+}
+function readSmallFile(file, maxKB=700){ // PDF 등 비이미지
+  return new Promise((res,rej)=>{
+    if(file.size > maxKB*1024){ rej(new Error(`파일이 너무 큽니다 (최대 ${maxKB}KB). PDF 대신 견적서 사진 촬영을 권장합니다.`)); return; }
+    const rd = new FileReader();
+    rd.onload = ev => res(ev.target.result);
+    rd.onerror = rej;
+    rd.readAsDataURL(file);
+  });
+}
+
+/* ================= SLA / 알림 ================= */
+function deadline(r){ if(r.stage==='DONE') return null; return r.stageAt + (state.cfg.sla[r.stage]||3)*DAY; }
+function ddays(r){ const dl=deadline(r); if(dl===null) return null; return Math.ceil((dl-now())/DAY); }
+function isOver(r){ const d=ddays(r); return d!==null && d<0; }
+function ddayBadge(r){
+  const d = ddays(r);
+  if(d===null) return '';
+  if(d<0) return `<span class="badge b-overdue">⚠ 기한초과 ${-d}일</span>`;
+  if(d===0) return `<span class="badge b-amber">오늘 마감</span>`;
+  return `<span class="dday" style="color:${d<=1?'var(--amber)':'var(--sub)'}">D-${d}</span>`;
+}
+function allNotis(){
+  const over = state.reqs.filter(isOver).map(r=>({
+    ts:deadline(r), type:'over', reqId:r.id,
+    text:`[${r.id}] ${STAGE_NM[r.stage]} 처리기한 ${-ddays(r)}일 초과 — ${STAGE_OWNER[r.stage]} 조치 필요 (${r.store})`
+  }));
+  const events = [];
+  state.reqs.forEach(r=>{ (r.history||[]).slice(-3).forEach(hh=>events.push({ts:hh.ts,type:'ev',reqId:r.id,text:`[${r.id}] ${hh.actor} — ${hh.action}`})); });
+  events.sort((a,b)=>b.ts-a.ts);
+  return [...over.sort((a,b)=>a.ts-b.ts), ...events.slice(0,25)];
+}
+
+/* ================= 세션 ================= */
+function saveSession(){ try{ localStorage.setItem('bosuon_session', JSON.stringify(state.user)); }catch(e){} }
+function loadSession(){ try{ return JSON.parse(localStorage.getItem('bosuon_session')||'null'); }catch(e){ return null; } }
+function logout(){ state.user=null; try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
+
+let pickedRole=null;
+function pickRole(r){
+  pickedRole=r;
+  document.querySelectorAll('.rolebtn').forEach(b=>b.classList.toggle('on',b.dataset.r===r));
+  document.getElementById('loginStoreWrap').style.display = r==='store'?'block':'none';
+  document.getElementById('loginNameWrap').style.display = (r==='hq'||r==='vendor')?'block':'none';
+}
+function fillStoreList(){
+  const dl=document.getElementById('storeList');
+  if(dl) dl.innerHTML = state.cfg.stores.map(s=>`<option value="${esc(s)}">`).join('');
+}
+function doLogin(){
+  const err = m => { const el=document.getElementById('lgErr'); el.textContent=m; el.style.display='block'; };
+  if(!pickedRole){ err('소속을 선택해주세요'); return; }
+  const code = document.getElementById('lgCode').value.trim();
+  if(code !== state.cfg.codes[pickedRole]){ err('접속코드가 올바르지 않습니다'); return; }
+  let name='', storeNm='';
+  if(pickedRole==='store'){
+    storeNm = document.getElementById('lgStore').value.trim();
+    if(!storeNm){ err('점포명을 입력해주세요'); return; }
+    name = storeNm;
+  } else {
+    name = document.getElementById('lgName').value.trim() || ROLE_NM[pickedRole];
+  }
+  state.user = {role:pickedRole, name, store:storeNm};
+  saveSession();
+  document.getElementById('login').classList.remove('open');
+  state.view='dash'; render();
+}
+function showLogin(){
+  fillStoreList();
+  document.getElementById('login').classList.add('open');
+  document.getElementById('main').innerHTML='';
+  document.getElementById('nav').innerHTML='';
+  document.getElementById('whoami').style.display='none';
+}
+function actorLabel(){
+  const u = state.user;
+  if(!u) return '';
+  if(u.role==='store') return `점포(${u.name})`;
+  if(u.role==='hq') return `본사담당(${u.name})`;
+  return `토마토세븐(${u.name})`;
+}
+
+/* ================= 공통 UI ================= */
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2400); }
+function setRole(r){ if(LIVE) return; state.user={role:r,name:ROLE_NM[r],store:r==='store'?state.cfg.stores[0]:''}; if(state.view==='new'&&r!=='store') state.view='dash'; if(state.view==='set'&&r!=='hq') state.view='dash'; render(); }
+function go(v,id){
+  if(state.view==='chatroom' && v!=='chatroom' && state.unsubMsgs){ try{state.unsubMsgs()}catch(e){} state.unsubMsgs=null; }
+  state.view=v; state.detailId=id||null;
+  if(v==='chat' && !state.roomsSubbed){
+    state.roomsSubbed=true;
+    store.subscribeRooms(list=>{ state.chatRooms=list; if(state.view==='chat') render(); });
+  }
+  render(); window.scrollTo(0,0);
+  if(v==='detail'&&id) loadDetailFiles(id);
+  if(v==='chatroom') renderChatMsgs();
+}
+function togglePanel(open){ document.getElementById('panel').classList.toggle('open',open); if(open) renderNotis(); }
+function closeModal(){ document.getElementById('modal').classList.remove('open'); render(); }
+function openModal(html){ document.getElementById('modalIn').innerHTML=html; document.getElementById('modal').classList.add('open'); }
+function modalOpen(){ return document.getElementById('modal').classList.contains('open'); }
+const R = id => state.reqs.find(x=>x.id===id);
+const money = n => n==null?'-':Number(n).toLocaleString('ko-KR')+'원';
+const role = () => state.user ? state.user.role : null;
+
+async function loadDetailFiles(id){
+  await store.getFiles(id);
+  if(state.view==='detail' && state.detailId===id && !modalOpen()) render();
+}
+
+/* ================= 렌더 ================= */
+function render(){
+  if(!state.user){ showLogin(); return; }
+  document.getElementById('login').classList.remove('open');
+  if(modalOpen()) return; // 모달 작업 중엔 실시간 갱신으로 화면 덮지 않음
+  const cmtEl = document.getElementById('cmtIn');
+  const cmtVal = cmtEl ? cmtEl.value : '';
+  const chatEl = document.getElementById('chatIn');
+  const chatVal = chatEl ? chatEl.value : '';
+
+  const sys = document.getElementById('sysbar');
+  if(!LIVE) { sys.className='sysbar'; sys.textContent='데모 모드 — 데이터가 저장되지 않습니다. 운영하려면 파일 상단에 Firebase 설정을 넣어주세요.'; sys.style.display='block'; }
+  else if(state.dbError){
+    const ec = String(state.dbError);
+    let msg = '⚠ 서버 연결 오류: '+ec;
+    if(ec.includes('admin-restricted')||ec.includes('operation-not-allowed')) msg='⚠ 익명 로그인이 꺼져 있습니다 — Firebase 콘솔 > Authentication > 로그인 방법에서 「익명」을 사용 설정하세요';
+    else if(ec.includes('permission-denied')) msg='⚠ 접근 권한 오류 — Firestore 보안 규칙이 게시되었는지 확인하세요';
+    else if(ec.includes('unavailable')||ec.includes('network')) msg='⚠ 네트워크 오류 — 인터넷 연결을 확인하세요';
+    sys.className='sysbar err'; sys.textContent=msg; sys.style.display='block';
+  }
+  else sys.style.display='none';
+
+  const who = document.getElementById('whoami');
+  const rs = document.getElementById('roleSel');
+  if(LIVE){ who.style.display='inline-block'; who.textContent = `${role()==='store'?'🏪':role()==='hq'?'🏢':'🔧'} ${state.user.name}`; who.onclick=()=>{ if(confirm('로그아웃할까요?')) logout(); }; rs.style.display='none'; }
+  else { rs.style.display='inline-block'; rs.value=role(); who.style.display='none'; }
+
+  const tabs = [ ['dash','대시보드'], ['list','접수 목록'], ['chat','💬 채팅'] ];
+  if(role()==='store') tabs.push(['new','+ 신규 접수']);
+  if(role()==='hq') tabs.push(['set','설정']);
+  document.getElementById('nav').innerHTML = tabs.map(([v,t])=>`<button class="${(state.view===v||(state.view==='detail'&&v==='list')||(state.view==='chatroom'&&v==='chat'))?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
+
+  const n = state.reqs.filter(isOver).length;
+  const cEl = document.getElementById('notiCnt');
+  cEl.style.display = n? 'flex':'none'; cEl.textContent = n;
+
+  const m = document.getElementById('main');
+  if(!state.ready){ m.innerHTML = '<div class="empty">서버 연결 중…</div>'; return; }
+  if(state.view==='dash') m.innerHTML = vDash();
+  else if(state.view==='list') m.innerHTML = vList();
+  else if(state.view==='detail') m.innerHTML = vDetail();
+  else if(state.view==='new') m.innerHTML = vNew();
+  else if(state.view==='set') m.innerHTML = vSet();
+  else if(state.view==='chat') m.innerHTML = vChat();
+  else if(state.view==='chatroom') m.innerHTML = vChatRoom();
+
+  const cmtEl2 = document.getElementById('cmtIn');
+  if(cmtEl2 && cmtVal) cmtEl2.value = cmtVal;
+  const chatEl2 = document.getElementById('chatIn');
+  if(chatEl2 && chatVal) chatEl2.value = chatVal;
+  if(state.view==='chatroom') renderChatMsgs();
+}
+function roleNote(){
+  const t = { hq:'본사담당 모드 — 견적 검토·승인, 설정, 전체 현황 관리', store:'점포 모드 — 보수공사 접수 및 진행상황 열람', vendor:'토마토세븐 모드 — 견적서 업로드, 실측·공사일정 등록, 완료 처리' };
+  return `<div class="role-note">👤 ${t[role()]}</div>`;
+}
+
+/* ===== 대시보드 ===== */
+function vDash(){
+  const rs = state.reqs;
+  const open = rs.filter(r=>r.stage!=='DONE');
+  const over = rs.filter(isOver);
+  const done = rs.filter(r=>r.stage==='DONE');
+  const cnt = s => rs.filter(r=>r.stage===s).length;
+  const max = Math.max(...STAGES.map(cnt),1);
+  const bars = STAGES.map(s=>`
+    <div class="stagebar"><span class="nm">${STAGE_NM[s]}</span>
+      <div class="tr"><div class="fl" style="width:${cnt(s)/max*100}%;${s==='DONE'?'background:var(--green)':''}"></div></div>
+      <span class="v">${cnt(s)}</span></div>`).join('');
+  const overList = over.length ? over.map(reqCard).join('') : '<div class="card" style="color:var(--sub);font-weight:700;text-align:center">기한초과 건이 없습니다 👍</div>';
+  const installBanner = window.deferredPrompt ? `<button class="card" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;border:2px solid var(--red)" onclick="installApp()"><span style="font-size:24px">📲</span><span><b>앱으로 설치하기</b><div style="font-size:12.5px;color:var(--sub)">홈 화면에 설치하면 앱처럼 바로 실행됩니다</div></span></button>` : '';
+  return roleNote()+installBanner+`
+    <div class="tiles">
+      <div class="tile"><div class="n">${rs.length}</div><div class="t">전체 접수</div></div>
+      <div class="tile"><div class="n">${open.length}</div><div class="t">진행중</div></div>
+      <div class="tile alert"><div class="n">${over.length}</div><div class="t">기한 초과</div></div>
+      <div class="tile"><div class="n" style="color:var(--green)">${done.length}</div><div class="t">완료</div></div>
+    </div>
+    <div class="card"><div class="h2">단계별 현황</div>${bars}</div>
+    <div class="h2" style="margin:16px 2px 10px">⚠️ 기한초과 — 조치 필요 <span class="badge b-red">${over.length}건</span></div>
+    ${overList}`;
+}
+
+/* ===== 목록 ===== */
+function reqCard(r){
+  const idx = STAGES.indexOf(r.stage);
+  const bar = STAGES.slice(0,5).map((s,i)=>`<i class="${i<idx?'done':(i===idx&&r.stage!=='DONE'?'cur':(r.stage==='DONE'?'done':''))}"></i>`).join('');
+  return `<button class="card req" onclick="go('detail','${r.id}')">
+    <div class="row1">
+      <span class="id">${r.id}</span>
+      <span class="badge ${STAGE_BADGE[r.stage]}">${STAGE_WAIT[r.stage]}</span>
+      ${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':''}
+      ${isOver(r)?`<span class="badge b-overdue">기한초과</span>`:''}
+    </div>
+    <h3>${esc(r.title)}</h3>
+    <div class="meta">${esc(r.store)} · 접수 ${fmtD(r.createdAt)}</div>
+    <div class="row2"><div class="minibar">${bar}</div>${r.stage==='DONE'?'<span class="badge b-green">완료</span>':ddayBadge(r)}</div>
+  </button>`;
+}
+function vList(){
+  const chips = [['ALL','전체'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]])];
+  const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
+  let rs = state.reqs.slice().sort((a,b)=>{
+    const ao=isOver(a)?0:1, bo=isOver(b)?0:1;
+    if(ao!==bo) return ao-bo;
+    return b.createdAt-a.createdAt;
+  });
+  if(state.filter==='OVER') rs = rs.filter(isOver);
+  else if(state.filter==='MINE') rs = rs.filter(r=>r.store===state.user.store);
+  else if(state.filter!=='ALL') rs = rs.filter(r=>r.stage===state.filter);
+  if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')).toLowerCase().includes(state.q.toLowerCase()));
+  return roleNote()+`
+    <div class="search"><input placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;render();this.focus();this.setSelectionRange(99,99)"></div>
+    <div class="filters">${useChips.map(([k,t])=>`<button class="chip ${state.filter===k?'on':''}" onclick="state.filter='${k}';render()">${t}</button>`).join('')}</div>
+    ${role()==='hq'?`<button class="btn sec2 sm" style="margin-bottom:10px" onclick="exportCSV()">⬇ 엑셀(CSV) 내보내기</button>`:''}
+    ${rs.length? rs.map(reqCard).join('') : '<div class="empty">조건에 맞는 접수 건이 없습니다</div>'}`;
+}
+
+/* ===== 상세 ===== */
+function stepper(r){
+  const idx = STAGES.indexOf(r.stage);
+  return `<div class="stepper">${STAGES.map((s,i)=>{
+    const cls = i<idx||r.stage==='DONE' ? 'done' : (i===idx?'cur':'');
+    return `<div class="step ${cls}"><div class="dot">${(i<idx||r.stage==='DONE')?'✓':i+1}</div>${STAGE_NM[s]}</div>`;
+  }).join('')}</div>`;
+}
+function photosHtml(id, kind){
+  const fl = (filesCache[id]||[]).filter(f=>f.kind===kind);
+  if(!fl.length) return '';
+  return `<div class="photos">${fl.map(f=>`<img src="${f.data}" onclick="viewImg(this.src)">`).join('')}</div>`;
+}
+function vDetail(){
+  const r = R(state.detailId); if(!r) return '<div class="empty">접수 건을 찾을 수 없습니다</div>';
+  const rl = role();
+  let secs = '';
+
+  secs += `<div class="sec"><div class="st">📋 1. 접수 내용</div>
+    <div class="kv"><b>점포</b>${esc(r.store)}</div>
+    <div class="kv"><b>접수일</b>${fmtDT(r.createdAt)}</div>
+    <div class="kv"><b>긴급도</b>${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':'보통'}</div>
+    <div class="kv"><b>공사내용</b>${esc(r.desc)}</div>
+    ${photosHtml(r.id,'photo') || (r.photoCount?'<div class="note">사진 불러오는 중…</div>':'')}
+  </div>`;
+
+  secs += `<div class="sec"><div class="st">📐 2. 실측 일정 ${slaTag(r,'SURVEY')}</div>`;
+  if(r.surveyDate){
+    secs += `<div class="kv"><b>실측일</b>${fmtD(r.surveyDate)} ${r.surveyDone?'<span class="badge b-green">실측완료</span>':'<span class="badge b-amber">예정</span>'}</div>`;
+  } else secs += `<div class="note">실측 일정이 등록되지 않았습니다.</div>`;
+  if(rl==='vendor' && r.stage==='SURVEY' && !r.surveyDate) secs += `<button class="btn blk" onclick="mSurvey('${r.id}')">📅 실측일정 등록</button>`;
+  if(rl==='vendor' && r.stage==='SURVEY' && r.surveyDate && !r.surveyDone) secs += `<button class="btn blk grn" onclick="doSurveyDone('${r.id}')">✅ 실측 완료 처리</button>`;
+  secs += `</div>`;
+
+  secs += `<div class="sec"><div class="st">💰 3. 견적서 ${slaTag(r,'ESTIMATE')}</div>`;
+  if((r.estimates||[]).length){
+    secs += r.estimates.map((ev,i)=>`
+      <div class="kv"><b>견적 ${i+1}</b>📎 ${esc(ev.fileName)} <span class="badge ${ev.status==='승인'?'b-green':ev.status==='보완요청'?'b-red':'b-gray'}" style="margin-left:6px">${ev.status}</span></div>
+      <div class="kv"><b>금액</b><strong>${money(ev.amount)}</strong></div>
+      <div class="kv"><b>견적일</b>${ev.estDate?fmtD(ev.estDate):fmtD(ev.ts)}</div>
+      ${ev.workPlan?`<div class="kv"><b>작업예정</b><strong>${fmtDT(ev.workPlan)}</strong></div>`:''}
+      <div class="kv"><b>업로드</b>${fmtDT(ev.ts)}</div>`).join('<hr style="border:none;border-top:1px dashed var(--line);margin:8px 0">');
+    secs += photosHtml(r.id,'estimate');
+    const pdfs = (filesCache[r.id]||[]).filter(f=>f.kind==='estimate-file');
+    if(pdfs.length) secs += pdfs.map(f=>`<div style="margin-top:8px"><a class="btn sec2 sm" href="${f.data}" download="${esc(f.name)}">📄 ${esc(f.name)} 내려받기</a></div>`).join('');
+  } else secs += `<div class="note">아직 견적서가 등록되지 않았습니다.</div>`;
+  if(rl==='vendor' && r.stage==='ESTIMATE') secs += `<button class="btn blk" onclick="mEstimate('${r.id}')">📤 견적서 업로드</button>`;
+  secs += `</div>`;
+
+  secs += `<div class="sec"><div class="st">🔎 3-1. 본사 견적검토 ${slaTag(r,'REVIEW')}</div>`;
+  const lastEstA = (r.estimates||[]).slice(-1)[0];
+  if(lastEstA && lastEstA.analysis) secs += analysisHtml(lastEstA.analysis);
+  if(r.review){
+    secs += `<div class="kv"><b>결과</b><span class="badge ${r.review.decision==='승인'?'b-green':'b-red'}">${r.review.decision}</span></div>
+      <div class="kv"><b>검토의견</b>${esc(r.review.opinion)}</div>
+      <div class="kv"><b>검토일</b>${fmtDT(r.review.at)}</div>`;
+  } else secs += `<div class="note">견적 검토 전입니다.</div>`;
+  if(rl==='hq' && r.stage==='REVIEW') secs += `<button class="btn blk" onclick="mReview('${r.id}')">✍ 견적 검토하기</button>`;
+  secs += `</div>`;
+
+    secs += `<div class="sec"><div class="st">🏗 4. 공사 일정 ${slaTag(r,'SCHEDULE')}</div>`;
+  if(r.constStart){
+    secs += `<div class="kv"><b>공사기간</b>${fmtDT(r.constStart)} ~ ${fmtDT(r.constEnd)}</div>`;
+  } else secs += `<div class="note">공사 일정이 등록되지 않았습니다.</div>`;
+  if(rl==='vendor' && r.stage==='SCHEDULE') secs += `<button class="btn blk" onclick="mSchedule('${r.id}')">📅 공사일정 등록</button>`;
+  secs += `</div>`;
+
+  secs += `<div class="sec"><div class="st">✅ 5. 공사 완료 ${slaTag(r,'CONSTRUCT')}</div>`;
+  if(r.stage==='DONE'){
+    secs += `<div class="kv"><b>완료일</b>${fmtDT(r.completedAt)}</div>${photosHtml(r.id,'done')}`;
+    const signFile = (filesCache[r.id]||[]).find(f=>f.kind==='sign');
+    if(r.signBy){
+      secs += `<div class="kv" style="margin-top:8px"><b>점포 확인</b><span class="badge b-green">서명 완료</span>&nbsp; ${esc(r.signBy)} · ${fmtDT(r.signAt)}</div>`;
+      if(signFile) secs += `<img class="signimg" src="${signFile.data}" alt="서명">`;
+    } else if(rl==='store'){
+      secs += `<div class="note">공사 결과를 확인하셨다면 완료 확인 서명을 해주세요.</div>
+        <button class="btn blk grn" onclick="mSign('${r.id}')">✍ 공사완료 확인 서명</button>`;
+    } else {
+      secs += `<div class="note">점포관리자 확인 서명 대기중입니다.</div>`;
+    }
+    secs += `<button class="btn sec2 blk" onclick="printReport('${r.id}')">📄 공사완료보고서 출력 (PDF 저장)</button>
+      <div class="note">버튼을 누른 뒤 인쇄 화면에서 「PDF로 저장」을 선택하면 전표 증빙용 보고서 파일이 생성됩니다.</div>`;
+  } else secs += `<div class="note">공사 완료 전입니다.</div>`;
+  if(rl==='vendor' && r.stage==='CONSTRUCT') secs += `<button class="btn blk grn" onclick="mDone('${r.id}')">🏁 공사 완료 처리</button>`;
+  secs += `</div>`;
+
+  secs += `<div class="sec"><div class="st">💬 의견·댓글 <span class="badge b-gray">${(r.comments||[]).length}</span></div>
+    ${(r.comments||[]).slice().sort((a,b)=>a.ts-b.ts).map(cm=>`<div class="cmt"><div class="who">${esc(cm.author)}<span>${fmtDT(cm.ts)}</span></div>${esc(cm.text)}</div>`).join('')}
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="cmtIn" placeholder="의견을 입력하세요 (관계자 전체 공개)">
+      <button class="btn sm" style="flex-shrink:0" onclick="addCmt('${r.id}')">등록</button>
+    </div></div>`;
+
+  secs += `<div class="sec"><div class="st">🕐 처리 이력</div><div class="hist">
+    ${(r.history||[]).slice().sort((a,b)=>b.ts-a.ts).map(hh=>`<div class="hitem">${esc(hh.actor)} — ${esc(hh.action)}<div class="ts">${fmtDT(hh.ts)}</div></div>`).join('')}
+  </div></div>`;
+
+  const overWarn = isOver(r) ? `<div class="note warn">⚠ 현재 「${STAGE_NM[r.stage]}」 단계가 처리기한을 ${-ddays(r)}일 초과했습니다. (${STAGE_OWNER[r.stage]} 조치 필요)</div>` : '';
+  return `<button class="back" onclick="go('list')">← 목록으로</button>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--sub);font-weight:700">${r.id}</span>
+        <span class="badge ${STAGE_BADGE[r.stage]}">${STAGE_WAIT[r.stage]}</span>
+        ${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':''}
+      </div>
+      <h3 style="font-size:18px;font-weight:800;margin-top:6px">${esc(r.title)}</h3>
+      <div style="color:var(--sub);font-size:13px">${esc(r.store)}</div>
+      ${stepper(r)} ${overWarn} ${secs}
+    </div>`;
+}
+function slaTag(r,stage){
+  if(r.stage!==stage) return '';
+  const d = ddays(r);
+  if(d===null) return '';
+  if(d<0) return `<span class="badge b-overdue">기한 ${-d}일 초과</span>`;
+  return `<span class="badge b-amber">기한 D-${d} (${fmtD(deadline(r))}까지)</span>`;
+}
+function viewImg(src){ openModal(`<img src="${src}" style="width:100%;border-radius:12px"><button class="btn sec2 blk" onclick="closeModal()">닫기</button>`); }
+
+/* ===== 신규 접수 (점포) ===== */
+let newPhotos = [];
+function vNew(){
+  newPhotos = [];
+  const myStore = state.user.store || '';
+  return roleNote()+`<div class="card">
+    <div class="h2">🛠 보수공사 신규 접수</div>
+    <label>점포명 <span style="font-weight:500">(입력하면 전국 점포 목록에서 검색됩니다)</span></label>
+    <div class="spwrap">
+      <input id="nStore" value="${esc(myStore)}" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
+        oninput="spFilter('nStore')" onfocus="spFilter('nStore')" onblur="spHide('nStore')">
+      <div class="spdrop" id="nStoreDrop"></div>
+    </div>
+    <label>공사 제목</label>
+    <input id="nTitle" placeholder="예) 주방 배수구 막힘 보수">
+    <label>공사 내용 (상세)</label>
+    <textarea id="nDesc" rows="4" placeholder="증상, 위치, 영업 지장 여부 등을 적어주세요"></textarea>
+    <label>긴급도</label>
+    <select id="nUrg"><option>보통</option><option>긴급</option></select>
+    <label>현장 사진 (자동 압축 저장)</label>
+    <input type="file" id="nFiles" accept="image/*" multiple style="display:none" onchange="pickPhotos(this)">
+    <button class="file-add" onclick="document.getElementById('nFiles').click()">📷 사진 추가 (여러 장 가능)</button>
+    <div class="photos" id="nPrev"></div>
+    <button class="btn blk" id="nSubmit" onclick="submitNew()">접수하기</button>
+    <div class="note">접수 즉시 모든 관계자 화면에 실시간 반영되며, 토마토세븐은 ${state.cfg.sla.SURVEY}일 내 실측일정을 등록해야 합니다.</div>
+  </div>`;
+}
+async function pickPhotos(inp){
+  for(const f of [...inp.files]){
+    try{ newPhotos.push(await compressImage(f)); }catch(e){ toast('사진 처리 실패: '+f.name); }
+  }
+  document.getElementById('nPrev').innerHTML = newPhotos.map(p=>`<img src="${p}">`).join('');
+}
+async function submitNew(){
+  const title = document.getElementById('nTitle').value.trim();
+  const desc = document.getElementById('nDesc').value.trim();
+  const storeNm = document.getElementById('nStore').value.trim();
+  if(!storeNm){ toast('점포명을 입력해주세요'); return; }
+  if(!title){ toast('공사 제목을 입력해주세요'); return; }
+  const btn = document.getElementById('nSubmit'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> 접수 중…';
+  const d = new Date();
+  const id = `R-${String(d.getFullYear()).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}-${rnd4()}`;
+  const r = { id, store:storeNm, title, desc, urgency:document.getElementById('nUrg').value,
+    createdAt:now(), stage:'SURVEY', stageAt:now(), estimates:[], comments:[], photoCount:newPhotos.length,
+    history:[{ts:now(),actor:actorLabel(),action:`보수공사 접수 (사진 ${newPhotos.length}장)`}] };
+  try{
+    await store.saveRequest(r);
+    for(const p of newPhotos) await store.addFile(id,{kind:'photo',name:'photo.jpg',data:p,ts:now()});
+    toast('접수가 완료되었습니다');
+    go('detail', id);
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); btn.disabled=false; btn.textContent='접수하기'; }
+}
+
+/* ===== 액션 ===== */
+let mFileData=null, mFileName=null, mFileIsImg=false, mXlsxRows=null;
+function mEstimate(id){
+  mFileData=null; mFileName=null; mXlsxRows=null;
+  openModal(`<h2>견적서 업로드</h2><div class="sub">${id}</div>
+    <label>견적 금액 (원)</label><input id="mAmt" type="number" inputmode="numeric" placeholder="예) 1500000">
+    <label>견적일</label><input id="mEstDate" type="date" value="${tsToDateInput(now())}">
+    <label>작업 예정일시 (공사 가능 일정)</label><input id="mWork" type="datetime-local">
+    <label>견적서 파일 (엑셀 업로드 시 자동 검토 · 사진/PDF 가능)</label>
+    <input type="file" id="mF" accept="image/*,.pdf,.xlsx" style="display:none" onchange="pickEstFile(this)">
+    <button class="file-add" onclick="document.getElementById('mF').click()"><span id="mFn">📎 파일 선택</span></button>
+    <button class="btn blk" onclick="doEstimate('${id}')">업로드</button>`);
+}
+async function pickEstFile(inp){
+  const f = inp.files[0]; if(!f) return;
+  try{
+    mXlsxRows = null;
+    if(/\.xlsx$/i.test(f.name)){
+      const buf = await f.arrayBuffer();
+      mXlsxRows = await parseXlsx(buf);
+      const quick = analyzeEstimate(mXlsxRows, null);
+      document.getElementById('mFn').textContent = quick.ok
+        ? `📊 ${f.name} — ${quick.itemCount}개 항목, 합계 ${money(quick.sheetTotal??quick.calcTotal)} 인식됨`
+        : `📊 ${f.name} — 표 인식 실패(업로드는 가능)`;
+      if(quick.ok && !document.getElementById('mAmt').value)
+        document.getElementById('mAmt').value = quick.sheetTotal??quick.calcTotal;
+      mFileIsImg = false;
+      mFileData = f.size<=700*1024 ? await readSmallFile(f) : null;
+    }
+    else if(f.type.startsWith('image/')){ mFileData = await compressImage(f,1200,0.7); mFileIsImg=true; document.getElementById('mFn').textContent='📎 '+f.name; }
+    else { mFileData = await readSmallFile(f); mFileIsImg=false; document.getElementById('mFn').textContent='📎 '+f.name; }
+    mFileName = f.name;
+  }catch(e){ toast(e.message); }
+}
+async function doEstimate(id){
+  const amt = Number(document.getElementById('mAmt').value);
+  if(!amt){ toast('견적 금액을 입력해주세요'); return; }
+  const est = {ts:now(), amount:amt, fileName:mFileName||'(파일 없음)', status:'검토대기'};
+  const ed = document.getElementById('mEstDate').value;
+  if(ed) est.estDate = new Date(ed+'T12:00:00').getTime();
+  const wp = document.getElementById('mWork').value;
+  if(wp) est.workPlan = new Date(wp).getTime();
+  if(mXlsxRows){ try{ est.analysis = analyzeEstimate(mXlsxRows, amt); }catch(e){} }
+  const r = R(id);
+  try{
+    await store.updateRequest(id, {estimates:[...(r.estimates||[]), est], stage:'REVIEW', stageAt:now()},
+      {ts:now(),actor:actorLabel(),action:`견적서 업로드 (${money(amt)}${est.workPlan?`, 작업예정 ${fmtDT(est.workPlan)}`:''})`});
+    if(mFileData) await store.addFile(id,{kind:mFileIsImg?'estimate':'estimate-file',name:mFileName,data:mFileData,ts:now()});
+    closeModal(); toast('견적서가 업로드되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function mReview(id){
+  openModal(`<h2>견적 검토</h2><div class="sub">${id} · 검토의견은 관계자 전체에게 공개됩니다</div>
+    <label>검토 결과</label>
+    <select id="mDec"><option value="승인">승인 — 공사일정 등록 진행</option><option value="보완요청">보완요청 — 재견적 요청</option></select>
+    <label>검토 의견</label>
+    <textarea id="mOp" rows="3" placeholder="예) 금액 적정, 승인합니다 / 자재 단가 내역 첨부 요망"></textarea>
+    <button class="btn blk" onclick="doReview('${id}')">검토 완료</button>`);
+}
+async function doReview(id){
+  const dec = document.getElementById('mDec').value;
+  const op = document.getElementById('mOp').value.trim() || (dec==='승인'?'승인합니다.':'보완 요청합니다.');
+  const r = R(id);
+  const ests = (r.estimates||[]).slice();
+  if(ests.length) ests[ests.length-1] = {...ests[ests.length-1], status:dec==='승인'?'승인':'보완요청'};
+  const patch = { review:{at:now(),decision:dec,opinion:op}, estimates:ests,
+    stage: dec==='승인'?'SCHEDULE':'ESTIMATE', stageAt:now() };
+  try{
+    await store.updateRequest(id, patch, {ts:now(),actor:actorLabel(),action:dec==='승인'?'견적 승인':'견적 보완요청 → 재견적 대기'});
+    closeModal(); toast('검토가 등록되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function mSurvey(id){
+  openModal(`<h2>실측일정 등록</h2><div class="sub">${id}</div>
+    <label>실측 예정일</label><input id="mDt" type="date">
+    <button class="btn blk" onclick="doSurvey('${id}')">등록</button>`);
+}
+async function doSurvey(id){
+  const v = document.getElementById('mDt').value;
+  if(!v){ toast('날짜를 선택해주세요'); return; }
+  const ts = new Date(v+'T09:00:00').getTime();
+  try{
+    await store.updateRequest(id,{surveyDate:ts, surveyAt:now(), surveyDone:false},
+      {ts:now(),actor:actorLabel(),action:`실측일정 등록 (${fmtD(ts)})`});
+    closeModal(); toast('실측일정이 등록되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function doSurveyDone(id){
+  try{
+    await store.updateRequest(id,{surveyDone:true, stage:'ESTIMATE', stageAt:now()},
+      {ts:now(),actor:actorLabel(),action:'실측 완료'});
+    toast('실측 완료 처리되었습니다'); render();
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function mSchedule(id){
+  const r = R(id);
+  const wp = (r.estimates||[]).slice(-1)[0]?.workPlan;
+  openModal(`<h2>공사일정 등록</h2><div class="sub">${id}${wp?` · 견적서의 작업예정일시가 미리 입력되어 있습니다`:''}</div>
+    <label>공사 시작일시</label><input id="mS" type="datetime-local" value="${wp?tsToDtInput(wp):''}">
+    <label>공사 종료일시</label><input id="mE" type="datetime-local" value="${wp?tsToDtInput(wp+9*3600000):''}">
+    <button class="btn blk" onclick="doSchedule('${id}')">등록</button>`);
+}
+async function doSchedule(id){
+  const s = document.getElementById('mS').value, ee = document.getElementById('mE').value;
+  if(!s||!ee){ toast('시작·종료 일시를 선택해주세요'); return; }
+  const st = new Date(s).getTime(), en = new Date(ee).getTime();
+  if(en<st){ toast('종료 일시가 시작보다 빠릅니다'); return; }
+  try{
+    await store.updateRequest(id,{constStart:st, constEnd:en, scheduleAt:now(), stage:'CONSTRUCT', stageAt:now()},
+      {ts:now(),actor:actorLabel(),action:`공사일정 등록 (${fmtDT(st)} ~ ${fmtDT(en)})`});
+    closeModal(); toast('공사일정이 등록되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+let donePhotosTmp = [];
+function mDone(id){
+  donePhotosTmp = [];
+  openModal(`<h2>공사 완료 처리</h2><div class="sub">${id} · 완료 사진을 첨부해주세요</div>
+    <input type="file" id="dF" accept="image/*" multiple style="display:none" onchange="pickDone(this)">
+    <button class="file-add" onclick="document.getElementById('dF').click()">📷 완료 사진 추가</button>
+    <div class="photos" id="dPrev"></div>
+    <button class="btn blk grn" onclick="doDone('${id}')">완료 처리</button>`);
+}
+async function pickDone(inp){
+  for(const f of [...inp.files]){
+    try{ donePhotosTmp.push(await compressImage(f)); }catch(e){ toast('사진 처리 실패'); }
+  }
+  document.getElementById('dPrev').innerHTML = donePhotosTmp.map(p=>`<img src="${p}">`).join('');
+}
+async function doDone(id){
+  try{
+    await store.updateRequest(id,{stage:'DONE', stageAt:now(), completedAt:now()},
+      {ts:now(),actor:actorLabel(),action:'공사 완료 처리'});
+    for(const p of donePhotosTmp) await store.addFile(id,{kind:'done',name:'done.jpg',data:p,ts:now()});
+    closeModal(); toast('공사가 완료 처리되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function addCmt(id){
+  const inp = document.getElementById('cmtIn'); const t = inp.value.trim();
+  if(!t) return;
+  inp.value='';
+  try{
+    await store.updateRequest(id, {}, null, {ts:now(), author:actorLabel(), role:role(), text:t});
+    render(); toast('의견이 등록되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* ===== 채팅 ===== */
+function myRooms(){
+  const metaMap = {};
+  state.chatRooms.forEach(r=>metaMap[r.name||r.id]=r);
+  let names;
+  if(role()==='store') names = ['전체', state.user.store || state.user.name];
+  else {
+    const known = new Set(['전체', ...state.cfg.stores]);
+    state.chatRooms.forEach(r=>known.add(r.name||r.id));
+    names = ['전체', ...[...known].filter(n=>n!=='전체')];
+  }
+  let rooms = names.map(n=>({name:n, ...(metaMap[n]||{})}));
+  if(state.roomQ) rooms = rooms.filter(r=>r.name.toLowerCase().includes(state.roomQ.toLowerCase()));
+  return rooms.sort((a,b)=>{
+    if(a.name==='전체') return -1; if(b.name==='전체') return 1;
+    return (b.lastTs||0)-(a.lastTs||0);
+  });
+}
+function vChat(){
+  const rooms = myRooms();
+  const search = role()==='store' ? '' :
+    `<div class="search"><input placeholder="🔍 점포 채팅방 검색" value="${esc(state.roomQ)}" oninput="state.roomQ=this.value;render();this.focus();this.setSelectionRange(99,99)"></div>`;
+  return roleNote()+`
+    <div class="role-note" style="background:var(--gray-bg);color:var(--sub)">💬 전화 대신 이곳에서 소통하세요. 점포방에는 점포·토마토세븐·본사가 함께 참여합니다.</div>
+    ${search}
+    ${rooms.map(r=>`<button class="card roomrow" onclick="openRoom('${esc(r.name).replace(/'/g,"\\'")}')">
+      <span style="font-size:22px">${r.name==='전체'?'📢':'🏪'}</span>
+      <span class="rmain"><span class="rname">${esc(r.name)}${r.name==='전체'?' (공지·전체방)':''}</span>
+      <div class="rlast">${r.lastBy?esc(r.lastBy)+': ':''}${esc(r.lastMsg||'대화를 시작해보세요')}</div></span>
+      <span class="rts">${r.lastTs?fmtD(r.lastTs):''}</span>
+    </button>`).join('') || '<div class="empty">채팅방이 없습니다</div>'}`;
+}
+function openRoom(room){
+  state.chatRoom = room; state.chatMsgs = [];
+  go('chatroom');
+  state.unsubMsgs = store.subscribeMsgs(room, msgs=>{ state.chatMsgs = msgs; renderChatMsgs(); });
+}
+function vChatRoom(){
+  return `<button class="back" onclick="go('chat')">← 채팅 목록</button>
+    <div class="card" style="padding:14px">
+      <div style="font-weight:800;font-size:15px">${state.chatRoom==='전체'?'📢':'🏪'} ${esc(state.chatRoom)} <span style="color:var(--sub);font-weight:500;font-size:12px">· 관계자 전체 열람</span></div>
+      <div id="chatMsgs"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="chatIn" placeholder="메시지 입력" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
+        <button class="btn sm" style="flex-shrink:0" onclick="sendChat()">전송</button>
+      </div>
+    </div>`;
+}
+function renderChatMsgs(){
+  const el = document.getElementById('chatMsgs');
+  if(!el) return;
+  el.innerHTML = state.chatMsgs.length ? state.chatMsgs.map(m=>{
+    const me = m.author===actorLabel();
+    return `<div class="msg ${me?'me':'them'}">${me?'':`<div class="mwho">${esc(m.author)}</div>`}${esc(m.text)}<div class="mts">${fmtDT(m.ts)}</div></div>`;
+  }).join('') : '<div class="empty" style="padding:60px 0">첫 메시지를 보내보세요</div>';
+  el.scrollTop = el.scrollHeight;
+}
+async function sendChat(){
+  const inp = document.getElementById('chatIn');
+  const t = inp.value.trim(); if(!t) return;
+  inp.value='';
+  try{ await store.sendMsg(state.chatRoom, {ts:now(), author:actorLabel(), role:role(), text:t}); }
+  catch(e){ toast('전송 실패: '+(e.code||e.message)); inp.value=t; }
+}
+
+/* ===== 완료확인 전자서명 ===== */
+let sgCv=null, sgCtx=null, sgDirty=false, sgPrev=null;
+function mSign(id){
+  sgDirty=false;
+  openModal(`<h2>공사완료 확인 서명</h2><div class="sub">${id} · 점포관리자 확인 서명입니다. 손가락으로 서명해주세요.</div>
+    <div class="sgwrap"><canvas id="sgCv"></canvas><div class="sghint" id="sgHint">여기에 서명</div></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn sec2" style="flex:1" onclick="sgClear()">지우기</button>
+      <button class="btn grn" style="flex:2" onclick="doSign('${id}')">서명 저장</button>
+    </div>`);
+  setTimeout(()=>{
+    sgCv = document.getElementById('sgCv');
+    const w = sgCv.offsetWidth, h = sgCv.offsetHeight, dpr = window.devicePixelRatio||1;
+    sgCv.width = w*dpr; sgCv.height = h*dpr;
+    sgCtx = sgCv.getContext('2d');
+    sgCtx.scale(dpr,dpr);
+    sgCtx.fillStyle='#fff'; sgCtx.fillRect(0,0,w,h);
+    sgCtx.strokeStyle='#1F2430'; sgCtx.lineWidth=2.5; sgCtx.lineCap='round'; sgCtx.lineJoin='round';
+    const pos = e => { const r = sgCv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; };
+    sgCv.addEventListener('pointerdown', e=>{ e.preventDefault(); sgCv.setPointerCapture(e.pointerId); sgPrev=pos(e); sgDirty=true; document.getElementById('sgHint').style.display='none'; });
+    sgCv.addEventListener('pointermove', e=>{ if(!sgPrev) return; e.preventDefault(); const p=pos(e); sgCtx.beginPath(); sgCtx.moveTo(sgPrev.x,sgPrev.y); sgCtx.lineTo(p.x,p.y); sgCtx.stroke(); sgPrev=p; });
+    const up = e=>{ sgPrev=null; };
+    sgCv.addEventListener('pointerup', up); sgCv.addEventListener('pointercancel', up);
+  }, 60);
+}
+function sgClear(){
+  if(!sgCtx) return;
+  const w = sgCv.offsetWidth, h = sgCv.offsetHeight;
+  sgCtx.fillStyle='#fff'; sgCtx.fillRect(0,0,w,h);
+  sgDirty=false; document.getElementById('sgHint').style.display='flex';
+}
+async function doSign(id){
+  if(!sgDirty){ toast('서명을 해주세요'); return; }
+  const data = sgCv.toDataURL('image/png');
+  try{
+    await store.addFile(id, {kind:'sign', name:'sign.png', data, ts:now()});
+    await store.updateRequest(id, {signBy:actorLabel(), signAt:now()},
+      {ts:now(), actor:actorLabel(), action:'공사완료 확인 서명'});
+    closeModal(); toast('서명이 저장되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* ===== 점포 검색 선택 ===== */
+function spFilter(inputId){
+  const inp = document.getElementById(inputId);
+  const drop = document.getElementById(inputId+'Drop');
+  if(!inp||!drop) return;
+  const v = inp.value.trim().toLowerCase();
+  const hits = state.cfg.stores.filter(s=>s.toLowerCase().includes(v));
+  const top = hits.slice(0,50);
+  drop.innerHTML = (hits.length>50?`<div class="spcnt">${hits.length}개 중 50개 표시 — 더 검색해보세요</div>`:'') +
+    top.map(sname=>`<div class="spitem" onmousedown="spPick('${inputId}','${esc(sname).replace(/'/g,"\\'")}')">${esc(sname)}</div>`).join('');
+  drop.style.display = top.length? 'block':'none';
+}
+function spPick(inputId, val){
+  const inp = document.getElementById(inputId);
+  inp.value = val;
+  document.getElementById(inputId+'Drop').style.display='none';
+}
+function spHide(inputId){ setTimeout(()=>{ const d=document.getElementById(inputId+'Drop'); if(d) d.style.display='none'; }, 200); }
+
+/* ===== 공사완료보고서 (인쇄→PDF 저장) ===== */
+async function printReport(id){
+  const r = R(id); if(!r) return;
+  toast('보고서 준비 중…');
+  await store.getFiles(id);
+  const files = filesCache[id]||[];
+  const photos = files.filter(f=>f.kind==='photo');
+  const dones = files.filter(f=>f.kind==='done');
+  const sign = files.find(f=>f.kind==='sign');
+  const approved = (r.estimates||[]).filter(e=>e.status==='승인').slice(-1)[0];
+  const box = 'border:1px solid #999;padding:6px 10px;';
+  const html = `
+  <div style="font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:700px;margin:0 auto">
+    <div style="text-align:center;border-bottom:3px solid #C0392B;padding-bottom:10px;margin-bottom:16px">
+      <div style="font-size:22pt;font-weight:800">공사완료보고서</div>
+      <div style="font-size:10pt;color:#555;margin-top:4px">GRS 보수ON · 롯데GRS 직영점 보수공사 관리</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11pt;margin-bottom:14px">
+      <tr><td style="${box}background:#f2f2f2;width:110px;font-weight:700">접수번호</td><td style="${box}">${esc(r.id)}</td>
+          <td style="${box}background:#f2f2f2;width:110px;font-weight:700">완료일</td><td style="${box}">${fmtD(r.completedAt||r.stageAt)}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">점포</td><td style="${box}">${esc(r.store)}</td>
+          <td style="${box}background:#f2f2f2;font-weight:700">시공업체</td><td style="${box}">토마토세븐</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">공사명</td><td style="${box}" colspan="3">${esc(r.title)}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">공사내용</td><td style="${box}" colspan="3">${esc(r.desc||'-')}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">공사기간</td><td style="${box}">${r.constStart?fmtDT(r.constStart)+' ~ '+fmtDT(r.constEnd):'-'}</td>
+          <td style="${box}background:#f2f2f2;font-weight:700">승인금액</td><td style="${box}">${approved?money(approved.amount):'-'}</td></tr>
+    </table>
+    ${dones.length||photos.length?`<div style="font-weight:800;font-size:11pt;margin:10px 0 6px">■ 공사 사진 ${dones.length?'(완료)':'(접수 시)'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${(dones.length?dones:photos).slice(0,6).map(f=>`<img src="${f.data}" style="width:160px;height:120px;object-fit:cover;border:1px solid #999">`).join('')}</div>`:''}
+    <div style="font-weight:800;font-size:11pt;margin:16px 0 6px">■ 점포 확인</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11pt">
+      <tr><td style="${box}background:#f2f2f2;width:110px;font-weight:700">확인자</td><td style="${box}">${esc(r.signBy||'(서명 전)')}</td>
+          <td style="${box}background:#f2f2f2;width:110px;font-weight:700">서명일시</td><td style="${box}">${r.signAt?fmtDT(r.signAt):'-'}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">서명</td><td style="${box}" colspan="3">${sign?`<img src="${sign.data}" style="height:70px">`:'(서명 이미지 없음)'}</td></tr>
+    </table>
+    <div style="margin-top:20px;font-size:9pt;color:#777;text-align:right">본 보고서는 GRS 보수ON 시스템에서 ${fmtDT(now())}에 자동 생성되었습니다.</div>
+  </div>`;
+  document.getElementById('printArea').innerHTML = html;
+  const imgs = document.getElementById('printArea').querySelectorAll('img');
+  await Promise.all([...imgs].map(im=>im.complete?1:new Promise(res=>{im.onload=im.onerror=res;})));
+  window.print();
+}
+
+/* ===== XLSX 파서 (외부 라이브러리 없이 동작) ===== */
+function decodeXml(t){ return t.replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(n)).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&'); }
+async function parseXlsx(buf){
+  const dv = new DataView(buf); const u8 = new Uint8Array(buf);
+  let eocd = -1;
+  for(let i=buf.byteLength-22; i>=Math.max(0,buf.byteLength-66000); i--){
+    if(dv.getUint32(i,true)===0x06054b50){ eocd=i; break; }
+  }
+  if(eocd<0) throw new Error('엑셀 파일 형식이 아닙니다');
+  const cnt = dv.getUint16(eocd+10,true), cdOff = dv.getUint32(eocd+16,true);
+  const entries = {}; let p = cdOff;
+  const td = new TextDecoder();
+  for(let k=0;k<cnt;k++){
+    if(dv.getUint32(p,true)!==0x02014b50) break;
+    const method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true),
+      nlen=dv.getUint16(p+28,true), elen=dv.getUint16(p+30,true), clen=dv.getUint16(p+32,true),
+      lho=dv.getUint32(p+42,true);
+    entries[td.decode(u8.slice(p+46,p+46+nlen))]={method,csize,lho};
+    p += 46+nlen+elen+clen;
+  }
+  async function read(name){
+    const e = entries[name]; if(!e) return null;
+    const q = e.lho;
+    const nl = dv.getUint16(q+26,true), el = dv.getUint16(q+28,true);
+    const data = u8.slice(q+30+nl+el, q+30+nl+el+e.csize);
+    if(e.method===0) return td.decode(data);
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return await new Response(stream).text();
+  }
+  const shared = [];
+  const ss = await read('xl/sharedStrings.xml');
+  if(ss){
+    for(const si of ss.split('<si>').slice(1)){
+      let t=''; const re=/<t[^>]*>([\s\S]*?)<\/t>/g; let m;
+      while((m=re.exec(si))) t+=m[1];
+      shared.push(decodeXml(t));
+    }
+  }
+  const sheetName = Object.keys(entries).filter(n=>/^xl\/worksheets\/sheet\d+\.xml$/.test(n)).sort()[0];
+  const sh = await read(sheetName);
+  if(!sh) throw new Error('시트를 찾을 수 없습니다');
+  const rows = [];
+  const rowRe = /<row[^>]*>([\s\S]*?)<\/row>/g; let rm;
+  while((rm=rowRe.exec(sh))){
+    const cells = {};
+    const cRe = /<c\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g; let cm; let maxCol=0;
+    while((cm=cRe.exec(rm[1]))){
+      const attrs = cm[1], inner = cm[2]||'';
+      const ref = /r="([A-Z]+)(\d+)"/.exec(attrs); if(!ref) continue;
+      let col=0; for(const ch of ref[1]) col = col*26 + (ch.charCodeAt(0)-64); col--;
+      const type = (/t="(\w+)"/.exec(attrs)||[])[1];
+      let val = '';
+      const v = /<v>([\s\S]*?)<\/v>/.exec(inner);
+      if(type==='inlineStr'){ const t=/<t[^>]*>([\s\S]*?)<\/t>/.exec(inner); val = t?decodeXml(t[1]):''; }
+      else if(type==='s'){ val = v?(shared[+v[1]]??''):''; }
+      else { val = v?decodeXml(v[1]):''; }
+      cells[col]=val; if(col>maxCol) maxCol=col;
+    }
+    const arr=[]; for(let i=0;i<=maxCol;i++) arr.push(cells[i]??'');
+    rows.push(arr);
+  }
+  return rows;
+}
+
+/* ===== 견적 자동검토 (규칙 기반) ===== */
+const toNum = v => { const n = parseFloat(String(v??'').replace(/[,₩원\s]/g,'')); return isNaN(n)?null:n; };
+function analyzeEstimate(rows, inputAmount){
+  const NAME=/품명|품목|항목|내용|공사명|자재|공종/, QTY=/수량/, UNIT=/단가/, AMT=/금액|공급가|합계/;
+  let hi=-1, cols={};
+  for(let i=0;i<Math.min(rows.length,15);i++){
+    const cells = rows[i].map(String);
+    if(cells.some(c=>NAME.test(c)) && cells.some(c=>UNIT.test(c)||AMT.test(c))){
+      hi=i;
+      cells.forEach((c,j)=>{
+        if(cols.name===undefined && NAME.test(c)) cols.name=j;
+        if(cols.qty===undefined && QTY.test(c)) cols.qty=j;
+        if(cols.unit===undefined && UNIT.test(c)) cols.unit=j;
+        if(cols.amt===undefined && AMT.test(c) && !UNIT.test(c)) cols.amt=j;
+      });
+      break;
+    }
+  }
+  if(hi<0 || cols.name===undefined || cols.amt===undefined)
+    return { ok:false, flags:['⚠ 표 형식을 인식하지 못했습니다 (품명·금액 열 필요). 수동 검토해주세요.'] };
+  const items=[]; let sheetTotal=null;
+  for(let i=hi+1;i<rows.length;i++){
+    const name = String(rows[i][cols.name]??'').trim();
+    const amt = toNum(rows[i][cols.amt]);
+    if(/^(합\s*계|총\s*계|소\s*계|계)$/.test(name) || (!name && amt!==null && i>hi+1)){
+      if(amt!==null) sheetTotal = amt; continue;
+    }
+    if(!name || amt===null) continue;
+    items.push({ name, qty:toNum(rows[i][cols.qty!==undefined?cols.qty:-1]), unit:toNum(rows[i][cols.unit!==undefined?cols.unit:-1]), amt });
+  }
+  const calcTotal = items.reduce((a,b)=>a+b.amt,0);
+  const flags=[];
+  let calcBad=0, unitMissing=0;
+  items.forEach(it=>{
+    if(it.qty!==null && it.unit!==null && Math.abs(it.qty*it.unit-it.amt)>1) calcBad++;
+    if(cols.unit!==undefined && (it.unit===null||it.unit===0)) unitMissing++;
+  });
+  if(calcBad) flags.push(`⚠ 수량×단가 ≠ 금액 불일치 ${calcBad}건`); else if(cols.qty!==undefined&&cols.unit!==undefined) flags.push('✓ 수량×단가 검산 이상 없음');
+  if(unitMissing) flags.push(`⚠ 단가 누락/0원 항목 ${unitMissing}건`);
+  if(sheetTotal!==null && Math.abs(sheetTotal-calcTotal)>1) flags.push(`⚠ 시트 합계(${money(sheetTotal)})와 항목 합산(${money(calcTotal)}) 불일치`);
+  if(inputAmount){
+    const base = sheetTotal??calcTotal;
+    const diff = base ? Math.round((inputAmount-base)/base*100) : null;
+    if(diff!==null && Math.abs(diff)>1) flags.push(`⚠ 입력 견적금액(${money(inputAmount)})이 엑셀 합계보다 ${diff>0?'+':''}${diff}% ${diff>0?'높음':'낮음'}`);
+    else flags.push('✓ 입력 금액과 엑셀 합계 일치');
+  }
+  const past = state.reqs.filter(x=>x.id!==state.detailId).flatMap(x=>(x.estimates||[]).filter(e=>e.status==='승인').map(e=>e.amount)).filter(Boolean);
+  let vsPast=null;
+  if(past.length>=2 && inputAmount){
+    const avg = past.reduce((a,b)=>a+b,0)/past.length;
+    vsPast = Math.round((inputAmount-avg)/avg*100);
+    flags.push(`ℹ 과거 승인 견적 평균(${money(Math.round(avg))}, ${past.length}건) 대비 ${vsPast>0?'+':''}${vsPast}%`);
+  }
+  const top = items.slice().sort((a,b)=>b.amt-a.amt).slice(0,3).map(it=>({name:it.name.slice(0,20), amt:it.amt}));
+
+  /* ---- 노무비: 표준노임단가 대조 ---- */
+  const laborTbl = (state.cfg.labor||[]).slice().sort((a,b)=>b[0].length-a[0].length);
+  const norm = t => String(t).replace(/[\s()（）\[\]0-9인]/g,'');
+  const labor=[], materials=[];
+  items.forEach(it=>{
+    const n = norm(it.name);
+    let hit = laborTbl.find(([job])=>n.includes(norm(job)));
+    if(!hit){
+      for(const [alias,job] of Object.entries(LABOR_ALIAS)){
+        if(n.includes(norm(alias))){ hit = laborTbl.find(([j])=>j===job); break; }
+      }
+    }
+    if(hit && it.unit){
+      const pct = Math.round((it.unit-hit[1])/hit[1]*100);
+      labor.push({name:it.name.slice(0,20), job:hit[0], unit:it.unit, std:hit[1], pct});
+    } else if(/인건비|노무비|공임|시공비|인력/.test(it.name) && !hit){
+      labor.push({name:it.name.slice(0,20), job:null});
+    } else {
+      materials.push({name:it.name.slice(0,30), amt:it.amt, unit:it.unit});
+    }
+  });
+  labor.forEach(l=>{
+    if(l.job===null) flags.push(`ℹ 「${l.name}」 — 직종명이 없어 표준노임 대조 불가 (직종 기재 요청 권장)`);
+    else if(l.pct>5) flags.push(`⚠ 노무비: ${l.name} ${money(l.unit)}/일 — 표준노임(${l.job} ${money(l.std)}) 대비 +${l.pct}%`);
+    else flags.push(`✓ 노무비: ${l.name} ${money(l.unit)}/일 — 표준노임(${l.job}) 대비 ${l.pct>0?'+':''}${l.pct}% (적정)`);
+  });
+  const matTop = materials.sort((a,b)=>b.amt-a.amt).slice(0,5);
+  return { ok:true, itemCount:items.length, calcTotal, sheetTotal, flags, top, laborCount:labor.filter(l=>l.job).length, materials:matTop, laborNote:state.cfg.laborNote||'' };
+}
+function analysisHtml(a){
+  if(!a) return '';
+  const rows = a.ok ? `
+    <div class="kv"><b>인식 항목</b>${a.itemCount}건 · 합계 <strong>${money(a.sheetTotal??a.calcTotal)}</strong></div>
+    ${a.top&&a.top.length?`<div class="kv"><b>고액 항목</b>${a.top.map(t=>`${esc(t.name)} (${money(t.amt)})`).join(', ')}</div>`:''}` : '';
+  return `<div style="background:var(--blue-bg);border-radius:10px;padding:10px 12px;margin-top:8px">
+    <div style="font-weight:800;font-size:13px;color:var(--blue);margin-bottom:6px">🤖 견적서 자동 검토 리포트</div>
+    ${rows}
+    ${a.flags.map(f=>`<div style="font-size:13px;margin-top:3px;${f.startsWith('⚠')?'color:var(--red-dark);font-weight:700':''}">${esc(f)}</div>`).join('')}
+    ${a.laborCount?`<div style="font-size:11.5px;color:var(--sub);margin-top:6px">· 노무 단가는 1일(공수) 기준, 표준노임단가 ${esc(a.laborNote||'')} 적용</div>`:''}
+    ${a.materials&&a.materials.length?`<div style="font-weight:800;font-size:12.5px;margin-top:8px">재료비 주요 항목 — 시세 확인</div>
+      ${a.materials.map(m=>`<div style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:4px">
+        <span style="flex:1">${esc(m.name)} · ${money(m.amt)}</span>
+        <a class="btn sec2 sm" style="flex-shrink:0;text-decoration:none" target="_blank" rel="noopener"
+           href="https://search.shopping.naver.com/search/all?query=${encodeURIComponent(m.name)}">🔍 시세</a>
+      </div>`).join('')}
+      <div style="font-size:11.5px;color:var(--sub);margin-top:4px">· 버튼을 누르면 네이버쇼핑 검색 결과가 열립니다 (인터넷 시세 확인용)</div>`:''}
+  </div>`;
+}
+
+/* ===== 설정 (본사) ===== */
+function vSet(){
+  const slaRows = Object.keys(state.cfg.sla).map(s=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="flex:1;font-weight:700;font-size:14px">${STAGE_NM[s]} <span style="color:var(--sub);font-weight:500;font-size:12px">(${STAGE_OWNER[s]||''})</span></span>
+      <input type="number" min="1" value="${state.cfg.sla[s]}" style="width:70px;text-align:center" onchange="updSla('${s}',this.value)">
+      <span style="color:var(--sub);font-size:13px">일 이내</span>
+    </div>`).join('');
+  const codeRows = ['hq','store','vendor'].map(rk=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="width:90px;font-weight:700;font-size:14px">${ROLE_NM[rk]}</span>
+      <input value="${esc(state.cfg.codes[rk])}" onchange="updCode('${rk}',this.value)">
+    </div>`).join('');
+  return roleNote()+`<div class="card">
+    <div class="h2">⏱ 단계별 처리기한 (SLA)</div>
+    <div class="note" style="margin:0 0 14px">각 단계 진입 후 아래 일수를 초과하면 기한초과 알림이 표시됩니다. ${LIVE?'변경 시 전체 사용자에게 즉시 적용됩니다.':''}</div>
+    ${slaRows}
+  </div>
+  <div class="card">
+    <div class="h2">🔑 소속별 접속코드</div>
+    <div class="note" style="margin:0 0 14px">코드를 변경하면 이후 로그인부터 적용됩니다. 점포·업체에 새 코드를 공지하세요.</div>
+    ${codeRows}
+  </div>
+  <div class="card">
+    <div class="h2">🏪 점포 목록 <span class="badge b-gray">${state.cfg.stores.length}개</span></div>
+    <div class="note" style="margin:0 0 10px">점포 로그인·접수 시 검색 목록으로 제공됩니다. 엑셀에서 점포명 열을 복사해 한 번에 등록할 수 있습니다.</div>
+    <input placeholder="🔍 등록된 점포 검색" oninput="state.setStoreQ=this.value;render();this.focus();this.setSelectionRange(99,99)" value="${esc(state.setStoreQ||'')}">
+    <div id="storeRows" style="margin-top:10px;max-height:300px;overflow-y:auto">${state.cfg.stores
+      .map((s,i)=>({s,i}))
+      .filter(o=>!state.setStoreQ || o.s.toLowerCase().includes(state.setStoreQ.toLowerCase()))
+      .slice(0,80)
+      .map(o=>`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="flex:1;font-size:14px">${esc(o.s)}</span>
+        <button class="btn sec2 sm" onclick="delStore(${o.i})">삭제</button>
+      </div>`).join('') || '<div class="empty" style="padding:14px 0">검색 결과 없음</div>'}</div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="addStoreIn" placeholder="새 점포명 하나 추가">
+      <button class="btn sm" style="flex-shrink:0" onclick="addStore()">추가</button>
+    </div>
+    <label>일괄 등록 (한 줄에 한 점포씩 붙여넣기)</label>
+    <textarea id="bulkIn" rows="5" placeholder="롯데리아 ○○점&#10;엔제리너스 ○○점&#10;크리스피크림도넛 ○○점&#10;..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn sec2" style="flex:1" onclick="bulkStores(false)">목록에 추가</button>
+      <button class="btn" style="flex:1" onclick="bulkStores(true)">전체 교체</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="h2">👷 표준노임단가표 <span class="badge b-gray">${(state.cfg.labor||[]).length}개 직종</span></div>
+    <div class="note" style="margin:0 0 10px">현재 기준: <b>${esc(state.cfg.laborNote||'-')}</b> · 견적서 자동 검토 시 노무비 단가를 이 표와 대조합니다.<br>개정 시 새 엑셀(직종명·단가 열 포함)을 올리면 전체 갱신됩니다.</div>
+    <input type="file" id="laborF" accept=".xlsx" style="display:none" onchange="pickLaborFile(this)">
+    <button class="file-add" onclick="document.getElementById('laborF').click()">📤 노임단가표 엑셀 업로드 (전체 교체)</button>
+  </div>
+  <div class="card">
+    <div class="h2">ℹ️ 시스템 상태</div>
+    <div style="font-size:13.5px;color:var(--sub);line-height:1.7">
+      ${LIVE ? '· <b style="color:var(--green)">운영 모드</b> — Firebase 실시간 DB에 연결되어 모든 사용자가 같은 데이터를 봅니다.<br>· 접수·처리 내역은 서버에 영구 저장됩니다.'
+             : '· <b style="color:var(--red-dark)">데모 모드</b> — 데이터가 저장되지 않습니다.<br>· 운영하려면 파일 상단 주석의 안내에 따라 Firebase 설정(무료)을 넣어주세요.'}
+    </div>
+  </div>`;
+}
+async function updSla(s,v){ const sla={...state.cfg.sla}; sla[s]=Math.max(1,Number(v)||1); try{ await store.saveConfig({sla}); toast('저장되었습니다'); render(); }catch(e){ toast('저장 실패'); } }
+async function updCode(rk,v){ if(!v.trim()){ toast('코드는 비울 수 없습니다'); render(); return;} const codes={...state.cfg.codes}; codes[rk]=v.trim(); try{ await store.saveConfig({codes}); toast('접속코드가 변경되었습니다'); }catch(e){ toast('저장 실패'); } }
+async function addStore(){ const v=document.getElementById('addStoreIn').value.trim(); if(!v) return; try{ await store.saveConfig({stores:[...state.cfg.stores,v]}); render(); }catch(e){ toast('저장 실패'); } }
+async function delStore(i){ const arr=state.cfg.stores.slice(); arr.splice(i,1); try{ await store.saveConfig({stores:arr}); render(); }catch(e){ toast('저장 실패'); } }
+async function bulkStores(replace){
+  const raw = document.getElementById('bulkIn').value;
+  const lines = [...new Set(raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];
+  if(!lines.length){ toast('붙여넣은 점포명이 없습니다'); return; }
+  if(replace && !confirm(`기존 목록을 지우고 ${lines.length}개 점포로 교체할까요?`)) return;
+  const merged = replace ? lines : [...new Set([...state.cfg.stores, ...lines])];
+  try{ await store.saveConfig({stores:merged}); toast(`${lines.length}개 점포 ${replace?'교체':'등록'} 완료 (총 ${merged.length}개)`); render(); }
+  catch(e){ toast('저장 실패'); }
+}
+
+async function pickLaborFile(inp){
+  const f = inp.files[0]; if(!f) return;
+  try{
+    const rows = await parseXlsx(await f.arrayBuffer());
+    const list = [];
+    for(const row of rows){
+      let name=null, rate=null;
+      for(const cell of row){
+        const n = toNum(cell);
+        if(n!==null && n>50000 && n<2000000 && rate===null) rate=n;
+        else if(typeof cell==='string' && /[가-힣]{2,}/.test(cell) && name===null) name=cell.trim();
+      }
+      if(name && rate) list.push([name, rate]);
+    }
+    if(list.length<5){ toast('직종·단가 표를 인식하지 못했습니다 (직종명·단가 열 확인)'); return; }
+    const d = new Date();
+    await store.saveConfig({labor:list, laborNote:`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')} 업로드 (${f.name})`});
+    toast(`표준노임 ${list.length}개 직종 등록 완료`); render();
+  }catch(e){ toast('파일 처리 실패: '+(e.message||e)); }
+  inp.value='';
+}
+
+/* ===== 알림 ===== */
+function renderNotis(){
+  const list = allNotis();
+  document.getElementById('notiList').innerHTML = list.length ? list.map(n=>`
+    <div class="noti ${n.type==='over'?'over':''}" onclick="togglePanel(false);go('detail','${n.reqId}')">
+      ${n.type==='over'?'⚠️ ':''}${esc(n.text)}<div class="ts">${fmtDT(n.ts)} · 터치하여 상세보기</div>
+    </div>`).join('') : '<div class="empty">알림이 없습니다</div>';
+}
+
+/* ===== CSV ===== */
+function exportCSV(){
+  const head = ['접수번호','점포','공사명','긴급도','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','완료일'];
+  const rows = state.reqs.map(r=>{
+    const last = (r.estimates||[])[(r.estimates||[]).length-1];
+    const d = ddays(r);
+    return [r.id, r.store, r.title, r.urgency, fmtD(r.createdAt), STAGE_WAIT[r.stage],
+      r.stage==='DONE'?'-':(d<0?`기한초과 ${-d}일`:`D-${d}`), last?last.amount:'',
+      r.surveyDate?fmtD(r.surveyDate):'', r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'', r.completedAt?fmtD(r.completedAt):''];
+  });
+  const csv = '\uFEFF'+[head,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = '보수공사현황.csv'; a.click();
+  toast('CSV 파일이 다운로드되었습니다');
+}
+
+/* ===== 시작 ===== */
+(async function(){
+  try{
+    await store.init(()=>render());
+  }catch(e){
+    state.ready=true; state.dbError = e.code||e.message;
+  }
+  if(LIVE){
+    const sess = loadSession();
+    if(sess && sess.role){ state.user = sess; }
+  } else {
+    state.user = {role:'hq', name:'본사담당', store:''}; // 데모: 본사 화면으로 시작
+  }
+  render();
+  // 1분마다 D-day/기한초과 재계산
+  setInterval(()=>{ if(state.user && !modalOpen()) render(); }, 60000);
+})();
+</script>
+</body>
+</html>
