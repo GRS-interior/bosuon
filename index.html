@@ -261,8 +261,8 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
 try{
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
   const { getAuth, signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
-  const { getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, arrayUnion } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
-  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, arrayUnion };
+  const { getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
+  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion };
 }catch(e){ window.FB_LOAD_ERROR = e.message; }
 window.dispatchEvent(new Event('fb-ready'));
 </script>
@@ -329,9 +329,9 @@ const tsToDateInput = ts => { const d=new Date(ts); return `${d.getFullYear()}-$
 const tsToDtInput = ts => { const d=new Date(ts); return `${tsToDateInput(ts)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`; };
 
 const STAGES = ['SURVEY','ESTIMATE','REVIEW','SCHEDULE','CONSTRUCT','DONE']; // 실측 → 견적 → 검토 → 공사일정 → 공사 → 완료
-const STAGE_NM = { ESTIMATE:'견적 등록', REVIEW:'견적 검토', SURVEY:'실측 일정', SCHEDULE:'공사 일정', CONSTRUCT:'공사 진행', DONE:'완료' };
-const STAGE_BADGE = { ESTIMATE:'b-amber', REVIEW:'b-blue', SURVEY:'b-amber', SCHEDULE:'b-amber', CONSTRUCT:'b-blue', DONE:'b-green' };
-const STAGE_WAIT = { ESTIMATE:'토마토세븐 견적 대기', REVIEW:'본사 검토 대기', SURVEY:'실측일정 등록 대기', SCHEDULE:'공사일정 등록 대기', CONSTRUCT:'공사 진행중', DONE:'처리 완료' };
+const STAGE_NM = { ESTIMATE:'견적 등록', REVIEW:'견적 검토', SURVEY:'실측 일정', SCHEDULE:'공사 일정', CONSTRUCT:'공사 진행', DONE:'완료', DROPPED:'중단' };
+const STAGE_BADGE = { ESTIMATE:'b-amber', REVIEW:'b-blue', SURVEY:'b-amber', SCHEDULE:'b-amber', CONSTRUCT:'b-blue', DONE:'b-green', DROPPED:'b-gray' };
+const STAGE_WAIT = { ESTIMATE:'토마토세븐 견적 대기', REVIEW:'본사 검토 대기', SURVEY:'실측일정 등록 대기', SCHEDULE:'공사일정 등록 대기', CONSTRUCT:'공사 진행중', DONE:'처리 완료', DROPPED:'중단됨' };
 const STAGE_OWNER = { ESTIMATE:'토마토세븐', REVIEW:'본사담당', SURVEY:'토마토세븐', SCHEDULE:'토마토세븐', CONSTRUCT:'토마토세븐' };
 const ROLE_NM = { hq:'본사담당', store:'점포', vendor:'토마토세븐' };
 
@@ -340,7 +340,8 @@ const state = {
   view:'dash', detailId:null, filter:'ALL', q:'',
   cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE },
   reqs:[], ready:false, dbError:null,
-  chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:''
+  chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:'',
+  chatNoti:false, lastSeen:{}, prevRoomTs:{}, roomsInit:false
 };
 const filesCache = {};   // reqId -> [{kind,name,data,ts}]
 
@@ -373,12 +374,9 @@ const store = {
         }
         fillStoreList(); if(state.ready) render();
       }, err=>console.warn('config',err));
-      // 접수건 실시간 구독
-      FB.onSnapshot(FB.query(FB.collection(fs,'requests'), FB.orderBy('createdAt','desc'), FB.limit(500)), snap=>{
-        state.reqs = snap.docs.map(d=>d.data());
-        state.ready = true; state.dbError=null;
-        onReqs();
-      }, err=>{ state.dbError = err.code||String(err); state.ready=true; onReqs(); });
+      // 접수건 실시간 구독은 로그인 후 역할에 맞춰 시작 (subscribeReqs)
+      if(state.user) subscribeReqs(onReqs);
+      else state._onReqs = onReqs;
     } else {
       seed(); seedChats();
       state.ready = true;
@@ -394,12 +392,19 @@ const store = {
     else { state.reqs.unshift(r); }
   },
   async updateRequest(id, patch, histEntry, comment){
+    /* 파트너 평가용: 단계가 넘어갈 때 기한초과였다면 지연 이력 기록 */
+    const cur = R(id);
+    let overdueEntry = null;
+    if(cur && patch.stage && patch.stage!==cur.stage && isOver(cur))
+      overdueEntry = {stage:cur.stage, days:-ddays(cur), ts:now()};
     if(LIVE){
       const upd = {...patch};
       if(histEntry) upd.history = FB.arrayUnion(histEntry);
       if(comment) upd.comments = FB.arrayUnion(comment);
+      if(overdueEntry) upd.overdues = FB.arrayUnion(overdueEntry);
       await FB.updateDoc(FB.doc(fs,'requests',id), upd);
     } else {
+      if(overdueEntry){ const rr=state.reqs.find(x=>x.id===id); rr.overdues=(rr.overdues||[]); rr.overdues.push(overdueEntry); }
       const r = state.reqs.find(x=>x.id===id);
       Object.assign(r, patch);
       if(histEntry) r.history.push(histEntry);
@@ -421,8 +426,19 @@ const store = {
   },
   /* ---- 채팅 ---- */
   subscribeRooms(cb){
-    if(LIVE) return FB.onSnapshot(FB.query(FB.collection(fs,'chats'), FB.orderBy('lastTs','desc'), FB.limit(100)),
-      snap=>cb(snap.docs.map(d=>({id:d.id, ...d.data()}))), err=>console.warn('rooms',err));
+    if(LIVE){
+      if(role()==='store'){
+        const names = ['전체', state.user.store||state.user.name];
+        const metas = {};
+        const unsubs = names.map(n=>FB.onSnapshot(FB.doc(fs,'chats',n), d=>{
+          if(d.exists()) metas[n]={id:n, ...d.data()};
+          cb(Object.values(metas));
+        }, err=>console.warn('room',err)));
+        return ()=>unsubs.forEach(u=>{try{u()}catch(e){}});
+      }
+      return FB.onSnapshot(FB.query(FB.collection(fs,'chats'), FB.orderBy('lastTs','desc'), FB.limit(100)),
+        snap=>cb(snap.docs.map(d=>({id:d.id, ...d.data()}))), err=>console.warn('rooms',err));
+    }
     demoChats.roomCb = cb; cb(demoRoomMetas()); return ()=>{demoChats.roomCb=null};
   },
   subscribeMsgs(room, cb){
@@ -443,6 +459,24 @@ const store = {
     }
   }
 };
+/* 역할별 접수건 구독 — 점포는 자기 점포 것만 받아 서버 사용량을 대폭 줄임 (1,500개 점포 대응) */
+function subscribeReqs(onReqs){
+  if(!LIVE) return;
+  if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; }
+  onReqs = onReqs || (()=>render());
+  let q;
+  if(role()==='store' && state.user.store){
+    q = FB.query(FB.collection(fs,'requests'), FB.where('store','==',state.user.store), FB.limit(200));
+  } else {
+    q = FB.query(FB.collection(fs,'requests'), FB.orderBy('createdAt','desc'), FB.limit(500));
+  }
+  state.unsubReqs = FB.onSnapshot(q, snap=>{
+    state.reqs = snap.docs.map(d=>d.data()).sort((a,b)=>b.createdAt-a.createdAt);
+    state.ready = true; state.dbError=null;
+    onReqs();
+  }, err=>{ state.dbError = err.code||String(err); state.ready=true; onReqs(); });
+}
+
 /* 데모 채팅 데이터 */
 const demoChats = { msgs:{}, meta:{}, roomCb:null, msgCb:null };
 function demoRoomMetas(){ return Object.values(demoChats.meta).sort((a,b)=>b.lastTs-a.lastTs); }
@@ -542,7 +576,7 @@ function readSmallFile(file, maxKB=700){ // PDF 등 비이미지
 }
 
 /* ================= SLA / 알림 ================= */
-function deadline(r){ if(r.stage==='DONE') return null; return r.stageAt + (state.cfg.sla[r.stage]||3)*DAY; }
+function deadline(r){ if(r.stage==='DONE'||r.stage==='DROPPED') return null; return r.stageAt + (state.cfg.sla[r.stage]||3)*DAY; }
 function ddays(r){ const dl=deadline(r); if(dl===null) return null; return Math.ceil((dl-now())/DAY); }
 function isOver(r){ const d=ddays(r); return d!==null && d<0; }
 function ddayBadge(r){
@@ -566,7 +600,19 @@ function allNotis(){
 /* ================= 세션 ================= */
 function saveSession(){ try{ localStorage.setItem('bosuon_session', JSON.stringify(state.user)); }catch(e){} }
 function loadSession(){ try{ return JSON.parse(localStorage.getItem('bosuon_session')||'null'); }catch(e){ return null; } }
-function logout(){ state.user=null; try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
+function loadChatPrefs(){
+  try{
+    state.chatNoti = localStorage.getItem('bosuon_chatnoti')==='1';
+    state.lastSeen = JSON.parse(localStorage.getItem('bosuon_lastseen')||'{}');
+  }catch(e){}
+}
+function saveChatPrefs(){
+  try{
+    localStorage.setItem('bosuon_chatnoti', state.chatNoti?'1':'0');
+    localStorage.setItem('bosuon_lastseen', JSON.stringify(state.lastSeen));
+  }catch(e){}
+}
+function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
 
 let pickedRole=null;
 function pickRole(r){
@@ -595,6 +641,8 @@ function doLogin(){
   state.user = {role:pickedRole, name, store:storeNm};
   saveSession();
   document.getElementById('login').classList.remove('open');
+  if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); }
+  loadChatPrefs(); ensureRooms();
   state.view='dash'; render();
 }
 function showLogin(){
@@ -615,13 +663,27 @@ function actorLabel(){
 /* ================= 공통 UI ================= */
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2400); }
 function setRole(r){ if(LIVE) return; state.user={role:r,name:ROLE_NM[r],store:r==='store'?state.cfg.stores[0]:''}; if(state.view==='new'&&r!=='store') state.view='dash'; if(state.view==='set'&&r!=='hq') state.view='dash'; render(); }
+function ensureRooms(){
+  if(state.roomsSubbed || !state.user) return;
+  state.roomsSubbed = true;
+  store.subscribeRooms(list=>{
+    state.chatRooms = list;
+    const me = actorLabel();
+    list.forEach(m=>{
+      const name = m.name||m.id;
+      const prev = state.prevRoomTs[name]||0;
+      if(state.roomsInit && m.lastTs && m.lastTs>prev && m.lastBy && m.lastBy!==me) maybeNotify(name, m);
+      if(m.lastTs) state.prevRoomTs[name] = m.lastTs;
+    });
+    state.roomsInit = true;
+    if(state.view==='chat'||state.view==='chatroom'){ if(!modalOpen()) render(); }
+    else renderNav();
+  });
+}
 function go(v,id){
   if(state.view==='chatroom' && v!=='chatroom' && state.unsubMsgs){ try{state.unsubMsgs()}catch(e){} state.unsubMsgs=null; }
   state.view=v; state.detailId=id||null;
-  if(v==='chat' && !state.roomsSubbed){
-    state.roomsSubbed=true;
-    store.subscribeRooms(list=>{ state.chatRooms=list; if(state.view==='chat') render(); });
-  }
+  if(v==='chat') ensureRooms();
   render(); window.scrollTo(0,0);
   if(v==='detail'&&id) loadDetailFiles(id);
   if(v==='chatroom') renderChatMsgs();
@@ -666,10 +728,7 @@ function render(){
   if(LIVE){ who.style.display='inline-block'; who.textContent = `${role()==='store'?'🏪':role()==='hq'?'🏢':'🔧'} ${state.user.name}`; who.onclick=()=>{ if(confirm('로그아웃할까요?')) logout(); }; rs.style.display='none'; }
   else { rs.style.display='inline-block'; rs.value=role(); who.style.display='none'; }
 
-  const tabs = [ ['dash','대시보드'], ['list','접수 목록'], ['chat','💬 채팅'] ];
-  if(role()==='store') tabs.push(['new','+ 신규 접수']);
-  if(role()==='hq') tabs.push(['set','설정']);
-  document.getElementById('nav').innerHTML = tabs.map(([v,t])=>`<button class="${(state.view===v||(state.view==='detail'&&v==='list')||(state.view==='chatroom'&&v==='chat'))?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
+  renderNav();
 
   const n = state.reqs.filter(isOver).length;
   const cEl = document.getElementById('notiCnt');
@@ -691,6 +750,22 @@ function render(){
   if(chatEl2 && chatVal) chatEl2.value = chatVal;
   if(state.view==='chatroom') renderChatMsgs();
 }
+function unreadRooms(){
+  const me = actorLabel();
+  return state.chatRooms.filter(m=>{
+    const name = m.name||m.id;
+    return m.lastTs && m.lastTs > (state.lastSeen[name]||0) && m.lastBy && m.lastBy!==me;
+  }).length;
+}
+function renderNav(){
+  if(!state.user) return;
+  const un = unreadRooms();
+  const chatLabel = '💬 채팅' + (un?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${un}</span>`:'');
+  const tabs = [ ['dash','대시보드'], ['list','접수 목록'], ['chat',chatLabel] ];
+  if(role()==='store') tabs.push(['new','+ 신규 접수']);
+  if(role()==='hq') tabs.push(['set','설정']);
+  document.getElementById('nav').innerHTML = tabs.map(([v,t])=>`<button class="${(state.view===v||(state.view==='detail'&&v==='list')||(state.view==='chatroom'&&v==='chat'))?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
+}
 function roleNote(){
   const t = { hq:'본사담당 모드 — 견적 검토·승인, 설정, 전체 현황 관리', store:'점포 모드 — 보수공사 접수 및 진행상황 열람', vendor:'토마토세븐 모드 — 견적서 업로드, 실측·공사일정 등록, 완료 처리' };
   return `<div class="role-note">👤 ${t[role()]}</div>`;
@@ -699,14 +774,15 @@ function roleNote(){
 /* ===== 대시보드 ===== */
 function vDash(){
   const rs = state.reqs;
-  const open = rs.filter(r=>r.stage!=='DONE');
+  const open = rs.filter(r=>r.stage!=='DONE'&&r.stage!=='DROPPED');
   const over = rs.filter(isOver);
   const done = rs.filter(r=>r.stage==='DONE');
   const cnt = s => rs.filter(r=>r.stage===s).length;
-  const max = Math.max(...STAGES.map(cnt),1);
-  const bars = STAGES.map(s=>`
+  const barStages = [...STAGES,'DROPPED'];
+  const max = Math.max(...barStages.map(cnt),1);
+  const bars = barStages.map(s=>`
     <div class="stagebar"><span class="nm">${STAGE_NM[s]}</span>
-      <div class="tr"><div class="fl" style="width:${cnt(s)/max*100}%;${s==='DONE'?'background:var(--green)':''}"></div></div>
+      <div class="tr"><div class="fl" style="width:${cnt(s)/max*100}%;${s==='DONE'?'background:var(--green)':s==='DROPPED'?'background:#9CA3AF':''}"></div></div>
       <span class="v">${cnt(s)}</span></div>`).join('');
   const overList = over.length ? over.map(reqCard).join('') : '<div class="card" style="color:var(--sub);font-weight:700;text-align:center">기한초과 건이 없습니다 👍</div>';
   const installBanner = window.deferredPrompt ? `<button class="card" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;border:2px solid var(--red)" onclick="installApp()"><span style="font-size:24px">📲</span><span><b>앱으로 설치하기</b><div style="font-size:12.5px;color:var(--sub)">홈 화면에 설치하면 앱처럼 바로 실행됩니다</div></span></button>` : '';
@@ -718,8 +794,35 @@ function vDash(){
       <div class="tile"><div class="n" style="color:var(--green)">${done.length}</div><div class="t">완료</div></div>
     </div>
     <div class="card"><div class="h2">단계별 현황</div>${bars}</div>
+    ${role()==='hq'?partnerCard(rs):''}
     <div class="h2" style="margin:16px 2px 10px">⚠️ 기한초과 — 조치 필요 <span class="badge b-red">${over.length}건</span></div>
     ${overList}`;
+}
+
+/* ===== 파트너사 평가 현황 (본사) ===== */
+function partnerCard(rs){
+  const done = rs.filter(r=>r.stage==='DONE');
+  const rated = done.filter(r=>r.rating);
+  const avgRate = rated.length ? (rated.reduce((a,b)=>a+b.rating,0)/rated.length) : null;
+  const rejects = rs.reduce((a,b)=>a+(b.rejectCount||0),0);
+  const odEvents = rs.flatMap(r=>r.overdues||[]);
+  const odDays = odEvents.reduce((a,b)=>a+(b.days||0),0);
+  const dropped = rs.filter(r=>r.stage==='DROPPED');
+  const durs = done.filter(r=>r.completedAt).map(r=>(r.completedAt-r.createdAt)/DAY);
+  const avgDur = durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null;
+  const nowOver = rs.filter(isOver).length;
+  const rateColor = avgRate===null?'var(--sub)':avgRate<=4?'var(--red-dark)':avgRate<=7?'var(--amber)':'var(--green)';
+  const lowRates = rated.filter(r=>r.rating<=4);
+  return `<div class="card">
+    <div class="h2">🏆 파트너사 평가 현황 <span class="badge b-gray">토마토세븐</span></div>
+    <div class="kv"><b>완료 실적</b>${done.length}건${avgDur!==null?` · 평균 처리 ${avgDur}일`:''}</div>
+    <div class="kv"><b>점포 만족도</b><strong style="color:${rateColor}">${avgRate!==null?'★ '+avgRate.toFixed(1)+' / 10':'평가 없음'}</strong>${rated.length?`&nbsp;(${rated.length}건 평가)`:''}</div>
+    <div class="kv"><b>견적 반려</b>${rejects?`<span style="color:var(--red-dark);font-weight:700">누적 ${rejects}회</span>`:'0회'}</div>
+    <div class="kv"><b>기한초과 이력</b>${odEvents.length?`<span style="color:var(--red-dark);font-weight:700">${odEvents.length}회 · 누적 지연 ${odDays}일</span>`:'없음'}${nowOver?` · 현재 초과 ${nowOver}건`:''}</div>
+    <div class="kv"><b>중단 건</b>${dropped.length}건</div>
+    ${lowRates.length?`<div class="note warn" style="margin-top:6px">⚠ 저만족(4점 이하) ${lowRates.length}건 — ${lowRates.slice(0,3).map(r=>`[${r.id}] ${esc(r.ratingReason||'사유 미기재')}`).join(' / ')}</div>`:''}
+    <div class="note" style="margin-top:8px">기한초과·반려·만족도는 처리 과정에서 자동 축적되며, 엑셀 내보내기에 포함됩니다.</div>
+  </div>`;
 }
 
 /* ===== 목록 ===== */
@@ -739,7 +842,7 @@ function reqCard(r){
   </button>`;
 }
 function vList(){
-  const chips = [['ALL','전체'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]])];
+  const chips = [['ALL','전체'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
   const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
   let rs = state.reqs.slice().sort((a,b)=>{
     const ao=isOver(a)?0:1, bo=isOver(b)?0:1;
@@ -787,7 +890,12 @@ function vDetail(){
   if(r.surveyDate){
     secs += `<div class="kv"><b>실측일</b>${fmtD(r.surveyDate)} ${r.surveyDone?'<span class="badge b-green">실측완료</span>':'<span class="badge b-amber">예정</span>'}</div>`;
   } else secs += `<div class="note">실측 일정이 등록되지 않았습니다.</div>`;
+  secs += photosHtml(r.id,'survey');
   if(rl==='vendor' && r.stage==='SURVEY' && !r.surveyDate) secs += `<button class="btn blk" onclick="mSurvey('${r.id}')">📅 실측일정 등록</button>`;
+  if(rl==='vendor' && ['SURVEY','ESTIMATE'].includes(r.stage) && r.surveyDate){
+    secs += `<input type="file" id="svF" accept="image/*" multiple style="display:none" onchange="pickSurveyPhotos('${r.id}',this)">
+      <button class="btn sec2 blk" onclick="document.getElementById('svF').click()">📷 실측 사진 업로드</button>`;
+  }
   if(rl==='vendor' && r.stage==='SURVEY' && r.surveyDate && !r.surveyDone) secs += `<button class="btn blk grn" onclick="doSurveyDone('${r.id}')">✅ 실측 완료 처리</button>`;
   secs += `</div>`;
 
@@ -830,6 +938,8 @@ function vDetail(){
     const signFile = (filesCache[r.id]||[]).find(f=>f.kind==='sign');
     if(r.signBy){
       secs += `<div class="kv" style="margin-top:8px"><b>점포 확인</b><span class="badge b-green">서명 완료</span>&nbsp; ${esc(r.signBy)} · ${fmtDT(r.signAt)}</div>`;
+      if(r.rating) secs += `<div class="kv"><b>만족도</b><strong style="color:${r.rating<=4?'var(--red-dark)':r.rating<=7?'var(--amber)':'var(--green)'}">★ ${r.rating} / 10</strong></div>
+        ${r.ratingReason?`<div class="kv"><b>사유</b>${esc(r.ratingReason)}</div>`:''}`;
       if(signFile) secs += `<img class="signimg" src="${signFile.data}" alt="서명">`;
     } else if(rl==='store'){
       secs += `<div class="note">공사 결과를 확인하셨다면 완료 확인 서명을 해주세요.</div>
@@ -855,6 +965,11 @@ function vDetail(){
   </div></div>`;
 
   const overWarn = isOver(r) ? `<div class="note warn">⚠ 현재 「${STAGE_NM[r.stage]}」 단계가 처리기한을 ${-ddays(r)}일 초과했습니다. (${STAGE_OWNER[r.stage]} 조치 필요)</div>` : '';
+  const dropBanner = r.stage==='DROPPED' ? `<div class="note warn" style="margin-top:10px">⛔ 이 프로젝트는 <b>중단</b> 처리되었습니다.<br>
+    · 처리자: ${esc(r.droppedBy||'-')} · ${r.droppedAt?fmtDT(r.droppedAt):''}<br>
+    · 사유: ${esc(r.dropReason||'-')}
+    ${rl==='hq'?`<div style="margin-top:8px"><button class="btn sm" onclick="doResume('${r.id}')">↩ 프로젝트 재개 (본사)</button></div>`:''}</div>` : '';
+  const dropBtn = (r.stage!=='DONE' && r.stage!=='DROPPED') ? `<div style="text-align:right;margin-top:12px"><button style="color:var(--sub);font-size:12.5px;font-weight:700;text-decoration:underline" onclick="mDrop('${r.id}')">⛔ 프로젝트 중단 처리</button></div>` : '';
   return `<button class="back" onclick="go('list')">← 목록으로</button>
     <div class="card">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -864,7 +979,7 @@ function vDetail(){
       </div>
       <h3 style="font-size:18px;font-weight:800;margin-top:6px">${esc(r.title)}</h3>
       <div style="color:var(--sub);font-size:13px">${esc(r.store)}</div>
-      ${stepper(r)} ${overWarn} ${secs}
+      ${stepper(r)} ${dropBanner} ${overWarn} ${secs} ${dropBtn}
     </div>`;
 }
 function slaTag(r,stage){
@@ -874,7 +989,11 @@ function slaTag(r,stage){
   if(d<0) return `<span class="badge b-overdue">기한 ${-d}일 초과</span>`;
   return `<span class="badge b-amber">기한 D-${d} (${fmtD(deadline(r))}까지)</span>`;
 }
-function viewImg(src){ openModal(`<img src="${src}" style="width:100%;border-radius:12px"><button class="btn sec2 blk" onclick="closeModal()">닫기</button>`); }
+function viewImg(src){
+  openModal(`<img src="${src}" style="width:100%;border-radius:12px">
+    <a class="btn blk" style="text-decoration:none" href="${src}" download="bosuon_${state.detailId||'photo'}_${Date.now()}.jpg">⬇ 사진 다운로드</a>
+    <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
+}
 
 /* ===== 신규 접수 (점포) ===== */
 let newPhotos = [];
@@ -996,6 +1115,7 @@ async function doReview(id){
   if(ests.length) ests[ests.length-1] = {...ests[ests.length-1], status:dec==='승인'?'승인':'보완요청'};
   const patch = { review:{at:now(),decision:dec,opinion:op}, estimates:ests,
     stage: dec==='승인'?'SCHEDULE':'ESTIMATE', stageAt:now() };
+  if(dec==='보완요청') patch.rejectCount = (r.rejectCount||0)+1;
   try{
     await store.updateRequest(id, patch, {ts:now(),actor:actorLabel(),action:dec==='승인'?'견적 승인':'견적 보완요청 → 재견적 대기'});
     closeModal(); toast('검토가 등록되었습니다');
@@ -1109,8 +1229,9 @@ function vChat(){
 }
 function openRoom(room){
   state.chatRoom = room; state.chatMsgs = [];
+  state.lastSeen[room] = now(); saveChatPrefs();
   go('chatroom');
-  state.unsubMsgs = store.subscribeMsgs(room, msgs=>{ state.chatMsgs = msgs; renderChatMsgs(); });
+  state.unsubMsgs = store.subscribeMsgs(room, msgs=>{ state.chatMsgs = msgs; renderChatMsgs(); state.lastSeen[room]=now(); saveChatPrefs(); });
 }
 function vChatRoom(){
   return `<button class="back" onclick="go('chat')">← 채팅 목록</button>
@@ -1140,11 +1261,95 @@ async function sendChat(){
   catch(e){ toast('전송 실패: '+(e.code||e.message)); inp.value=t; }
 }
 
+function mDrop(id){
+  openModal(`<h2>프로젝트 중단 처리</h2><div class="sub">${id} · 중단 사유는 전체 관계자에게 공개되며 평가 이력에 기록됩니다</div>
+    <label>중단 사유 (필수)</label>
+    <textarea id="dropWhy" rows="3" placeholder="예) 점포 리뉴얼 일정과 중복되어 본 공사 불필요 / 임대인 협의 불발 등"></textarea>
+    <button class="btn blk" onclick="doDrop('${id}')">중단 처리</button>`);
+}
+async function doDrop(id){
+  const why = document.getElementById('dropWhy').value.trim();
+  if(!why){ toast('중단 사유를 입력해주세요'); return; }
+  const r = R(id);
+  try{
+    await store.updateRequest(id, {stage:'DROPPED', stageAt:now(), prevStage:r.stage, dropReason:why, droppedBy:actorLabel(), droppedAt:now()},
+      {ts:now(), actor:actorLabel(), action:`프로젝트 중단 (사유: ${why.slice(0,40)}${why.length>40?'…':''})`});
+    closeModal(); toast('중단 처리되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function doResume(id){
+  if(!confirm('이 프로젝트를 재개할까요? 중단 전 단계로 되돌아갑니다.')) return;
+  const r = R(id);
+  try{
+    await store.updateRequest(id, {stage:r.prevStage||'SURVEY', stageAt:now(), dropReason:r.dropReason||'', droppedBy:'', droppedAt:0},
+      {ts:now(), actor:actorLabel(), action:'프로젝트 재개 (중단 해제)'});
+    toast('재개되었습니다'); render();
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+async function pickSurveyPhotos(id, inp){
+  const files = [...inp.files]; if(!files.length) return;
+  toast('사진 업로드 중…');
+  let n=0;
+  for(const f of files){
+    try{ const p = await compressImage(f); await store.addFile(id,{kind:'survey',name:'survey.jpg',data:p,ts:now()}); n++; }
+    catch(e){ toast('사진 처리 실패: '+f.name); }
+  }
+  if(n) await store.updateRequest(id, {}, {ts:now(),actor:actorLabel(),action:`실측 사진 ${n}장 업로드`});
+  toast(`실측 사진 ${n}장 업로드 완료`); render();
+}
+
+/* ===== 채팅 푸시 알림 (앱 실행 중) ===== */
+function maybeNotify(room, meta){
+  if(!state.chatNoti) return;
+  if(state.view==='chatroom' && state.chatRoom===room && !document.hidden) return; // 그 방을 보고 있으면 생략
+  showNotif(`💬 ${room}`, `${meta.lastBy}: ${meta.lastMsg||''}`.slice(0,90), room);
+  renderNav();
+}
+async function showNotif(title, body, tag){
+  try{
+    if(typeof Notification==='undefined' || Notification.permission!=='granted') return;
+    const opts = { body, tag:'bosuon-'+tag, icon:'./icon-192.png', badge:'./icon-192.png' };
+    const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.getRegistration() : null;
+    if(reg && reg.showNotification) reg.showNotification(title, opts);
+    else new Notification(title, opts);
+  }catch(e){ console.warn('notify', e); }
+}
+async function toggleChatNoti(){
+  if(state.chatNoti){
+    state.chatNoti = false; saveChatPrefs(); renderNotis(); toast('채팅 알림을 껐습니다'); return;
+  }
+  if(typeof Notification==='undefined'){
+    toast('이 브라우저는 알림을 지원하지 않습니다 (아이폰은 홈 화면에 추가 후 앱에서 켜주세요)'); return;
+  }
+  let perm = Notification.permission;
+  if(perm==='default') perm = await Notification.requestPermission();
+  if(perm!=='granted'){ toast('브라우저 알림 권한이 거부되어 있습니다. 브라우저 설정에서 허용해주세요'); return; }
+  state.chatNoti = true; saveChatPrefs(); renderNotis();
+  showNotif('GRS 보수ON', '채팅 알림이 켜졌습니다. 새 메시지가 오면 이렇게 알려드려요!', 'test');
+  toast('채팅 알림을 켰습니다');
+}
+
 /* ===== 완료확인 전자서명 ===== */
 let sgCv=null, sgCtx=null, sgDirty=false, sgPrev=null;
+let sgRate=0;
+function pickRate(n){
+  sgRate=n;
+  document.querySelectorAll('.ratebtn').forEach(b=>{
+    const v=+b.dataset.v;
+    b.style.background = v<=n ? (n<=4?'var(--red)':n<=7?'#F2A505':'var(--green)') : 'var(--gray-bg)';
+    b.style.color = v<=n ? '#fff' : 'var(--sub)';
+  });
+  document.getElementById('rateLabel').textContent = n ? `${n}점 / 10점` : '';
+}
 function mSign(id){
-  sgDirty=false;
-  openModal(`<h2>공사완료 확인 서명</h2><div class="sub">${id} · 점포관리자 확인 서명입니다. 손가락으로 서명해주세요.</div>
+  sgDirty=false; sgRate=0;
+  openModal(`<h2>공사완료 확인 서명</h2><div class="sub">${id} · 점포관리자 확인 서명입니다.</div>
+    <label>이번 공사 만족도 (10점 만점) <span id="rateLabel" style="color:var(--red-dark)"></span></label>
+    <div style="display:flex;gap:4px">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="ratebtn" data-v="${n}" onclick="pickRate(${n})" style="flex:1;padding:9px 0;border-radius:8px;background:var(--gray-bg);color:var(--sub);font-weight:800;font-size:13px">${n}</button>`).join('')}</div>
+    <label>점수 사유 (평가 관리에 활용됩니다)</label>
+    <textarea id="rateWhy" rows="2" placeholder="예) 마감 깔끔, 일정 지연 아쉬움 등"></textarea>
+    <label>서명</label>
     <div class="sgwrap"><canvas id="sgCv"></canvas><div class="sghint" id="sgHint">여기에 서명</div></div>
     <div style="display:flex;gap:8px;margin-top:10px">
       <button class="btn sec2" style="flex:1" onclick="sgClear()">지우기</button>
@@ -1172,13 +1377,15 @@ function sgClear(){
   sgDirty=false; document.getElementById('sgHint').style.display='flex';
 }
 async function doSign(id){
+  if(!sgRate){ toast('만족도 점수를 선택해주세요 (1~10점)'); return; }
   if(!sgDirty){ toast('서명을 해주세요'); return; }
   const data = sgCv.toDataURL('image/png');
+  const why = document.getElementById('rateWhy').value.trim();
   try{
     await store.addFile(id, {kind:'sign', name:'sign.png', data, ts:now()});
-    await store.updateRequest(id, {signBy:actorLabel(), signAt:now()},
-      {ts:now(), actor:actorLabel(), action:'공사완료 확인 서명'});
-    closeModal(); toast('서명이 저장되었습니다');
+    await store.updateRequest(id, {signBy:actorLabel(), signAt:now(), rating:sgRate, ratingReason:why},
+      {ts:now(), actor:actorLabel(), action:`공사완료 확인 서명 (만족도 ${sgRate}/10)`});
+    closeModal(); toast('서명과 만족도가 저장되었습니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
@@ -1234,6 +1441,8 @@ async function printReport(id){
     <table style="width:100%;border-collapse:collapse;font-size:11pt">
       <tr><td style="${box}background:#f2f2f2;width:110px;font-weight:700">확인자</td><td style="${box}">${esc(r.signBy||'(서명 전)')}</td>
           <td style="${box}background:#f2f2f2;width:110px;font-weight:700">서명일시</td><td style="${box}">${r.signAt?fmtDT(r.signAt):'-'}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">만족도</td><td style="${box}">${r.rating?r.rating+' / 10점':'-'}</td>
+          <td style="${box}background:#f2f2f2;font-weight:700">평가 사유</td><td style="${box}">${esc(r.ratingReason||'-')}</td></tr>
       <tr><td style="${box}background:#f2f2f2;font-weight:700">서명</td><td style="${box}" colspan="3">${sign?`<img src="${sign.data}" style="height:70px">`:'(서명 이미지 없음)'}</td></tr>
     </table>
     <div style="margin-top:20px;font-size:9pt;color:#777;text-align:right">본 보고서는 GRS 보수ON 시스템에서 ${fmtDT(now())}에 자동 생성되었습니다.</div>
@@ -1512,21 +1721,29 @@ async function pickLaborFile(inp){
 /* ===== 알림 ===== */
 function renderNotis(){
   const list = allNotis();
-  document.getElementById('notiList').innerHTML = list.length ? list.map(n=>`
+  const togg = `<div style="display:flex;align-items:center;gap:10px;background:var(--gray-bg);border-radius:12px;padding:11px 13px;margin-bottom:12px">
+    <span style="flex:1;font-weight:800;font-size:14px">💬 채팅 푸시 알림<div style="font-size:11.5px;color:var(--sub);font-weight:500">앱이 켜져 있는 동안 새 메시지 도착 시 알림</div></span>
+    <button onclick="toggleChatNoti()" style="width:52px;height:28px;border-radius:99px;position:relative;background:${state.chatNoti?'var(--green)':'#C9CDD4'};transition:.2s">
+      <span style="position:absolute;top:3px;${state.chatNoti?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>
+    </button>
+  </div>`;
+  document.getElementById('notiList').innerHTML = togg + (list.length ? list.map(n=>`
     <div class="noti ${n.type==='over'?'over':''}" onclick="togglePanel(false);go('detail','${n.reqId}')">
       ${n.type==='over'?'⚠️ ':''}${esc(n.text)}<div class="ts">${fmtDT(n.ts)} · 터치하여 상세보기</div>
-    </div>`).join('') : '<div class="empty">알림이 없습니다</div>';
+    </div>`).join('') : '<div class="empty">알림이 없습니다</div>');
 }
 
 /* ===== CSV ===== */
 function exportCSV(){
-  const head = ['접수번호','점포','공사명','긴급도','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','완료일'];
+  const head = ['접수번호','점포','공사명','긴급도','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
   const rows = state.reqs.map(r=>{
     const last = (r.estimates||[])[(r.estimates||[]).length-1];
     const d = ddays(r);
+    const od = (r.overdues||[]).map(o=>`${STAGE_NM[o.stage]||o.stage} ${o.days}일`).join('; ');
     return [r.id, r.store, r.title, r.urgency, fmtD(r.createdAt), STAGE_WAIT[r.stage],
-      r.stage==='DONE'?'-':(d<0?`기한초과 ${-d}일`:`D-${d}`), last?last.amount:'',
-      r.surveyDate?fmtD(r.surveyDate):'', r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'', r.completedAt?fmtD(r.completedAt):''];
+      (r.stage==='DONE'||r.stage==='DROPPED')?'-':(d<0?`기한초과 ${-d}일`:`D-${d}`), last?last.amount:'',
+      r.surveyDate?fmtD(r.surveyDate):'', r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'', r.completedAt?fmtD(r.completedAt):'',
+      r.rating||'', r.ratingReason||'', r.rejectCount||0, od, r.dropReason||''];
   });
   const csv = '\uFEFF'+[head,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a = document.createElement('a');
@@ -1544,9 +1761,10 @@ function exportCSV(){
   }
   if(LIVE){
     const sess = loadSession();
-    if(sess && sess.role){ state.user = sess; }
+    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); loadChatPrefs(); ensureRooms(); }
   } else {
     state.user = {role:'hq', name:'본사담당', store:''}; // 데모: 본사 화면으로 시작
+    loadChatPrefs(); ensureRooms();
   }
   render();
   // 1분마다 D-day/기한초과 재계산
