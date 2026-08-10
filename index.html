@@ -697,6 +697,12 @@ function closeModal(){ document.getElementById('modal').classList.remove('open')
 function openModal(html){ document.getElementById('modalIn').innerHTML=html; document.getElementById('modal').classList.add('open'); }
 function modalOpen(){ return document.getElementById('modal').classList.contains('open'); }
 const R = id => state.reqs.find(x=>x.id===id);
+function waitLabel(r){
+  if(r.stage==='SCHEDULE' && r.schedStatus==='제안') return '점포 일정승인 대기';
+  if(r.stage==='SCHEDULE' && r.schedStatus==='조율요청') return '일정 재조율 중';
+  if(r.stage==='CONSTRUCT' && r.workStart && !r.workEnd) return '작업 진행중';
+  return STAGE_WAIT[r.stage];
+}
 const money = n => n==null?'-':Number(n).toLocaleString('ko-KR')+'원';
 const role = () => state.user ? state.user.role : null;
 
@@ -842,7 +848,7 @@ function reqCard(r){
   return `<button class="card req" onclick="go('detail','${r.id}')">
     <div class="row1">
       <span class="id">${r.id}</span>
-      <span class="badge ${STAGE_BADGE[r.stage]}">${STAGE_WAIT[r.stage]}</span>
+      <span class="badge ${STAGE_BADGE[r.stage]}">${waitLabel(r)}</span>
       ${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':''}
       ${r.dept&&r.dept!=='잘모르겠음'?deptBadge(r.dept):''}
       ${isOver(r)?`<span class="badge b-overdue">기한초과</span>`:''}
@@ -900,11 +906,15 @@ function vDetail(){
   </div>`;
 
   secs += `<div class="sec"><div class="st">📐 2. 실측 일정 ${slaTag(r,'SURVEY')}</div>`;
-  if(r.surveyDate){
+  if(r.surveySkipped){
+    secs += `<div class="kv"><b>실측</b><span class="badge b-gray">미실측 (생략)</span></div>
+      ${r.surveySkipReason?`<div class="kv"><b>생략 사유</b>${esc(r.surveySkipReason)}</div>`:''}`;
+  } else if(r.surveyDate){
     secs += `<div class="kv"><b>실측일</b>${fmtD(r.surveyDate)} ${r.surveyDone?'<span class="badge b-green">실측완료</span>':'<span class="badge b-amber">예정</span>'}</div>`;
   } else secs += `<div class="note">실측 일정이 등록되지 않았습니다.</div>`;
   secs += photosHtml(r.id,'survey');
-  if(rl==='vendor' && r.stage==='SURVEY' && !r.surveyDate) secs += `<button class="btn blk" onclick="mSurvey('${r.id}')">📅 실측일정 등록</button>`;
+  if(rl==='vendor' && r.stage==='SURVEY' && !r.surveyDate) secs += `<button class="btn blk" onclick="mSurvey('${r.id}')">📅 실측일정 등록</button>
+    <button class="btn sec2 blk" onclick="mSkipSurvey('${r.id}')">⏭ 실측 생략 — 바로 견적 진행</button>`;
   if(rl==='vendor' && ['SURVEY','ESTIMATE'].includes(r.stage) && r.surveyDate){
     secs += `<input type="file" id="svF" accept="image/*" multiple style="display:none" onchange="pickSurveyPhotos('${r.id}',this)">
       <button class="btn sec2 blk" onclick="document.getElementById('svF').click()">📷 실측 사진 업로드</button>`;
@@ -941,9 +951,33 @@ function vDetail(){
 
     secs += `<div class="sec"><div class="st">🏗 4. 공사 일정 ${slaTag(r,'SCHEDULE')}</div>`;
   if(r.constStart){
-    secs += `<div class="kv"><b>공사기간</b>${fmtDT(r.constStart)} ~ ${fmtDT(r.constEnd)}</div>`;
-  } else secs += `<div class="note">공사 일정이 등록되지 않았습니다.</div>`;
-  if(rl==='vendor' && r.stage==='SCHEDULE') secs += `<button class="btn blk" onclick="mSchedule('${r.id}')">📅 공사일정 등록</button>`;
+    const ss = r.schedStatus;
+    const ssBadge = r.stage==='SCHEDULE'
+      ? (ss==='제안' ? '<span class="badge b-amber">점포 승인 대기</span>' : ss==='조율요청' ? '<span class="badge b-red">조율 요청됨</span>' : '')
+      : (ss ? '<span class="badge b-green">점포 승인 완료</span>' : '');
+    secs += `<div class="kv"><b>공사기간</b>${fmtDT(r.constStart)} ~ ${fmtDT(r.constEnd)} ${ssBadge}</div>`;
+    if(ss==='승인' && r.schedBy) secs += `<div class="kv"><b>일정 승인</b>${esc(r.schedBy)} · ${fmtDT(r.schedAt)}</div>`;
+    if(ss==='조율요청' && r.schedNegoReason) secs += `<div class="note warn">🔁 점포 조율 요청: ${esc(r.schedNegoReason)}</div>`;
+    if(r.stage==='SCHEDULE' && ss==='제안'){
+      if(rl==='store'){
+        secs += `<div class="note">토마토세븐이 제안한 일정입니다. 가능하면 승인, 어려우면 조율을 요청하세요.</div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="btn sec2" style="flex:1" onclick="mSchedNego('${r.id}')">🔁 일정 조율 요청</button>
+            <button class="btn grn" style="flex:1.4" onclick="approveSchedule('${r.id}')">✅ 일정 승인 (확정)</button>
+          </div>`;
+      } else if(rl==='vendor'){
+        secs += `<div class="note">점포관리자 승인 대기중입니다. 필요 시 일정을 수정할 수 있습니다.</div>
+          <button class="btn sec2 blk" onclick="mSchedule('${r.id}')">✏ 일정 수정</button>`;
+      } else {
+        secs += `<div class="note">점포관리자 일정 승인 대기중입니다.</div>`;
+      }
+    }
+    if(r.stage==='SCHEDULE' && ss==='조율요청' && rl==='vendor')
+      secs += `<button class="btn blk" onclick="mSchedule('${r.id}')">📅 일정 다시 제안</button>`;
+  } else {
+    secs += `<div class="note">공사 일정이 등록되지 않았습니다. ${r.stage==='SCHEDULE'?'토마토세븐이 일정을 제안하면 점포 승인 후 확정됩니다.':''}</div>`;
+  }
+  if(rl==='vendor' && r.stage==='SCHEDULE' && !r.constStart) secs += `<button class="btn blk" onclick="mSchedule('${r.id}')">📅 공사일정 등록 (점포 승인 필요)</button>`;
   secs += `</div>`;
 
   secs += `<div class="sec"><div class="st">✅ 5. 공사 완료 ${slaTag(r,'CONSTRUCT')}</div>`;
@@ -964,7 +998,12 @@ function vDetail(){
     secs += `<button class="btn sec2 blk" onclick="printReport('${r.id}')">📄 공사완료보고서 출력 (PDF 저장)</button>
       <div class="note">버튼을 누른 뒤 인쇄 화면에서 「PDF로 저장」을 선택하면 전표 증빙용 보고서 파일이 생성됩니다.</div>`;
   } else secs += `<div class="note">공사 완료 전입니다.</div>`;
-  if(rl==='vendor' && r.stage==='CONSTRUCT') secs += `<button class="btn blk grn" onclick="mDone('${r.id}')">🏁 공사 완료 처리</button>`;
+  if(r.workStart) secs += `<div class="kv"><b>실제 작업</b>▶ ${fmtDT(r.workStart)}${r.workEnd?` ~ ⏹ ${fmtDT(r.workEnd)}`:' <span class="badge b-blue">진행중</span>'}</div>`;
+  if(rl==='vendor' && r.stage==='CONSTRUCT'){
+    if(!r.workStart) secs += `<button class="btn blk" onclick="doWorkStart('${r.id}')">▶ 작업 시작 (현재 시각 기록)</button>`;
+    else if(!r.workEnd) secs += `<button class="btn sec2 blk" onclick="doWorkEnd('${r.id}')">⏹ 작업 종료 (현재 시각 기록)</button>`;
+    secs += `<button class="btn blk grn" onclick="mDone('${r.id}')">🏁 공사 완료 처리</button>`;
+  }
   secs += `</div>`;
 
   secs += `<div class="sec"><div class="st">💬 의견·댓글 <span class="badge b-gray">${(r.comments||[]).length}</span></div>
@@ -988,7 +1027,7 @@ function vDetail(){
     <div class="card">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--sub);font-weight:700">${r.id}</span>
-        <span class="badge ${STAGE_BADGE[r.stage]}">${STAGE_WAIT[r.stage]}</span>
+        <span class="badge ${STAGE_BADGE[r.stage]}">${waitLabel(r)}</span>
         ${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':''}
       </div>
       <h3 style="font-size:18px;font-weight:800;margin-top:6px">${esc(r.title)}</h3>
@@ -1162,6 +1201,28 @@ async function doSurvey(id){
     closeModal(); toast('실측일정이 등록되었습니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
+function mSkipSurvey(id){
+  openModal(`<h2>실측 생략 (미실측)</h2><div class="sub">${id} · 실측 없이 바로 견적 단계로 넘어갑니다</div>
+    <label>미실측 사유</label>
+    <select id="skipSel">
+      <option>사진으로 견적 산출 가능</option>
+      <option>단순 부품·자재 교체 건</option>
+      <option>동일 공사 반복 건 (기존 실측 자료 활용)</option>
+      <option>직접 입력</option>
+    </select>
+    <div id="skipEtcWrap" style="display:none"><label>사유 직접 입력</label><input id="skipEtc" placeholder="사유를 입력하세요"></div>
+    <button class="btn blk" onclick="doSkipSurvey('${id}')">미실측 확정 — 견적 단계로</button>`);
+  setTimeout(()=>{ document.getElementById('skipSel').onchange = e=>{ document.getElementById('skipEtcWrap').style.display = e.target.value==='직접 입력'?'block':'none'; }; },50);
+}
+async function doSkipSurvey(id){
+  let why = document.getElementById('skipSel').value;
+  if(why==='직접 입력'){ why = document.getElementById('skipEtc').value.trim(); if(!why){ toast('사유를 입력해주세요'); return; } }
+  try{
+    await store.updateRequest(id, {surveySkipped:true, surveySkipReason:why, stage:'ESTIMATE', stageAt:now()},
+      {ts:now(), actor:actorLabel(), action:`실측 생략(미실측) — 바로 견적 진행 (${why})`});
+    closeModal(); toast('미실측 처리되었습니다. 견적을 등록해주세요');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 async function doSurveyDone(id){
   try{
     await store.updateRequest(id,{surveyDone:true, stage:'ESTIMATE', stageAt:now()},
@@ -1183,9 +1244,43 @@ async function doSchedule(id){
   const st = new Date(s).getTime(), en = new Date(ee).getTime();
   if(en<st){ toast('종료 일시가 시작보다 빠릅니다'); return; }
   try{
-    await store.updateRequest(id,{constStart:st, constEnd:en, scheduleAt:now(), stage:'CONSTRUCT', stageAt:now()},
-      {ts:now(),actor:actorLabel(),action:`공사일정 등록 (${fmtDT(st)} ~ ${fmtDT(en)})`});
-    closeModal(); toast('공사일정이 등록되었습니다');
+    await store.updateRequest(id,{constStart:st, constEnd:en, scheduleAt:now(), schedStatus:'제안', schedNegoReason:''},
+      {ts:now(),actor:actorLabel(),action:`공사일정 제안 (${fmtDT(st)} ~ ${fmtDT(en)}) — 점포 승인 대기`});
+    closeModal(); toast('일정이 등록되었습니다. 점포 승인 후 확정됩니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function approveSchedule(id){
+  try{
+    await store.updateRequest(id,{schedStatus:'승인', schedBy:actorLabel(), schedAt:now(), stage:'CONSTRUCT', stageAt:now()},
+      {ts:now(),actor:actorLabel(),action:'공사일정 승인 — 일정 확정'});
+    toast('일정이 확정되었습니다'); render();
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function mSchedNego(id){
+  openModal(`<h2>일정 조율 요청</h2><div class="sub">${id} · 제안된 일정이 어려울 때 사용하세요</div>
+    <label>조율 요청 사유 (가능한 일정을 함께 적어주세요)</label>
+    <textarea id="negoWhy" rows="3" placeholder="예) 그날 오전은 납품이 있어요. 14시 이후나 다음날 오전 가능합니다"></textarea>
+    <button class="btn blk" onclick="doSchedNego('${id}')">조율 요청 보내기</button>`);
+}
+async function doSchedNego(id){
+  const why = document.getElementById('negoWhy').value.trim();
+  if(!why){ toast('사유를 입력해주세요'); return; }
+  try{
+    await store.updateRequest(id,{schedStatus:'조율요청', schedNegoReason:why},
+      {ts:now(),actor:actorLabel(),action:`일정 조율 요청 (${why.slice(0,40)}${why.length>40?'…':''})`});
+    closeModal(); toast('조율 요청을 보냈습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function doWorkStart(id){
+  try{
+    await store.updateRequest(id,{workStart:now()}, {ts:now(),actor:actorLabel(),action:'작업 시작'});
+    toast('작업 시작 시각이 기록되었습니다'); render();
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function doWorkEnd(id){
+  try{
+    await store.updateRequest(id,{workEnd:now()}, {ts:now(),actor:actorLabel(),action:'작업 종료'});
+    toast('작업 종료 시각이 기록되었습니다'); render();
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 let donePhotosTmp = [];
@@ -1205,7 +1300,10 @@ async function pickDone(inp){
 }
 async function doDone(id){
   try{
-    await store.updateRequest(id,{stage:'DONE', stageAt:now(), completedAt:now()},
+    const rr = R(id);
+    const patch = {stage:'DONE', stageAt:now(), completedAt:now()};
+    if(rr.workStart && !rr.workEnd) patch.workEnd = now();
+    await store.updateRequest(id, patch,
       {ts:now(),actor:actorLabel(),action:'공사 완료 처리'});
     for(const p of donePhotosTmp) await store.addFile(id,{kind:'done',name:'done.jpg',data:p,ts:now()});
     closeModal(); toast('공사가 완료 처리되었습니다');
@@ -1456,10 +1554,11 @@ async function printReport(id){
           <td style="${box}background:#f2f2f2;width:110px;font-weight:700">완료일</td><td style="${box}">${fmtD(r.completedAt||r.stageAt)}</td></tr>
       <tr><td style="${box}background:#f2f2f2;font-weight:700">점포</td><td style="${box}">${esc(r.store)}</td>
           <td style="${box}background:#f2f2f2;font-weight:700">시공업체</td><td style="${box}">토마토세븐</td></tr>
-      <tr><td style="${box}background:#f2f2f2;font-weight:700">담당부서</td><td style="${box}" colspan="3">${esc(r.dept||'미지정')}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">실제 작업시간</td><td style="${box}">${r.workStart?fmtDT(r.workStart)+' ~ '+(r.workEnd?fmtDT(r.workEnd):'-'):'-'}</td>
+          <td style="${box}background:#f2f2f2;font-weight:700">담당부서</td><td style="${box}">${esc(r.dept||'미지정')}</td></tr>
       <tr><td style="${box}background:#f2f2f2;font-weight:700">공사명</td><td style="${box}" colspan="3">${esc(r.title)}</td></tr>
       <tr><td style="${box}background:#f2f2f2;font-weight:700">공사내용</td><td style="${box}" colspan="3">${esc(r.desc||'-')}</td></tr>
-      <tr><td style="${box}background:#f2f2f2;font-weight:700">공사기간</td><td style="${box}">${r.constStart?fmtDT(r.constStart)+' ~ '+fmtDT(r.constEnd):'-'}</td>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">공사기간(계획)</td><td style="${box}">${r.constStart?fmtDT(r.constStart)+' ~ '+fmtDT(r.constEnd):'-'}</td>
           <td style="${box}background:#f2f2f2;font-weight:700">승인금액</td><td style="${box}">${approved?money(approved.amount):'-'}</td></tr>
     </table>
     ${dones.length||photos.length?`<div style="font-weight:800;font-size:11pt;margin:10px 0 6px">■ 공사 사진 ${dones.length?'(완료)':'(접수 시)'}</div>
@@ -1564,11 +1663,14 @@ function analyzeEstimate(rows, inputAmount){
   }
   if(hi<0 || cols.name===undefined || cols.amt===undefined)
     return { ok:false, flags:['⚠ 표 형식을 인식하지 못했습니다 — 제목행에 「품명」과 「단가/금액」 열이 필요합니다. 본사 배포 표준 견적서 양식 사용을 권장합니다.'] };
-  const items=[]; let sheetTotal=null;
+  const items=[]; let sheetTotal=null, subTotal=null, overhead=null;
   for(let i=hi+1;i<rows.length;i++){
     const name = String(rows[i][cols.name]??'').trim();
+    const nm = name.replace(/\s/g,'');
     const amt = toNum(rows[i][cols.amt]);
-    if(/^(합\s*계|총\s*계|소\s*계|계)$/.test(name) || (!name && amt!==null && i>hi+1)){
+    if(/일반관리비|이윤|제경비|간접비/.test(nm)){ if(amt!==null) overhead=(overhead||0)+amt; continue; }
+    if(/소계/.test(nm)){ if(amt!==null) subTotal=amt; continue; }
+    if(/합계|총계/.test(nm) || /^계$/.test(nm) || (!name && amt!==null && i>hi+1)){
       if(amt!==null) sheetTotal = amt; continue;
     }
     if(!name || amt===null) continue;
@@ -1583,12 +1685,28 @@ function analyzeEstimate(rows, inputAmount){
   });
   if(calcBad) flags.push(`⚠ 수량×단가 ≠ 금액 불일치 ${calcBad}건`); else if(cols.qty!==undefined&&cols.unit!==undefined) flags.push('✓ 수량×단가 검산 이상 없음');
   if(unitMissing) flags.push(`⚠ 단가 누락/0원 항목 ${unitMissing}건`);
-  if(sheetTotal!==null && Math.abs(sheetTotal-calcTotal)>1) flags.push(`⚠ 시트 합계(${money(sheetTotal)})와 항목 합산(${money(calcTotal)}) 불일치`);
+  /* 소계 검산 */
+  const baseSub = subTotal!==null ? subTotal : calcTotal;
+  if(subTotal!==null && Math.abs(subTotal-calcTotal)>1) flags.push(`⚠ 소계(${money(subTotal)})와 항목 합산(${money(calcTotal)}) 불일치`);
+  /* 일반관리비·이윤 10% 기준 검토 */
+  if(overhead!==null){
+    const pct = baseSub ? overhead/baseSub*100 : null;
+    if(pct!==null){
+      if(Math.abs(pct-10)<=0.6) flags.push(`✓ 일반관리비·이윤 10% 정상 반영 (${money(overhead)})`);
+      else if(pct>10.6) flags.push(`⚠ 일반관리비·이윤 ${pct.toFixed(1)}% (${money(overhead)}) — 기준 10% 초과`);
+      else flags.push(`ℹ 일반관리비·이윤 ${pct.toFixed(1)}% (${money(overhead)}) — 기준 10%보다 낮음`);
+    }
+  } else if(items.length){
+    flags.push(`⚠ 일반관리비·이윤 항목 없음 — 소계의 10%(${money(Math.round(baseSub*0.1))}) 반영 기준입니다 (표준양식 사용 권장)`);
+  }
+  /* 총합계 검산: 소계 + 관리비 */
+  const expectTotal = baseSub + (overhead||0);
+  if(sheetTotal!==null && Math.abs(sheetTotal-expectTotal)>1) flags.push(`⚠ 총합계(${money(sheetTotal)})가 소계+관리비(${money(expectTotal)})와 불일치`);
   if(inputAmount){
-    const base = sheetTotal??calcTotal;
+    const base = sheetTotal ?? expectTotal;
     const diff = base ? Math.round((inputAmount-base)/base*100) : null;
-    if(diff!==null && Math.abs(diff)>1) flags.push(`⚠ 입력 견적금액(${money(inputAmount)})이 엑셀 합계보다 ${diff>0?'+':''}${diff}% ${diff>0?'높음':'낮음'}`);
-    else flags.push('✓ 입력 금액과 엑셀 합계 일치');
+    if(diff!==null && Math.abs(diff)>1) flags.push(`⚠ 입력 견적금액(${money(inputAmount)})이 엑셀 총합계보다 ${diff>0?'+':''}${diff}% ${diff>0?'높음':'낮음'}`);
+    else flags.push('✓ 입력 금액과 엑셀 총합계 일치');
   }
   const past = state.reqs.filter(x=>x.id!==state.detailId).flatMap(x=>(x.estimates||[]).filter(e=>e.status==='승인').map(e=>e.amount)).filter(Boolean);
   let vsPast=null;
@@ -1626,12 +1744,12 @@ function analyzeEstimate(rows, inputAmount){
     else flags.push(`✓ 노무비: ${l.name} ${money(l.unit)}/일 — 표준노임(${l.job}) 대비 ${l.pct>0?'+':''}${l.pct}% (적정)`);
   });
   const matTop = materials.sort((a,b)=>b.amt-a.amt).slice(0,5);
-  return { ok:true, itemCount:items.length, calcTotal, sheetTotal, flags, top, laborCount:labor.filter(l=>l.job).length, materials:matTop, laborNote:state.cfg.laborNote||'' };
+  return { ok:true, itemCount:items.length, calcTotal, sheetTotal, subTotal:baseSub, overhead, flags, top, laborCount:labor.filter(l=>l.job).length, materials:matTop, laborNote:state.cfg.laborNote||'' };
 }
 function analysisHtml(a){
   if(!a) return '';
   const rows = a.ok ? `
-    <div class="kv"><b>인식 항목</b>${a.itemCount}건 · 합계 <strong>${money(a.sheetTotal??a.calcTotal)}</strong></div>
+    <div class="kv"><b>인식 항목</b>${a.itemCount}건 · 소계 ${money(a.subTotal??a.calcTotal)}${a.overhead?` + 관리비·이윤 ${money(a.overhead)}`:''} = <strong>${money(a.sheetTotal??((a.subTotal??a.calcTotal)+(a.overhead||0)))}</strong></div>
     ${a.top&&a.top.length?`<div class="kv"><b>고액 항목</b>${a.top.map(t=>`${esc(t.name)} (${money(t.amt)})`).join(', ')}</div>`:''}` : '';
   return `<div style="background:var(--blue-bg);border-radius:10px;padding:10px 12px;margin-top:8px">
     <div style="font-weight:800;font-size:13px;color:var(--blue);margin-bottom:6px">🤖 견적서 자동 검토 리포트</div>
@@ -1762,14 +1880,15 @@ function renderNotis(){
 
 /* ===== CSV ===== */
 function exportCSV(){
-  const head = ['접수번호','점포','공사명','긴급도','담당부서','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
+  const head = ['접수번호','점포','공사명','긴급도','담당부서','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','일정승인','작업시작(실제)','작업종료(실제)','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
   const rows = state.reqs.map(r=>{
     const last = (r.estimates||[])[(r.estimates||[]).length-1];
     const d = ddays(r);
     const od = (r.overdues||[]).map(o=>`${STAGE_NM[o.stage]||o.stage} ${o.days}일`).join('; ');
-    return [r.id, r.store, r.title, r.urgency, r.dept||'', fmtD(r.createdAt), STAGE_WAIT[r.stage],
+    return [r.id, r.store, r.title, r.urgency, r.dept||'', fmtD(r.createdAt), waitLabel(r),
       (r.stage==='DONE'||r.stage==='DROPPED')?'-':(d<0?`기한초과 ${-d}일`:`D-${d}`), last?last.amount:'',
-      r.surveyDate?fmtD(r.surveyDate):'', r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'', r.completedAt?fmtD(r.completedAt):'',
+      r.surveySkipped?'미실측('+(r.surveySkipReason||'')+')':(r.surveyDate?fmtD(r.surveyDate):''), r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'',
+      r.schedStatus==='승인'?`승인(${r.schedBy||''})`:(r.schedStatus||''), r.workStart?fmtDT(r.workStart):'', r.workEnd?fmtDT(r.workEnd):'', r.completedAt?fmtD(r.completedAt):'',
       r.rating||'', r.ratingReason||'', r.rejectCount||0, od, r.dropReason||''];
   });
   const csv = '\uFEFF'+[head,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
