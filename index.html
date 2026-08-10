@@ -61,6 +61,9 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .tile .n{font-size:26px;font-weight:800;letter-spacing:-1px}
   .tile .t{font-size:12px;color:var(--sub);font-weight:700;margin-top:2px}
   .tile.alert .n{color:var(--red)}
+  button.tile{cursor:pointer;text-align:center;width:100%}
+  button.tile:active{transform:scale(.97);box-shadow:0 0 0 2px var(--red-bg)}
+  button.stagebar:active{background:var(--gray-bg);border-radius:6px}
   .h2{font-size:15px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
   .stagebar{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:13px}
   .stagebar .nm{width:88px;color:var(--sub);font-weight:700;flex-shrink:0}
@@ -680,6 +683,7 @@ function ensureRooms(){
     else renderNav();
   });
 }
+function goList(filter){ state.filter=filter; state.q=''; go('list'); }
 function go(v,id){
   if(state.view==='chatroom' && v!=='chatroom' && state.unsubMsgs){ try{state.unsubMsgs()}catch(e){} state.unsubMsgs=null; }
   state.view=v; state.detailId=id||null;
@@ -787,19 +791,19 @@ function vDash(){
   const barStages = [...STAGES,'DROPPED'];
   const max = Math.max(...barStages.map(cnt),1);
   const bars = barStages.map(s=>`
-    <div class="stagebar"><span class="nm">${STAGE_NM[s]}</span>
+    <button class="stagebar" style="width:100%" onclick="goList('${s}')"><span class="nm">${STAGE_NM[s]} ›</span>
       <div class="tr"><div class="fl" style="width:${cnt(s)/max*100}%;${s==='DONE'?'background:var(--green)':s==='DROPPED'?'background:#9CA3AF':''}"></div></div>
-      <span class="v">${cnt(s)}</span></div>`).join('');
+      <span class="v">${cnt(s)}</span></button>`).join('');
   const overList = over.length ? over.map(reqCard).join('') : '<div class="card" style="color:var(--sub);font-weight:700;text-align:center">기한초과 건이 없습니다 👍</div>';
   const installBanner = window.deferredPrompt ? `<button class="card" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;border:2px solid var(--red)" onclick="installApp()"><span style="font-size:24px">📲</span><span><b>앱으로 설치하기</b><div style="font-size:12.5px;color:var(--sub)">홈 화면에 설치하면 앱처럼 바로 실행됩니다</div></span></button>` : '';
   return roleNote()+installBanner+`
     <div class="tiles">
-      <div class="tile"><div class="n">${rs.length}</div><div class="t">전체 접수</div></div>
-      <div class="tile"><div class="n">${open.length}</div><div class="t">진행중</div></div>
-      <div class="tile alert"><div class="n">${over.length}</div><div class="t">기한 초과</div></div>
-      <div class="tile"><div class="n" style="color:var(--green)">${done.length}</div><div class="t">완료</div></div>
+      <button class="tile" onclick="goList('ALL')"><div class="n">${rs.length}</div><div class="t">전체 접수 ›</div></button>
+      <button class="tile" onclick="goList('OPEN')"><div class="n">${open.length}</div><div class="t">진행중 ›</div></button>
+      <button class="tile alert" onclick="goList('OVER')"><div class="n">${over.length}</div><div class="t">기한 초과 ›</div></button>
+      <button class="tile" onclick="goList('DONE')"><div class="n" style="color:var(--green)">${done.length}</div><div class="t">완료 ›</div></button>
     </div>
-    <div class="card"><div class="h2">단계별 현황</div>${bars}</div>
+    <div class="card"><div class="h2">단계별 현황 <span style="font-size:10.5px;color:var(--sub);font-weight:600">터치하면 해당 목록으로 이동</span></div>${bars}</div>
     ${role()==='hq'?partnerCard(rs):''}
     <div class="h2" style="margin:16px 2px 10px">⚠️ 기한초과 — 조치 필요 <span class="badge b-red">${over.length}건</span></div>
     ${overList}`;
@@ -849,7 +853,7 @@ function reqCard(r){
   </button>`;
 }
 function vList(){
-  const chips = [['ALL','전체'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
+  const chips = [['ALL','전체'],['OPEN','진행중'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
   const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
   let rs = state.reqs.slice().sort((a,b)=>{
     const ao=isOver(a)?0:1, bo=isOver(b)?0:1;
@@ -857,6 +861,7 @@ function vList(){
     return b.createdAt-a.createdAt;
   });
   if(state.filter==='OVER') rs = rs.filter(isOver);
+  else if(state.filter==='OPEN') rs = rs.filter(r=>r.stage!=='DONE'&&r.stage!=='DROPPED');
   else if(state.filter==='MINE') rs = rs.filter(r=>r.store===state.user.store);
   else if(state.filter!=='ALL') rs = rs.filter(r=>r.stage===state.filter);
   if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')+(r.dept||'')).toLowerCase().includes(state.q.toLowerCase()));
