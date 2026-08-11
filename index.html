@@ -205,7 +205,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
     <label>소속 선택</label>
     <div class="rolebtns">
       <button class="rolebtn" data-r="store" onclick="pickRole('store')"><span class="em">🏪</span>점포</button>
-      <button class="rolebtn" data-r="vendor" onclick="pickRole('vendor')"><span class="em">🔧</span>토마토세븐</button>
+      <button class="rolebtn" data-r="vendor" onclick="pickRole('vendor')"><span class="em">🔧</span>시공업체</button>
       <button class="rolebtn" data-r="hq" onclick="pickRole('hq')"><span class="em">🏢</span>본사담당</button>
     </div>
     <div id="loginStoreWrap" style="display:none">
@@ -308,7 +308,10 @@ const FIREBASE_CONFIG = {
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
 
 /* 초기 접속코드 — 운영 시작 후 본사 '설정' 탭에서 변경 가능 */
-const DEFAULT_CODES = { hq:'GRS-ADMIN-2026', store:'GRS-STORE-2026', vendor:'TOMATO7-2026' };
+const DEFAULT_CODES = { hq:'GRS-ADMIN-2026', store:'GRS-STORE-2026', vendor:'TOMATO7-2026', vendor2:'WOORI-INT-2026' };
+const VENDORS = ['토마토세븐','우리아이엔티'];
+/* 점포명에 '인천공항' 포함 → 우리아이엔티 담당 (자동) */
+const storeVendor = name => String(name||'').includes('인천공항') ? '우리아이엔티' : '토마토세븐';
 const DEFAULT_SLA = { SURVEY:3, ESTIMATE:3, REVIEW:2, SCHEDULE:7, CONSTRUCT:14 };
 const DEFAULT_STORES = ['롯데리아 강남역점','롯데리아 홍대점','엔제리너스 잠실롯데월드점','크리스피크림 명동점','롯데리아 부산서면점','엔제리너스 판교테크노밸리점'];
 
@@ -334,9 +337,12 @@ const tsToDtInput = ts => { const d=new Date(ts); return `${tsToDateInput(ts)}T$
 const STAGES = ['SURVEY','ESTIMATE','REVIEW','SCHEDULE','CONSTRUCT','DONE']; // 실측 → 견적 → 검토 → 공사일정 → 공사 → 완료
 const STAGE_NM = { ESTIMATE:'견적 등록', REVIEW:'견적 검토', SURVEY:'실측 일정', SCHEDULE:'공사 일정', CONSTRUCT:'공사 진행', DONE:'완료', DROPPED:'중단' };
 const STAGE_BADGE = { ESTIMATE:'b-amber', REVIEW:'b-blue', SURVEY:'b-amber', SCHEDULE:'b-amber', CONSTRUCT:'b-blue', DONE:'b-green', DROPPED:'b-gray' };
-const STAGE_WAIT = { ESTIMATE:'토마토세븐 견적 대기', REVIEW:'본사 검토 대기', SURVEY:'실측일정 등록 대기', SCHEDULE:'공사일정 등록 대기', CONSTRUCT:'공사 진행중', DONE:'처리 완료', DROPPED:'중단됨' };
-const STAGE_OWNER = { ESTIMATE:'토마토세븐', REVIEW:'본사담당', SURVEY:'토마토세븐', SCHEDULE:'토마토세븐', CONSTRUCT:'토마토세븐' };
-const ROLE_NM = { hq:'본사담당', store:'점포', vendor:'토마토세븐' };
+const STAGE_WAIT = { ESTIMATE:'시공업체 견적 대기', REVIEW:'본사 검토 대기', SURVEY:'실측일정 등록 대기', SCHEDULE:'공사일정 등록 대기', CONSTRUCT:'공사 진행중', DONE:'처리 완료', DROPPED:'중단됨' };
+const STAGE_OWNER = { ESTIMATE:'시공업체', REVIEW:'본사담당', SURVEY:'시공업체', SCHEDULE:'시공업체', CONSTRUCT:'시공업체' };
+const ROLE_NM = { hq:'본사담당', store:'점포', vendor:'시공업체' };
+const reqVendor = r => r.vendorCo || storeVendor(r.store);
+const myCo = () => (state.user && state.user.co) || '토마토세븐';
+function visibleReqs(){ return role()==='vendor' ? state.reqs.filter(r=>reqVendor(r)===myCo()) : state.reqs; }
 
 const state = {
   user:null,            // {role, name, store}
@@ -595,12 +601,12 @@ function ddayBadge(r){
   return `<span class="dday" style="color:${d<=1?'var(--amber)':'var(--sub)'}">D-${d}</span>`;
 }
 function allNotis(){
-  const over = state.reqs.filter(isOver).map(r=>({
+  const over = visibleReqs().filter(isOver).map(r=>({
     ts:deadline(r), type:'over', reqId:r.id,
     text:`[${r.id}] ${STAGE_NM[r.stage]} 처리기한 ${-ddays(r)}일 초과 — ${STAGE_OWNER[r.stage]} 조치 필요 (${r.store})`
   }));
   const events = [];
-  state.reqs.forEach(r=>{ (r.history||[]).slice(-3).forEach(hh=>events.push({ts:hh.ts,type:'ev',reqId:r.id,text:`[${r.id}] ${hh.actor} — ${hh.action}`})); });
+  visibleReqs().forEach(r=>{ (r.history||[]).slice(-3).forEach(hh=>events.push({ts:hh.ts,type:'ev',reqId:r.id,text:`[${r.id}] ${hh.actor} — ${hh.action}`})); });
   events.sort((a,b)=>b.ts-a.ts);
   return [...over.sort((a,b)=>a.ts-b.ts), ...events.slice(0,25)];
 }
@@ -637,7 +643,12 @@ function doLogin(){
   const err = m => { const el=document.getElementById('lgErr'); el.textContent=m; el.style.display='block'; };
   if(!pickedRole){ err('소속을 선택해주세요'); return; }
   const code = document.getElementById('lgCode').value.trim();
-  if(code !== state.cfg.codes[pickedRole]){ err('접속코드가 올바르지 않습니다'); return; }
+  let vendorCo = null;
+  if(pickedRole==='vendor'){
+    if(code === state.cfg.codes.vendor) vendorCo = '토마토세븐';
+    else if(code === state.cfg.codes.vendor2) vendorCo = '우리아이엔티';
+    else { err('접속코드가 올바르지 않습니다'); return; }
+  } else if(code !== state.cfg.codes[pickedRole]){ err('접속코드가 올바르지 않습니다'); return; }
   let name='', storeNm='';
   if(pickedRole==='store'){
     storeNm = document.getElementById('lgStore').value.trim();
@@ -646,7 +657,7 @@ function doLogin(){
   } else {
     name = document.getElementById('lgName').value.trim() || ROLE_NM[pickedRole];
   }
-  state.user = {role:pickedRole, name, store:storeNm};
+  state.user = {role:pickedRole, name, store:storeNm, co:vendorCo||''};
   saveSession();
   document.getElementById('login').classList.remove('open');
   if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); }
@@ -665,7 +676,7 @@ function actorLabel(){
   if(!u) return '';
   if(u.role==='store') return `점포(${u.name})`;
   if(u.role==='hq') return `본사담당(${u.name})`;
-  return `토마토세븐(${u.name})`;
+  return `${u.co||'토마토세븐'}(${u.name})`;
 }
 
 /* ================= 공통 UI ================= */
@@ -674,7 +685,7 @@ function refocusSearch(id){
   if(el){ el.focus(); const L = el.value.length; try{ el.setSelectionRange(L,L); }catch(e){} }
 }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2400); }
-function setRole(r){ if(LIVE) return; state.user={role:r,name:ROLE_NM[r],store:r==='store'?state.cfg.stores[0]:''}; if(state.view==='new'&&r!=='store') state.view='dash'; if(state.view==='set'&&r!=='hq') state.view='dash'; render(); }
+function setRole(r){ if(LIVE) return; state.user={role:r,name:ROLE_NM[r],store:r==='store'?state.cfg.stores[0]:'',co:r==='vendor'?'토마토세븐':''}; if(state.view==='new'&&r!=='store') state.view='dash'; if(state.view==='set'&&r!=='hq') state.view='dash'; render(); }
 function ensureRooms(){
   if(state.roomsSubbed || !state.user) return;
   state.roomsSubbed = true;
@@ -749,7 +760,7 @@ function render(){
 
   renderNav();
 
-  const n = state.reqs.filter(isOver).length;
+  const n = visibleReqs().filter(isOver).length;
   const cEl = document.getElementById('notiCnt');
   cEl.style.display = n? 'flex':'none'; cEl.textContent = n;
 
@@ -792,13 +803,13 @@ function deptBadge(d){
   return `<span class="badge ${cls}">${d}</span>`;
 }
 function roleNote(){
-  const t = { hq:'본사담당 모드 — 견적 검토·승인, 설정, 전체 현황 관리', store:'점포 모드 — 보수공사 접수 및 진행상황 열람', vendor:'토마토세븐 모드 — 견적서 업로드, 실측·공사일정 등록, 완료 처리' };
+  const t = { hq:'본사담당 모드 — 견적 검토·승인, 설정, 전체 현황 관리', store:'점포 모드 — 보수공사 접수 및 진행상황 열람', vendor:`${myCo()} 모드 — 실측·견적·일정 등록, 완료 처리 (담당 점포만 표시)` };
   return `<div class="role-note">👤 ${t[role()]}</div>`;
 }
 
 /* ===== 대시보드 ===== */
 function vDash(){
-  const rs = state.reqs;
+  const rs = visibleReqs();
   const open = rs.filter(r=>r.stage!=='DONE'&&r.stage!=='DROPPED');
   const over = rs.filter(isOver);
   const done = rs.filter(r=>r.stage==='DONE');
@@ -819,13 +830,13 @@ function vDash(){
       <button class="tile" onclick="goList('DONE')"><div class="n" style="color:var(--green)">${done.length}</div><div class="t">완료 ›</div></button>
     </div>
     <div class="card"><div class="h2">단계별 현황 <span style="font-size:10.5px;color:var(--sub);font-weight:600">터치하면 해당 목록으로 이동</span></div>${bars}</div>
-    ${role()==='hq'?partnerCard(rs):''}
+    ${role()==='hq'?VENDORS.map(v=>partnerCard(rs.filter(r=>reqVendor(r)===v), v)).join(''):''}
     <div class="h2" style="margin:16px 2px 10px">⚠️ 기한초과 — 조치 필요 <span class="badge b-red">${over.length}건</span></div>
     ${overList}`;
 }
 
 /* ===== 파트너사 평가 현황 (본사) ===== */
-function partnerCard(rs){
+function partnerCard(rs, coName){
   const done = rs.filter(r=>r.stage==='DONE');
   const rated = done.filter(r=>r.rating);
   const avgRate = rated.length ? (rated.reduce((a,b)=>a+b.rating,0)/rated.length) : null;
@@ -839,7 +850,8 @@ function partnerCard(rs){
   const rateColor = avgRate===null?'var(--sub)':avgRate<=4?'var(--red-dark)':avgRate<=7?'var(--amber)':'var(--green)';
   const lowRates = rated.filter(r=>r.rating<=4);
   return `<div class="card">
-    <div class="h2">🏆 파트너사 평가 현황 <span class="badge b-gray">토마토세븐</span></div>
+    <div class="h2">🏆 파트너사 평가 현황 <span class="badge ${coName==='우리아이엔티'?'b-blue':'b-gray'}">${coName}</span></div>
+    ${rs.length===0?'<div class="note">해당 업체 담당 접수 건이 아직 없습니다.</div>':''}
     <div class="kv"><b>완료 실적</b>${done.length}건${avgDur!==null?` · 평균 처리 ${avgDur}일`:''}</div>
     <div class="kv"><b>점포 만족도</b><strong style="color:${rateColor}">${avgRate!==null?'★ '+avgRate.toFixed(1)+' / 10':'평가 없음'}</strong>${rated.length?`&nbsp;(${rated.length}건 평가)`:''}</div>
     <div class="kv"><b>견적 반려</b>${rejects?`<span style="color:var(--red-dark);font-weight:700">누적 ${rejects}회</span>`:'0회'}</div>
@@ -867,10 +879,8 @@ function reqCard(r){
     <div class="row2"><div class="minibar">${bar}</div>${r.stage==='DONE'?'<span class="badge b-green">완료</span>':ddayBadge(r)}</div>
   </button>`;
 }
-function vList(){
-  const chips = [['ALL','전체'],['OPEN','진행중'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
-  const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
-  let rs = state.reqs.slice().sort((a,b)=>{
+function reqCardsHtml(){
+  let rs = visibleReqs().slice().sort((a,b)=>{
     const ao=isOver(a)?0:1, bo=isOver(b)?0:1;
     if(ao!==bo) return ao-bo;
     return b.createdAt-a.createdAt;
@@ -879,12 +889,17 @@ function vList(){
   else if(state.filter==='OPEN') rs = rs.filter(r=>r.stage!=='DONE'&&r.stage!=='DROPPED');
   else if(state.filter==='MINE') rs = rs.filter(r=>r.store===state.user.store);
   else if(state.filter!=='ALL') rs = rs.filter(r=>r.stage===state.filter);
-  if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')+(r.dept||'')).toLowerCase().includes(state.q.toLowerCase()));
+  if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')+(r.dept||'')).toLowerCase().includes(String(state.q).toLowerCase()));
+  return rs.length? rs.map(reqCard).join('') : '<div class="empty">조건에 맞는 접수 건이 없습니다</div>';
+}
+function vList(){
+  const chips = [['ALL','전체'],['OPEN','진행중'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
+  const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
   return roleNote()+`
-    <div class="search"><input id="listSq" placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;render();refocusSearch('listSq')"></div>
+    <div class="search"><input id="listSq" placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;const el=document.getElementById('reqList');if(el)el.innerHTML=reqCardsHtml()"></div>
     <div class="filters">${useChips.map(([k,t])=>`<button class="chip ${state.filter===k?'on':''}" onclick="state.filter='${k}';render()">${t}</button>`).join('')}</div>
     ${role()==='hq'?`<button class="btn sec2 sm" style="margin-bottom:10px" onclick="exportCSV()">⬇ 엑셀(CSV) 내보내기</button>`:''}
-    ${rs.length? rs.map(reqCard).join('') : '<div class="empty">조건에 맞는 접수 건이 없습니다</div>'}`;
+    <div id="reqList">${reqCardsHtml()}</div>`;
 }
 
 /* ===== 상세 ===== */
@@ -910,6 +925,7 @@ function vDetail(){
     <div class="kv"><b>접수일</b>${fmtDT(r.createdAt)}</div>
     <div class="kv"><b>긴급도</b>${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':'보통'}</div>
     <div class="kv"><b>담당부서</b>${deptBadge(r.dept)||'미지정'}${r.deptVendor&&r.dept&&r.deptVendor!==r.dept?` <span class="badge b-red">⚠ 업체 판단: ${r.deptVendor}</span>`:''}</div>
+    <div class="kv"><b>시공업체</b><span class="badge ${reqVendor(r)==='우리아이엔티'?'b-blue':'b-gray'}">${reqVendor(r)}</span>${rl==='hq'&&r.stage!=='DONE'&&r.stage!=='DROPPED'?` <button style="font-size:11.5px;color:var(--sub);text-decoration:underline;font-weight:700" onclick="switchVendor('${r.id}')">변경</button>`:''}</div>
     <div class="kv"><b>공사내용</b>${esc(r.desc)}</div>
     ${photosHtml(r.id,'photo') || (r.photoCount?'<div class="note">사진 불러오는 중…</div>':'')}
   </div>`;
@@ -1083,7 +1099,7 @@ function vNew(){
     <button class="file-add" onclick="document.getElementById('nFiles').click()">📷 사진 추가 (여러 장 가능)</button>
     <div class="photos" id="nPrev"></div>
     <button class="btn blk" id="nSubmit" onclick="submitNew()">접수하기</button>
-    <div class="note">접수 즉시 모든 관계자 화면에 실시간 반영되며, 토마토세븐은 ${state.cfg.sla.SURVEY}일 내 실측일정을 등록해야 합니다.</div>
+    <div class="note">접수 즉시 모든 관계자 화면에 실시간 반영되며, 담당 시공업체가 ${state.cfg.sla.SURVEY}일 내 실측일정을 등록해야 합니다.</div>
   </div>`;
 }
 async function pickPhotos(inp){
@@ -1101,7 +1117,7 @@ async function submitNew(){
   const btn = document.getElementById('nSubmit'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> 접수 중…';
   const d = new Date();
   const id = `R-${String(d.getFullYear()).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}-${rnd4()}`;
-  const r = { id, store:storeNm, title, desc, urgency:document.getElementById('nUrg').value, dept:document.getElementById('nDept').value,
+  const r = { id, store:storeNm, title, desc, urgency:document.getElementById('nUrg').value, dept:document.getElementById('nDept').value, vendorCo:storeVendor(storeNm),
     createdAt:now(), stage:'SURVEY', stageAt:now(), estimates:[], comments:[], photoCount:newPhotos.length,
     history:[{ts:now(),actor:actorLabel(),action:`보수공사 접수 (사진 ${newPhotos.length}장)`}] };
   try{
@@ -1340,25 +1356,29 @@ function myRooms(){
     names = ['전체', ...[...known].filter(n=>n!=='전체')];
   }
   let rooms = names.map(n=>({name:n, ...(metaMap[n]||{})}));
+  if(role()==='vendor') rooms = rooms.filter(r=>r.name==='전체' || storeVendor(r.name)===myCo());
   if(state.roomQ) rooms = rooms.filter(r=>r.name.toLowerCase().includes(state.roomQ.toLowerCase()));
   return rooms.sort((a,b)=>{
     if(a.name==='전체') return -1; if(b.name==='전체') return 1;
     return (b.lastTs||0)-(a.lastTs||0);
   });
 }
-function vChat(){
+function roomsHtml(){
   const rooms = myRooms();
-  const search = role()==='store' ? '' :
-    `<div class="search"><input id="roomSq" placeholder="🔍 점포 채팅방 검색" value="${esc(state.roomQ)}" oninput="state.roomQ=this.value;render();refocusSearch('roomSq')"></div>`;
-  return roleNote()+`
-    <div class="role-note" style="background:var(--gray-bg);color:var(--sub)">💬 전화 대신 이곳에서 소통하세요. 점포방에는 점포·토마토세븐·본사가 함께 참여합니다.</div>
-    ${search}
-    ${rooms.map(r=>`<button class="card roomrow" onclick="openRoom('${esc(r.name).replace(/'/g,"\\'")}')">
+  return rooms.map(r=>`<button class="card roomrow" onclick="openRoom('${esc(r.name).replace(/'/g,"\\'")}')">
       <span style="font-size:22px">${r.name==='전체'?'📢':'🏪'}</span>
       <span class="rmain"><span class="rname">${esc(r.name)}${r.name==='전체'?' (공지·전체방)':''}</span>
       <div class="rlast">${r.lastBy?esc(r.lastBy)+': ':''}${esc(r.lastMsg||'대화를 시작해보세요')}</div></span>
       <span class="rts">${r.lastTs?fmtD(r.lastTs):''}</span>
-    </button>`).join('') || '<div class="empty">채팅방이 없습니다</div>'}`;
+    </button>`).join('') || '<div class="empty">채팅방이 없습니다</div>';
+}
+function vChat(){
+  const search = role()==='store' ? '' :
+    `<div class="search"><input id="roomSq" placeholder="🔍 점포 채팅방 검색" value="${esc(state.roomQ)}" oninput="state.roomQ=this.value;const el=document.getElementById('roomList');if(el)el.innerHTML=roomsHtml()"></div>`;
+  return roleNote()+`
+    <div class="role-note" style="background:var(--gray-bg);color:var(--sub)">💬 전화 대신 이곳에서 소통하세요. 점포방에는 점포·토마토세븐·본사가 함께 참여합니다.</div>
+    ${search}
+    <div id="roomList">${roomsHtml()}</div>`;
 }
 function openRoom(room){
   state.chatRoom = room; state.chatMsgs = [];
@@ -1420,6 +1440,16 @@ async function doResume(id){
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
+async function switchVendor(id){
+  const r = R(id);
+  const cur = reqVendor(r);
+  const next = cur==='토마토세븐' ? '우리아이엔티' : '토마토세븐';
+  if(!confirm(`이 공사의 시공업체를 「${cur}」 → 「${next}」로 변경할까요?`)) return;
+  try{
+    await store.updateRequest(id, {vendorCo:next}, {ts:now(), actor:actorLabel(), action:`시공업체 변경: ${cur} → ${next}`});
+    toast('시공업체가 변경되었습니다'); render();
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 async function pickSurveyPhotos(id, inp){
   const files = [...inp.files]; if(!files.length) return;
   toast('사진 업로드 중…');
@@ -1562,7 +1592,7 @@ async function printReport(id){
       <tr><td style="${box}background:#f2f2f2;width:110px;font-weight:700">접수번호</td><td style="${box}">${esc(r.id)}</td>
           <td style="${box}background:#f2f2f2;width:110px;font-weight:700">완료일</td><td style="${box}">${fmtD(r.completedAt||r.stageAt)}</td></tr>
       <tr><td style="${box}background:#f2f2f2;font-weight:700">점포</td><td style="${box}">${esc(r.store)}</td>
-          <td style="${box}background:#f2f2f2;font-weight:700">시공업체</td><td style="${box}">토마토세븐</td></tr>
+          <td style="${box}background:#f2f2f2;font-weight:700">시공업체</td><td style="${box}">${reqVendor(r)}</td></tr>
       <tr><td style="${box}background:#f2f2f2;font-weight:700">실제 작업시간</td><td style="${box}">${r.workStart?fmtDT(r.workStart)+' ~ '+(r.workEnd?fmtDT(r.workEnd):'-'):'-'}</td>
           <td style="${box}background:#f2f2f2;font-weight:700">담당부서</td><td style="${box}">${esc(r.dept||'미지정')}</td></tr>
       <tr><td style="${box}background:#f2f2f2;font-weight:700">공사명</td><td style="${box}" colspan="3">${esc(r.title)}</td></tr>
@@ -1783,10 +1813,11 @@ function vSet(){
       <input type="number" min="1" value="${state.cfg.sla[s]}" style="width:70px;text-align:center" onchange="updSla('${s}',this.value)">
       <span style="color:var(--sub);font-size:13px">일 이내</span>
     </div>`).join('');
-  const codeRows = ['hq','store','vendor'].map(rk=>`
+  const CODE_NM = {hq:'본사담당', store:'점포', vendor:'토마토세븐', vendor2:'우리아이엔티'};
+  const codeRows = ['hq','store','vendor','vendor2'].map(rk=>`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span style="width:90px;font-weight:700;font-size:14px">${ROLE_NM[rk]}</span>
-      <input value="${esc(state.cfg.codes[rk])}" onchange="updCode('${rk}',this.value)">
+      <span style="width:110px;font-weight:700;font-size:14px">${CODE_NM[rk]}</span>
+      <input value="${esc(state.cfg.codes[rk]||'')}" onchange="updCode('${rk}',this.value)">
     </div>`).join('');
   return roleNote()+`<div class="card">
     <div class="h2">⏱ 단계별 처리기한 (SLA)</div>
@@ -1801,16 +1832,8 @@ function vSet(){
   <div class="card">
     <div class="h2">🏪 점포 목록 <span class="badge b-gray">${state.cfg.stores.length}개</span></div>
     <div class="note" style="margin:0 0 10px">점포 로그인·접수 시 검색 목록으로 제공됩니다. 엑셀에서 점포명 열을 복사해 한 번에 등록할 수 있습니다.</div>
-    <input id="setSq" placeholder="🔍 등록된 점포 검색" oninput="state.setStoreQ=this.value;render();refocusSearch('setSq')" value="${esc(state.setStoreQ||'')}">
-    <div id="storeRows" style="margin-top:10px;max-height:300px;overflow-y:auto">${state.cfg.stores
-      .map((s,i)=>({s:String(s), i}))
-      .filter(o=>!state.setStoreQ || o.s.toLowerCase().includes(String(state.setStoreQ).toLowerCase()))
-      .slice(0,80)
-      .map(o=>`
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <span style="flex:1;font-size:14px">${esc(o.s)}</span>
-        <button class="btn sec2 sm" onclick="delStore(${o.i})">삭제</button>
-      </div>`).join('') || '<div class="empty" style="padding:14px 0">검색 결과 없음</div>'}</div>
+    <input id="setSq" placeholder="🔍 등록된 점포 검색" oninput="state.setStoreQ=this.value;const el=document.getElementById('storeRows');if(el)el.innerHTML=storeRowsHtml()" value="${esc(state.setStoreQ||'')}">
+    <div id="storeRows" style="margin-top:10px;max-height:300px;overflow-y:auto">${storeRowsHtml()}</div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <input id="addStoreIn" placeholder="새 점포명 하나 추가">
       <button class="btn sm" style="flex-shrink:0" onclick="addStore()">추가</button>
@@ -1876,6 +1899,17 @@ async function applyStoreUpload(replace){
     closeModal(); toast(`점포 ${storeUploadList.length}개 ${replace?'교체':'추가'} 완료 (총 ${merged.length}개)`);
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
+function storeRowsHtml(){
+  return state.cfg.stores
+    .map((s,i)=>({s:String(s), i}))
+    .filter(o=>!state.setStoreQ || o.s.toLowerCase().includes(String(state.setStoreQ).toLowerCase()))
+    .slice(0,80)
+    .map(o=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="flex:1;font-size:14px">${esc(o.s)}</span>
+      <button class="btn sec2 sm" onclick="delStore(${o.i})">삭제</button>
+    </div>`).join('') || '<div class="empty" style="padding:14px 0">검색 결과 없음</div>';
+}
 async function bulkStores(replace){
   const raw = document.getElementById('bulkIn').value;
   const lines = [...new Set(raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];
@@ -1925,12 +1959,12 @@ function renderNotis(){
 
 /* ===== CSV ===== */
 function exportCSV(){
-  const head = ['접수번호','점포','공사명','긴급도','담당부서','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','일정승인','작업시작(실제)','작업종료(실제)','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
+  const head = ['접수번호','점포','공사명','긴급도','담당부서','시공업체','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','일정승인','작업시작(실제)','작업종료(실제)','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
   const rows = state.reqs.map(r=>{
     const last = (r.estimates||[])[(r.estimates||[]).length-1];
     const d = ddays(r);
     const od = (r.overdues||[]).map(o=>`${STAGE_NM[o.stage]||o.stage} ${o.days}일`).join('; ');
-    return [r.id, r.store, r.title, r.urgency, r.dept||'', fmtD(r.createdAt), waitLabel(r),
+    return [r.id, r.store, r.title, r.urgency, r.dept||'', reqVendor(r), fmtD(r.createdAt), waitLabel(r),
       (r.stage==='DONE'||r.stage==='DROPPED')?'-':(d<0?`기한초과 ${-d}일`:`D-${d}`), last?last.amount:'',
       r.surveySkipped?'미실측('+(r.surveySkipReason||'')+')':(r.surveyDate?fmtD(r.surveyDate):''), r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'',
       r.schedStatus==='승인'?`승인(${r.schedBy||''})`:(r.schedStatus||''), r.workStart?fmtDT(r.workStart):'', r.workEnd?fmtDT(r.workEnd):'', r.completedAt?fmtD(r.completedAt):'',
