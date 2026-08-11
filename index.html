@@ -371,7 +371,7 @@ const store = {
           const c=d.data();
           state.cfg.codes = Object.assign({...DEFAULT_CODES}, c.codes||{});
           state.cfg.sla = Object.assign({...DEFAULT_SLA}, c.sla||{});
-          if(Array.isArray(c.stores)&&c.stores.length) state.cfg.stores=c.stores;
+          if(Array.isArray(c.stores)&&c.stores.length) state.cfg.stores=c.stores.map(x=>String(x).trim()).filter(Boolean);
           if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor;
           if(c.laborNote) state.cfg.laborNote=c.laborNote;
         }
@@ -664,6 +664,10 @@ function actorLabel(){
 }
 
 /* ================= 공통 UI ================= */
+function refocusSearch(id){
+  const el = document.getElementById(id);
+  if(el){ el.focus(); const L = el.value.length; try{ el.setSelectionRange(L,L); }catch(e){} }
+}
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2400); }
 function setRole(r){ if(LIVE) return; state.user={role:r,name:ROLE_NM[r],store:r==='store'?state.cfg.stores[0]:''}; if(state.view==='new'&&r!=='store') state.view='dash'; if(state.view==='set'&&r!=='hq') state.view='dash'; render(); }
 function ensureRooms(){
@@ -872,7 +876,7 @@ function vList(){
   else if(state.filter!=='ALL') rs = rs.filter(r=>r.stage===state.filter);
   if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')+(r.dept||'')).toLowerCase().includes(state.q.toLowerCase()));
   return roleNote()+`
-    <div class="search"><input placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;render();this.focus();this.setSelectionRange(99,99)"></div>
+    <div class="search"><input id="listSq" placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;render();refocusSearch('listSq')"></div>
     <div class="filters">${useChips.map(([k,t])=>`<button class="chip ${state.filter===k?'on':''}" onclick="state.filter='${k}';render()">${t}</button>`).join('')}</div>
     ${role()==='hq'?`<button class="btn sec2 sm" style="margin-bottom:10px" onclick="exportCSV()">⬇ 엑셀(CSV) 내보내기</button>`:''}
     ${rs.length? rs.map(reqCard).join('') : '<div class="empty">조건에 맞는 접수 건이 없습니다</div>'}`;
@@ -1340,7 +1344,7 @@ function myRooms(){
 function vChat(){
   const rooms = myRooms();
   const search = role()==='store' ? '' :
-    `<div class="search"><input placeholder="🔍 점포 채팅방 검색" value="${esc(state.roomQ)}" oninput="state.roomQ=this.value;render();this.focus();this.setSelectionRange(99,99)"></div>`;
+    `<div class="search"><input id="roomSq" placeholder="🔍 점포 채팅방 검색" value="${esc(state.roomQ)}" oninput="state.roomQ=this.value;render();refocusSearch('roomSq')"></div>`;
   return roleNote()+`
     <div class="role-note" style="background:var(--gray-bg);color:var(--sub)">💬 전화 대신 이곳에서 소통하세요. 점포방에는 점포·토마토세븐·본사가 함께 참여합니다.</div>
     ${search}
@@ -1519,7 +1523,7 @@ function spFilter(inputId){
   const drop = document.getElementById(inputId+'Drop');
   if(!inp||!drop) return;
   const v = inp.value.trim().toLowerCase();
-  const hits = state.cfg.stores.filter(s=>s.toLowerCase().includes(v));
+  const hits = state.cfg.stores.map(String).filter(s=>s.toLowerCase().includes(v));
   const top = hits.slice(0,50);
   drop.innerHTML = (hits.length>50?`<div class="spcnt">${hits.length}개 중 50개 표시 — 더 검색해보세요</div>`:'') +
     top.map(sname=>`<div class="spitem" onmousedown="spPick('${inputId}','${esc(sname).replace(/'/g,"\\'")}')">${esc(sname)}</div>`).join('');
@@ -1792,10 +1796,10 @@ function vSet(){
   <div class="card">
     <div class="h2">🏪 점포 목록 <span class="badge b-gray">${state.cfg.stores.length}개</span></div>
     <div class="note" style="margin:0 0 10px">점포 로그인·접수 시 검색 목록으로 제공됩니다. 엑셀에서 점포명 열을 복사해 한 번에 등록할 수 있습니다.</div>
-    <input placeholder="🔍 등록된 점포 검색" oninput="state.setStoreQ=this.value;render();this.focus();this.setSelectionRange(99,99)" value="${esc(state.setStoreQ||'')}">
+    <input id="setSq" placeholder="🔍 등록된 점포 검색" oninput="state.setStoreQ=this.value;render();refocusSearch('setSq')" value="${esc(state.setStoreQ||'')}">
     <div id="storeRows" style="margin-top:10px;max-height:300px;overflow-y:auto">${state.cfg.stores
-      .map((s,i)=>({s,i}))
-      .filter(o=>!state.setStoreQ || o.s.toLowerCase().includes(state.setStoreQ.toLowerCase()))
+      .map((s,i)=>({s:String(s), i}))
+      .filter(o=>!state.setStoreQ || o.s.toLowerCase().includes(String(state.setStoreQ).toLowerCase()))
       .slice(0,80)
       .map(o=>`
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
@@ -1806,6 +1810,9 @@ function vSet(){
       <input id="addStoreIn" placeholder="새 점포명 하나 추가">
       <button class="btn sm" style="flex-shrink:0" onclick="addStore()">추가</button>
     </div>
+    <label>엑셀 파일로 일괄 등록 (A열: 브랜드명 · B열: 점포명)</label>
+    <input type="file" id="storeXls" accept=".xlsx" style="display:none" onchange="pickStoreFile(this)">
+    <button class="file-add" onclick="document.getElementById('storeXls').click()">📤 점포목록 엑셀 업로드 — 「브랜드명+점포명」 자동 결합</button>
     <label>일괄 등록 (한 줄에 한 점포씩 붙여넣기)</label>
     <textarea id="bulkIn" rows="5" placeholder="롯데리아 ○○점&#10;엔제리너스 ○○점&#10;크리스피크림도넛 ○○점&#10;..."></textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
@@ -1831,6 +1838,39 @@ async function updSla(s,v){ const sla={...state.cfg.sla}; sla[s]=Math.max(1,Numb
 async function updCode(rk,v){ if(!v.trim()){ toast('코드는 비울 수 없습니다'); render(); return;} const codes={...state.cfg.codes}; codes[rk]=v.trim(); try{ await store.saveConfig({codes}); toast('접속코드가 변경되었습니다'); }catch(e){ toast('저장 실패'); } }
 async function addStore(){ const v=document.getElementById('addStoreIn').value.trim(); if(!v) return; try{ await store.saveConfig({stores:[...state.cfg.stores,v]}); render(); }catch(e){ toast('저장 실패'); } }
 async function delStore(i){ const arr=state.cfg.stores.slice(); arr.splice(i,1); try{ await store.saveConfig({stores:arr}); render(); }catch(e){ toast('저장 실패'); } }
+let storeUploadList = [];
+async function pickStoreFile(inp){
+  const f = inp.files[0]; if(!f) return;
+  try{
+    const rows = await parseXlsx(await f.arrayBuffer());
+    const names = [];
+    for(const row of rows){
+      const a = String(row[0]??'').trim();
+      const b = String(row[1]??'').trim();
+      if(!a && !b) continue;
+      if(/브랜드|점포명|매장명|상호/.test(a+b) && names.length===0) continue; // 제목행 건너뛰기
+      names.push(a && b ? `${a} ${b}` : (a||b));
+    }
+    storeUploadList = [...new Set(names.map(n=>n.replace(/\s+/g,' ').trim()).filter(Boolean))];
+    if(storeUploadList.length<1){ toast('점포를 인식하지 못했습니다 (A열 브랜드명, B열 점포명 확인)'); inp.value=''; return; }
+    openModal(`<h2>점포목록 엑셀 인식 결과</h2>
+      <div class="sub">${esc(f.name)} — <b>${storeUploadList.length}개</b> 점포 인식</div>
+      <div class="note" style="margin-top:10px">${storeUploadList.slice(0,6).map(esc).join('<br>')}${storeUploadList.length>6?`<br>… 외 ${storeUploadList.length-6}개`:''}</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn sec2" style="flex:1" onclick="applyStoreUpload(false)">기존 목록에 추가</button>
+        <button class="btn" style="flex:1" onclick="applyStoreUpload(true)">전체 교체</button>
+      </div>`);
+  }catch(e){ toast('파일 처리 실패: '+(e.message||e)); }
+  inp.value='';
+}
+async function applyStoreUpload(replace){
+  if(replace && !confirm(`기존 점포 목록을 지우고 ${storeUploadList.length}개로 교체할까요?`)) return;
+  const merged = replace ? storeUploadList : [...new Set([...state.cfg.stores.map(String), ...storeUploadList])];
+  try{
+    await store.saveConfig({stores:merged});
+    closeModal(); toast(`점포 ${storeUploadList.length}개 ${replace?'교체':'추가'} 완료 (총 ${merged.length}개)`);
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 async function bulkStores(replace){
   const raw = document.getElementById('bulkIn').value;
   const lines = [...new Set(raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean))];
