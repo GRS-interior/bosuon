@@ -48,6 +48,20 @@ service cloud.firestore {
       }
     }
 
+    /* 조명·타일 발주건 */
+    match /orders/{orderId} {
+      allow read, write: if signedIn();
+
+      /* 도면·견적서·납품사진·납품확인서 서명 */
+      match /files/{fileId} {
+        allow read, write: if signedIn();
+      }
+
+      match /{sub=**} {
+        allow read, write: if signedIn();
+      }
+    }
+
     /* 채팅방 */
     match /chats/{room} {
       allow read, write: if signedIn();

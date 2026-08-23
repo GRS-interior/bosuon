@@ -52,6 +52,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:800;border-radius:99px;padding:3px 10px;white-space:nowrap}
   .b-red{background:var(--red-bg);color:var(--red-dark)} .b-green{background:var(--green-bg);color:var(--green)}
   .b-amber{background:var(--amber-bg);color:var(--amber)} .b-blue{background:var(--blue-bg);color:var(--blue)}
+  .b-purple{background:#EFE7FB;color:#6B34B8}
   .b-gray{background:var(--gray-bg);color:var(--sub)}
   .b-overdue{background:var(--red);color:#fff}
   .urgent{background:#7C1D18;color:#fff}
@@ -121,6 +122,25 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .filerow .fmeta{display:block;font-size:11px;color:var(--sub);font-weight:500;margin-top:1px}
   .filerow .facts{display:flex;gap:6px;flex-shrink:0}
   .btn.dl{background:var(--ink)}
+  /* 시스템 전환 (보수공사 ↔ 조명·타일 발주) */
+  .appsw{display:flex;gap:6px;padding:8px 14px 0;background:var(--red)}
+  .appsw button{flex:1;padding:9px 6px;border-radius:10px 10px 0 0;font-weight:800;font-size:13.5px;background:rgba(255,255,255,.16);color:rgba(255,255,255,.85)}
+  .appsw button.on{background:#fff;color:var(--red-dark)}
+  /* 발주 — 품목 표 */
+  .itab{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+  .itab th{background:var(--gray-bg);color:var(--sub);font-size:11.5px;font-weight:800;padding:7px 6px;text-align:left;white-space:nowrap}
+  .itab td{padding:7px 6px;border-top:1px solid var(--line);vertical-align:top}
+  .itab td.num,.itab th.num{text-align:right;white-space:nowrap}
+  .itab tfoot td{border-top:2px solid var(--ink);font-weight:800;background:var(--gray-bg)}
+  .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .oline{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .chips button{padding:6px 11px;border-radius:99px;background:var(--gray-bg);color:var(--sub);font-weight:700;font-size:12.5px}
+  .chips button.on{background:var(--ink);color:#fff}
+  .kindtab{display:flex;gap:8px;margin-bottom:14px}
+  .kindtab button{flex:1;padding:12px 8px;border-radius:12px;border:2px solid var(--line);background:#fff;font-weight:800;font-size:13.5px;color:var(--sub);line-height:1.35}
+  .kindtab button.on{border-color:var(--red);background:var(--red-bg);color:var(--red-dark)}
+  .kindtab button small{display:block;font-weight:500;font-size:11px;margin-top:2px;opacity:.85}
   .togrow{display:flex;align-items:center;gap:10px;background:var(--gray-bg);border-radius:12px;padding:11px 13px;margin-bottom:8px}
   .togrow .tl{flex:1;font-weight:800;font-size:14px}
   .togrow .tl div{font-size:11.5px;color:var(--sub);font-weight:500;margin-top:1px}
@@ -215,12 +235,14 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
 <div id="login">
   <div class="login-card">
     <div class="lg">GRS 보수ON</div>
-    <div class="ds">롯데GRS 직영점 보수공사 접수·트래킹</div>
+    <div class="ds">보수공사 접수·트래킹 · 조명/타일 발주</div>
     <label>소속 선택</label>
     <div class="rolebtns">
       <button class="rolebtn" data-r="store" onclick="pickRole('store')"><span class="em">🏪</span>점포</button>
-      <button class="rolebtn" data-r="vendor" onclick="pickRole('vendor')"><span class="em">🔧</span>시공업체</button>
+      <button class="rolebtn" data-r="vendor" onclick="pickRole('vendor')"><span class="em">🔧</span>보수 시공업체</button>
       <button class="rolebtn" data-r="hq" onclick="pickRole('hq')"><span class="em">🏢</span>본사담당</button>
+      <button class="rolebtn" data-r="builder" onclick="pickRole('builder')"><span class="em">🏗</span>인테리어 시공사</button>
+      <button class="rolebtn" data-r="supplier" onclick="pickRole('supplier')"><span class="em">📦</span>조명·타일 공급사</button>
     </div>
     <div id="loginStoreWrap" style="display:none">
       <label>점포명</label>
@@ -230,6 +252,10 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
         <div class="spdrop" id="lgStoreDrop"></div>
       </div>
       <datalist id="storeList"></datalist>
+    </div>
+    <div id="loginBuilderWrap" style="display:none">
+      <label>시공사 선택</label>
+      <select id="lgBuilder"></select>
     </div>
     <div id="loginNameWrap" style="display:none">
       <label>이름 (담당자)</label>
@@ -252,9 +278,12 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
       <option value="hq">🏢 본사담당</option>
       <option value="store">🏪 점포</option>
       <option value="vendor">🔧 토마토세븐</option>
+      <option value="builder">🏗 인테리어 시공사</option>
+      <option value="supplier">📦 조명 공급사</option>
     </select>
     <button class="bell" onclick="togglePanel(true)">🔔<span class="cnt" id="notiCnt" style="display:none">0</span></button>
   </div>
+  <div class="appsw" id="appsw" style="display:none"></div>
   <nav id="nav"></nav>
 </header>
 
@@ -322,12 +351,37 @@ const FIREBASE_CONFIG = {
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
 
 /* 초기 접속코드 — 운영 시작 후 본사 '설정' 탭에서 변경 가능 */
-const DEFAULT_CODES = { hq:'GRS-ADMIN-2026', store:'GRS-STORE-2026', vendor:'TOMATO7-2026', vendor2:'WOORI-INT-2026' };
+const DEFAULT_CODES = { hq:'GRS-ADMIN-2026', store:'GRS-STORE-2026', vendor:'TOMATO7-2026', vendor2:'WOORI-INT-2026',
+  builder:'GRS-BUILD-2026', supplier:'APLUS-2026', supplier2:'WOOSUK-2026' };
 const VENDORS = ['토마토세븐','우리아이엔티'];
 /* 점포명에 '인천공항' 포함 → 우리아이엔티 담당 (자동) */
 const storeVendor = name => String(name||'').includes('인천공항') ? '우리아이엔티' : '토마토세븐';
 const DEFAULT_SLA = { SURVEY:3, ESTIMATE:3, REVIEW:2, SCHEDULE:7, CONSTRUCT:14 };
 const DEFAULT_STORES = ['롯데리아 강남역점','롯데리아 홍대점','엔제리너스 잠실롯데월드점','크리스피크림 명동점','롯데리아 부산서면점','엔제리너스 판교테크노밸리점'];
+
+/* ═══════════════ 조명·타일 발주 시스템 ═══════════════ */
+/* 인테리어 시공사 (본사 설정에서 추가·삭제 가능) */
+const DEFAULT_BUILDERS = ['인터피아','예일에이엔티','하빈아이엔티','초원','대경아이디','가우','큐브아이엔씨','나성아이디','한양이엔씨','아트브릭'];
+/* 공급사 — 조명 1개사, 타일 1개사 */
+const SUPPLIER_OF = { '조명':'에이프러스', '타일':'우석타일' };
+const CAT_OF      = { '에이프러스':'조명', '우석타일':'타일' };
+const SUPPLIERS   = ['에이프러스','우석타일'];
+const CAT_ICON    = { '조명':'💡', '타일':'🧱' };
+
+/* 발주 단계 — 도면제공 → 견적 → 확정 → 납품일협의 → 납품·확인서 → 정산 */
+const O_STAGES = ['DRAWING','QUOTE','CONFIRM','SCHED','DELIVERED','SETTLED'];
+const O_NM = { DRAWING:'도면 제공', QUOTE:'견적 제출', CONFIRM:'검토·확정', SCHED:'납품일 협의', DELIVERED:'납품·확인서', SETTLED:'정산', CANCEL:'취소' };
+const O_WAIT = { DRAWING:'공급사 수량산출·견적 대기', QUOTE:'검토·확정 대기', CONFIRM:'납품일 협의 대기', SCHED:'납품 대기', DELIVERED:'정산 대기', SETTLED:'정산 완료', CANCEL:'취소됨' };
+const O_BADGE = { DRAWING:'b-amber', QUOTE:'b-blue', CONFIRM:'b-amber', SCHED:'b-blue', DELIVERED:'b-amber', SETTLED:'b-green', CANCEL:'b-gray' };
+const DEFAULT_O_SLA = { DRAWING:5, QUOTE:3, CONFIRM:3, SCHED:7, DELIVERED:30 };
+/* 직영점은 GRS 공사담당자가, 가맹점은 시공사 현장소장이 확정한다 */
+const oConfirmer = o => o.type==='직영점' ? 'GRS 공사담당' : '시공사 현장소장';
+const O_OWNER = (o) => ({ DRAWING:'공급사', QUOTE:oConfirmer(o), CONFIRM:'시공사·공급사', SCHED:'공급사', DELIVERED:'GRS 담당' }[o.stage] || '');
+const oSettleNm = o => o.type==='직영점' ? '월단위 정산' : '개별 정산 (대금지급)';
+
+/* 접수 유형 — 일반 보수 / 오픈 직후 추가요청 */
+const REQ_KIND_NM = { fix:'보수공사', open:'오픈 직후 추가요청' };
+const OPEN_TYPES = ['공사 보완','설계 변경','마감 하자','추가 설치','기타'];
 
 /* 표준노임단가 (대한건설협회 시중노임단가, 2026.01 기준 — 본사 설정에서 엑셀로 갱신 가능) */
 const DEFAULT_LABOR = [["작업반장",215907],["보통인부",172068],["특별인부",226122],["조력공",179028],["제도사",237324],["비계공",281939],["형틀목공",275790],["철근공",268187],["철공",239808],["철판공",221481],["철골공",252641],["용접공",282536],["콘크리트공",273540],["보링공",232562],["착암공",222306],["화약취급공",272448],["할석공",241932],["포설공",221015],["포장공",273308],["잠수부",387342],["조적공",270807],["견출공",250903],["건축목공",277642],["창호공",247188],["유리공",253539],["방수공",228286],["미장공",277276],["타일공",290939],["도장공",263017],["내장공",256883],["도배공",227614],["연마공",210772],["석공",268908],["줄눈공",211653],["판넬조립공",243121],["지붕잇기공",233250],["벌목부",253243],["조경공",235204],["배관공(수도)",262580],["배관공",247897],["보일러공",240120],["위생공",218908],["덕트공",202472],["보온공",217012],["인력운반공",180193],["궤도공",218933],["건설기계조장",210909],["건설기계운전사",283297],["화물차운전사",238936],["일반기계운전사",173995],["기계설비공",241698],["플랜트배관공",320480],["플랜트제관공",266029],["플랜트특수용접공",337247],["플랜트용접공",292640],["플랜트기계설치공",230376],["플랜트특별인부",213074],["플랜트케이블전공",264269],["플랜트계장공",204377],["플랜트보온공",250140],["제철축로공",362985],["비파괴시험공",214553],["특급품질관리원",199588],["고급품질관리원",197788],["중급품질관리원",177841],["초급품질관리원",149081],["지적기사",275711],["지적산업기사",245000],["지적기능사",178874],["내선전공",273676],["특고압케이블전공",440616],["고압케이블전공",373640],["저압케이블전공",304156],["송전활선전공",675173],["송전전공",638460],["배전활선전공",562439],["배전전공",414968],["플랜트전공",269759],["계장공",319449],["철도신호공",310041],["통신내선공",284880],["통신설비공",315528],["통신외선공",408942],["통신케이블공",436224],["무선안테나공",356809],["석면해체공",204181]];
@@ -353,15 +407,60 @@ const STAGE_NM = { ESTIMATE:'견적 등록', REVIEW:'견적 검토', SURVEY:'실
 const STAGE_BADGE = { ESTIMATE:'b-amber', REVIEW:'b-blue', SURVEY:'b-amber', SCHEDULE:'b-amber', CONSTRUCT:'b-blue', DONE:'b-green', DROPPED:'b-gray' };
 const STAGE_WAIT = { ESTIMATE:'시공업체 견적 대기', REVIEW:'본사 검토 대기', SURVEY:'실측일정 등록 대기', SCHEDULE:'공사일정 등록 대기', CONSTRUCT:'공사 진행중', DONE:'처리 완료', DROPPED:'중단됨' };
 const STAGE_OWNER = { ESTIMATE:'시공업체', REVIEW:'본사담당', SURVEY:'시공업체', SCHEDULE:'시공업체', CONSTRUCT:'시공업체' };
-const ROLE_NM = { hq:'본사담당', store:'점포', vendor:'시공업체' };
+const ROLE_NM = { hq:'본사담당', store:'점포', vendor:'시공업체', builder:'인테리어 시공사', supplier:'공급사' };
+const ROLE_ICON = { hq:'🏢', store:'🏪', vendor:'🔧', builder:'🏗', supplier:'📦' };
+/* 역할별 사용 가능한 시스템 */
+const ROLE_APPS = { hq:['bosu','order'], store:['bosu'], vendor:['bosu'], builder:['order'], supplier:['order'] };
+const APP_NM = { bosu:'보수공사', order:'조명·타일 발주' };
+const APP_ICON = { bosu:'🛠', order:'💡' };
+function myApps(){ return ROLE_APPS[role()] || ['bosu']; }
+function canApp(a){ return myApps().includes(a); }
 const reqVendor = r => r.vendorCo || storeVendor(r.store);
 const myCo = () => (state.user && state.user.co) || '토마토세븐';
 function visibleReqs(){ return role()==='vendor' ? state.reqs.filter(r=>reqVendor(r)===myCo()) : state.reqs; }
 
+/* ===== 발주 — 역할별 열람 범위 ===== */
+function visibleOrders(){
+  const rl = role();
+  if(rl==='supplier') return state.orders.filter(o=>o.supplier===myCo());
+  if(rl==='builder')  return state.orders.filter(o=>o.builder===myCo());
+  return state.orders;                       // 본사담당은 전체
+}
+const O = id => state.orders.find(o=>o.id===id);
+const oDeadline = o => (o.stage==='SETTLED'||o.stage==='CANCEL') ? null : o.stageAt + (state.cfg.osla[o.stage]||3)*DAY;
+function oDdays(o){ const dl=oDeadline(o); return dl===null?null:Math.ceil((dl-now())/DAY); }
+const oIsOver = o => { const d=oDdays(o); return d!==null && d<0; };
+function oDdayBadge(o){
+  const d = oDdays(o);
+  if(d===null) return '';
+  if(d<0) return `<span class="badge b-overdue">⚠ 기한초과 ${-d}일</span>`;
+  if(d===0) return `<span class="badge b-amber">오늘 마감</span>`;
+  return `<span class="dday" style="color:${d<=1?'var(--amber)':'var(--sub)'}">D-${d}</span>`;
+}
+/* 이 역할이 지금 이 발주건에서 조치할 차례인가 */
+function oCanAct(o, stage){
+  const rl = role();
+  if(o.stage!==stage) return false;
+  if(stage==='DRAWING') return rl==='supplier' && o.supplier===myCo();
+  if(stage==='QUOTE')   return o.type==='직영점' ? rl==='hq' : (rl==='builder' && o.builder===myCo());
+  if(stage==='CONFIRM') return (rl==='builder' && o.builder===myCo()) || (rl==='supplier' && o.supplier===myCo());
+  if(stage==='SCHED')   return rl==='builder' && o.builder===myCo();
+  if(stage==='DELIVERED') return rl==='hq';
+  return false;
+}
+const oAmount = o => o.quote ? (o.confirm && o.confirm.finalAmount!=null ? o.confirm.finalAmount : o.quote.amount) : null;
+const ymOf = ts => { const d=new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; };
+const ymLabel = ym => ym ? `${ym.split('-')[0]}년 ${+ym.split('-')[1]}월` : '';
+
 const state = {
-  user:null,            // {role, name, store}
+  user:null,            // {role, name, store, co}
+  app:'bosu',           // 'bosu'(보수공사) | 'order'(조명·타일 발주)
   view:'dash', detailId:null, filter:'ALL', q:'',
-  cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE },
+  /* 발주 시스템 */
+  orders:[], orderId:null, oFilter:'ALL', oCat:'ALL', oq:'', settleMonth:null,
+  unsubOrders:null, ordersReady:false, orderErr:null, prevOrderSig:{}, ordersInit:false,
+  cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE,
+        builders:[...DEFAULT_BUILDERS], osla:{...DEFAULT_O_SLA} },
   reqs:[], ready:false, dbError:null,
   chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:'',
   chatNoti:false, lastSeen:{}, prevRoomTs:{}, roomsInit:false,
@@ -378,6 +477,8 @@ const MAX_FILE_CHARS = 900000;
 
 /* ================= 저장소 계층 (Firestore / 데모 메모리) ================= */
 let fs=null;
+/* 첨부파일 경로 — 'O:발주번호'는 orders 컬렉션, 그 외는 requests 컬렉션 */
+const filesPath = key => String(key).startsWith('O:') ? ['orders', String(key).slice(2)] : ['requests', String(key)];
 function waitFB(ms=12000){
   return new Promise((res,rej)=>{
     const check = ()=>{ if(window.FB) res(); else rej(new Error(window.FB_LOAD_ERROR||'SDK 로드 실패 — 인터넷 연결을 확인하세요')); };
@@ -400,6 +501,8 @@ const store = {
           state.cfg.codes = Object.assign({...DEFAULT_CODES}, c.codes||{});
           state.cfg.sla = Object.assign({...DEFAULT_SLA}, c.sla||{});
           if(Array.isArray(c.stores)&&c.stores.length) state.cfg.stores=c.stores.map(x=>String(x).trim()).filter(Boolean);
+          if(Array.isArray(c.builders)&&c.builders.length) state.cfg.builders=c.builders.map(x=>String(x).trim()).filter(Boolean);
+          state.cfg.osla = Object.assign({...DEFAULT_O_SLA}, c.osla||{});
           if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor.map(x=>Array.isArray(x)?[String(x[0]),+x[1]]:[String(x.j),+x.r]);
           if(c.laborNote) state.cfg.laborNote=c.laborNote;
         }
@@ -447,10 +550,10 @@ const store = {
       if(comment) r.comments.push(comment);
     }
   },
-  async addFile(reqId, file){ // file={kind,name,data,ts}
+  async addFile(reqId, file){ // file={kind,name,data,ts} — reqId가 'O:xxx'면 발주건
     if(file && file.data && file.data.length > MAX_FILE_CHARS)
       throw new Error(`파일 용량 초과 (${Math.round(file.data.length/1024)}KB / 최대 ${Math.round(MAX_FILE_CHARS/1024)}KB)`);
-    if(LIVE) await FB.addDoc(FB.collection(fs,'requests',reqId,'files'), file);
+    if(LIVE){ const [c,d] = filesPath(reqId); await FB.addDoc(FB.collection(fs,c,d,'files'), file); }
     if(!filesCache[reqId]) filesCache[reqId]=[];
     filesCache[reqId].push(file);
     filesLoaded[reqId] = true; filesErr[reqId] = null;
@@ -459,8 +562,9 @@ const store = {
   async getFiles(reqId, force){
     if(!force && filesLoaded[reqId]) return filesCache[reqId]||[];
     if(!LIVE){ filesCache[reqId] = filesCache[reqId]||[]; filesLoaded[reqId]=true; return filesCache[reqId]; }
+    const [pc,pd] = filesPath(reqId);
     const pull = async (useOrder) => {
-      const col = FB.collection(fs,'requests',reqId,'files');
+      const col = FB.collection(fs,pc,pd,'files');
       const snap = await FB.getDocs(useOrder ? FB.query(col, FB.orderBy('ts')) : col);
       return snap.docs.map(d=>d.data()).sort((a,b)=>(a.ts||0)-(b.ts||0));
     };
@@ -483,8 +587,9 @@ const store = {
   subscribeFiles(reqId, cb){
     if(!LIVE){ filesLoaded[reqId]=true; cb(); return ()=>{}; }
     let unsub = null;
+    const [sc,sd] = filesPath(reqId);
     try{
-      unsub = FB.onSnapshot(FB.collection(fs,'requests',reqId,'files'),
+      unsub = FB.onSnapshot(FB.collection(fs,sc,sd,'files'),
         snap=>{
           filesCache[reqId] = snap.docs.map(d=>d.data()).sort((a,b)=>(a.ts||0)-(b.ts||0));
           filesLoaded[reqId] = true; filesErr[reqId] = null;
@@ -501,6 +606,25 @@ const store = {
       store.getFiles(reqId, true).then(cb).catch(()=>cb());
     }
     return ()=>{ if(unsub){ try{unsub()}catch(e){} } };
+  },
+  /* ---- 조명·타일 발주 ---- */
+  async saveOrder(o){
+    if(LIVE) await FB.setDoc(FB.doc(fs,'orders',o.id), o);
+    else state.orders.unshift(o);
+  },
+  async updateOrder(id, patch, histEntry){
+    if(LIVE){
+      const upd = {...patch};
+      if(histEntry) upd.history = FB.arrayUnion(histEntry);
+      await FB.updateDoc(FB.doc(fs,'orders',id), upd);
+      /* 실시간 구독이 돌아오기 전에도 화면이 바로 반영되도록 로컬에도 적용 */
+      const o = O(id);
+      if(o){ Object.assign(o, patch); if(histEntry) (o.history=o.history||[]).push(histEntry); }
+    } else {
+      const o = O(id); if(!o) return;
+      Object.assign(o, patch);
+      if(histEntry) (o.history=o.history||[]).push(histEntry);
+    }
   },
   /* ---- 채팅 ---- */
   subscribeRooms(cb){
@@ -555,6 +679,52 @@ function subscribeReqs(onReqs){
     state.ready = true; state.dbError=null;
     onReqs();
   }, err=>{ state.dbError = err.code||String(err); state.ready=true; onReqs(); });
+}
+
+/* 발주건 실시간 구독 — 공급사·시공사는 자기 건만 받는다 */
+function subscribeOrders(onOrders){
+  if(!LIVE || !state.user) return;
+  if(!canApp('order')) return;
+  if(state.unsubOrders){ try{state.unsubOrders()}catch(e){} state.unsubOrders=null; }
+  onOrders = onOrders || (()=>render());
+  const col = FB.collection(fs,'orders');
+  let q;
+  if(role()==='supplier')      q = FB.query(col, FB.where('supplier','==',myCo()), FB.limit(500));
+  else if(role()==='builder')  q = FB.query(col, FB.where('builder','==',myCo()), FB.limit(500));
+  else                         q = FB.query(col, FB.orderBy('createdAt','desc'), FB.limit(500));
+  state.unsubOrders = FB.onSnapshot(q, snap=>{
+    const list = snap.docs.map(d=>d.data()).sort((a,b)=>b.createdAt-a.createdAt);
+    try{ detectOrderNotis(list); }catch(e){ console.warn('onoti', e); }
+    state.orders = list;
+    state.ordersReady = true;
+    onOrders();
+  }, err=>{ state.orderErr = err.code||String(err); state.ordersReady=true; onOrders(); });
+}
+/* 발주 진행상황 알림 — 보수와 같은 방식 */
+function detectOrderNotis(list){
+  const me = actorLabel();
+  const fresh = [];
+  list.forEach(o=>{
+    const hist = o.history||[];
+    const sig = { n:hist.length, stage:o.stage };
+    const prev = state.prevOrderSig[o.id];
+    state.prevOrderSig[o.id] = sig;
+    if(!state.ordersInit || !prev) return;
+    if(!state.reqNoti) return;
+    if(state.reqNotiMine && !O_STAGES.some(s=>oCanAct(o,s))) return;
+    if(sig.n > prev.n){
+      const last = hist[hist.length-1];
+      if(last && last.actor !== me){
+        const mine = O_STAGES.some(s=>oCanAct(o,s));
+        fresh.push({ title:`${CAT_ICON[o.cat]} ${o.site} · ${o.cat} 발주`,
+                     body:`${last.action} (${last.actor})${mine?'\n▶ 내 조치가 필요합니다':''}`,
+                     tag:'ord-'+o.id, id:o.id });
+      }
+    }
+  });
+  state.ordersInit = true;
+  if(fresh.length > 3) showNotif('📦 발주 진행상황', `${fresh.length}건이 업데이트되었습니다`, 'obulk', null);
+  else fresh.forEach(f=>showNotif(f.title, f.body, f.tag, null));
 }
 
 /* ============ 진행상황 알림 ============
@@ -679,6 +849,154 @@ function seed(){
   filesCache['R-2606-K1L2']=[{kind:'photo',name:'p1',data:svg('후드 모터','#702459'),ts:daysAgo(34)},{kind:'done',name:'d1',data:svg('교체 완료','#22543D'),ts:daysAgo(8)}];
   filesCache['R-2607-M3N4']=[{kind:'photo',name:'p1',data:svg('카운터','#4C3B2A'),ts:daysAgo(8)}];
   Object.keys(filesCache).forEach(k=>{ filesLoaded[k]=true; });
+
+  /* ── 오픈 직후 추가요청 샘플 ── */
+  state.reqs.unshift(mk({
+    id:'R-2608-OP01', kind:'open', store:'롯데리아 수원역점', title:'오픈 후 홀 조명 밝기 보완 및 스위치 위치 변경',
+    desc:'오픈 후 홀 중앙 조도가 낮아 추가 다운라이트 4개 요청. 주방 입구 스위치가 동선과 맞지 않아 위치 이동 필요.',
+    urgency:'긴급', openDate:daysAgo(11), openType:'공사 보완', builder:'인터피아',
+    createdAt:daysAgo(5), stage:'ESTIMATE', stageAt:daysAgo(2), photoCount:0, dept:'인테리어팀',
+    surveyDate:daysAgo(3), surveyAt:daysAgo(4), surveyDone:true,
+    history:[h(daysAgo(5),'점포(수원역점)','오픈 직후 추가요청 접수 (오픈 후 6일)'),
+             h(daysAgo(4),'토마토세븐','실측일정 등록'), h(daysAgo(3),'토마토세븐','실측 완료')],
+    comments:[{ts:daysAgo(4),author:'본사담당',role:'hq',text:'오픈 시공사(인터피아) 하자 여부 먼저 확인 부탁드립니다.'}] }));
+  state.reqs.unshift(mk({
+    id:'R-2608-OP02', kind:'open', store:'엔제리너스 광교점', title:'카운터 하부 마감 들뜸 (오픈 하자)',
+    desc:'오픈 3일 만에 카운터 하부 몰딩 들뜸 발생. 시공사 A/S 요청.',
+    openDate:daysAgo(9), openType:'마감 하자', builder:'예일에이엔티',
+    createdAt:daysAgo(6), stage:'SURVEY', stageAt:daysAgo(6), photoCount:0, dept:'인테리어팀',
+    history:[h(daysAgo(6),'점포(광교점)','오픈 직후 추가요청 접수 (오픈 후 3일)')] }));
+
+  seedOrders();
+  /* 발주 데모 첨부 — 도면·납품사진·서명 */
+  const osvg = (t,c)=>'data:image/svg+xml;utf8,'+encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="180"><rect width="240" height="180" fill="${c}"/><text x="120" y="96" font-size="15" font-family="sans-serif" fill="#fff" text-anchor="middle" font-weight="bold">${t}</text></svg>`);
+  const osign = ()=>'data:image/svg+xml;utf8,'+encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="110"><rect width="300" height="110" fill="#fff"/><path d="M30 78 C56 24 70 96 92 52 S128 18 146 66 C160 100 176 34 198 58 C214 76 232 40 258 62" fill="none" stroke="#1F2430" stroke-width="3" stroke-linecap="round"/></svg>`);
+  const put = (id, arr)=>{ filesCache['O:'+id]=arr; filesLoaded['O:'+id]=true; };
+  put('O-2608-L001',[{kind:'drawing',name:'수원역점_조명배치도.pdf',data:osvg('조명 배치도','#2C5282'),ts:daysAgo(2)},
+                     {kind:'drawing',name:'수원역점_천장평면도.pdf',data:osvg('천장 평면도','#2A4365'),ts:daysAgo(2)}]);
+  put('O-2608-T001',[{kind:'drawing',name:'수원역점_바닥마감도.pdf',data:osvg('바닥 마감도','#744210'),ts:daysAgo(8)},
+                     {kind:'quote',name:'수원역점_타일_수량산출서.xlsx',data:'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,'+btoa('DEMO'),ts:daysAgo(3)}]);
+  put('O-2607-T002',[{kind:'drawing',name:'광교점_타일_시공도.pdf',data:osvg('타일 시공도','#702459'),ts:daysAgo(24)}]);
+  put('O-2607-L003',[{kind:'drawing',name:'판교점_조명도.pdf',data:osvg('조명도','#22543D'),ts:daysAgo(31)},
+                     {kind:'delivery',name:'납품사진_1.jpg',data:osvg('납품 전경','#4A5568'),ts:daysAgo(9)},
+                     {kind:'delivery',name:'납품사진_2.jpg',data:osvg('박스 수량 확인','#2D3748'),ts:daysAgo(9)},
+                     {kind:'delivery',name:'납품사진_3.jpg',data:osvg('제품 라벨','#1A202C'),ts:daysAgo(9)},
+                     {kind:'osign',name:'납품확인_서명.png',data:osign(),ts:daysAgo(9)}]);
+  put('O-2607-L004',[{kind:'delivery',name:'납품사진_1.jpg',data:osvg('납품 전경','#4A5568'),ts:daysAgo(5)},
+                     {kind:'delivery',name:'납품사진_2.jpg',data:osvg('⚠ 트랙조명 스크래치','#9B2C2C'),ts:daysAgo(5)},
+                     {kind:'osign',name:'납품확인_서명.png',data:osign(),ts:daysAgo(5)}]);
+  put('O-2606-T003',[{kind:'delivery',name:'납품사진_1.jpg',data:osvg('납품 완료','#22543D'),ts:daysAgo(38)},
+                     {kind:'osign',name:'납품확인_서명.png',data:osign(),ts:daysAgo(38)}]);
+  const pc = { 'O-2607-L003':3, 'O-2607-L004':2, 'O-2606-T003':1 };
+  state.orders.forEach(o=>{ if(o.receipt && pc[o.id]) o.receipt.photoCount = pc[o.id]; });
+}
+
+/* ===== 발주 데모 데이터 ===== */
+function seedOrders(){
+  const oh = (ts,actor,action)=>({ts,actor,action});
+  const items = (rows)=>rows.map(([n,sp,u,q,p])=>({name:n,spec:sp,unit:u,qty:q,price:p,amount:q*p}));
+  const L1 = items([
+    ['LED 다운라이트','6인치 15W 주백색','EA',48,18500],
+    ['LED 라인조명','1200mm 40W','EA',12,64000],
+    ['펜던트 조명','블랙 원통형 E26','EA',8,87000],
+    ['간판 투광기','50W 방수형','EA',4,112000],
+    ['조명 스위치·디머','3구 디머 스위치','EA',6,43000],
+  ]);
+  const L2 = items([
+    ['LED 다운라이트','4인치 10W 전구색','EA',36,15800],
+    ['트랙 조명','3구 레일 세트','SET',6,158000],
+    ['간접조명 바','900mm 12W','EA',22,29500],
+  ]);
+  const T1 = items([
+    ['자기질 타일','600×600 무광 그레이','㎡',86,32000],
+    ['논슬립 바닥타일','300×300 주방용','㎡',42,28500],
+    ['벽타일','200×200 화이트 유광','㎡',58,21000],
+    ['타일 접착제','25kg','포',34,18000],
+    ['줄눈재','5kg 그레이','포',18,12500],
+  ]);
+  const T2 = items([
+    ['포세린 타일','800×800 폴리싱','㎡',64,47000],
+    ['계단 논슬립','1200mm','EA',14,26000],
+  ]);
+  const sum = a => a.reduce((s,x)=>s+x.amount,0);
+
+  state.orders = [
+    { id:'O-2608-L001', type:'직영점', cat:'조명', supplier:'에이프러스', builder:'인터피아',
+      site:'롯데리아 수원역점', openPlan:daysAgo(-18), manager:'김본사',
+      createdAt:daysAgo(2), stage:'DRAWING', stageAt:daysAgo(2), drawingCount:3,
+      history:[oh(daysAgo(2),'본사담당(김본사)','발주 등록 · 도면 3매 제공')] },
+
+    { id:'O-2608-T001', type:'직영점', cat:'타일', supplier:'우석타일', builder:'인터피아',
+      site:'롯데리아 수원역점', openPlan:daysAgo(-18), manager:'김본사',
+      createdAt:daysAgo(8), stage:'QUOTE', stageAt:daysAgo(3), drawingCount:3,
+      quote:{ts:daysAgo(3), items:T1, amount:sum(T1), fileName:'수원역점_타일_수량산출서.xlsx', note:'로스율 5% 반영. 줄눈재 색상 확정 필요.'},
+      history:[oh(daysAgo(8),'본사담당(김본사)','발주 등록 · 도면 3매 제공'),
+               oh(daysAgo(3),'우석타일(견적팀)',`견적서 제출 (${sum(T1).toLocaleString('ko-KR')}원 · ${T1.length}개 품목)`)] },
+
+    { id:'O-2607-L002', type:'가맹점', cat:'조명', supplier:'에이프러스', builder:'예일에이엔티',
+      site:'롯데리아 청주가경점', openPlan:daysAgo(-9), manager:'박현장',
+      createdAt:daysAgo(16), stage:'CONFIRM', stageAt:daysAgo(4), drawingCount:2,
+      quote:{ts:daysAgo(9), items:L2, amount:sum(L2), fileName:'청주가경점_조명_견적서.xlsx'},
+      confirm:{by:'예일에이엔티(박현장)', at:daysAgo(4), decision:'확정', finalAmount:sum(L2), opinion:'수량 적정. 트랙조명 색온도 3000K로 확정.'},
+      history:[oh(daysAgo(16),'본사담당(김본사)','발주 등록 · 도면 2매 제공'),
+               oh(daysAgo(9),'에이프러스(영업팀)',`견적서 제출 (${sum(L2).toLocaleString('ko-KR')}원)`),
+               oh(daysAgo(4),'예일에이엔티(박현장)','견적 확정 (현장소장 검토)')] },
+
+    { id:'O-2607-T002', type:'직영점', cat:'타일', supplier:'우석타일', builder:'하빈아이엔티',
+      site:'엔제리너스 광교점', openPlan:daysAgo(3), manager:'김본사',
+      createdAt:daysAgo(24), stage:'SCHED', stageAt:daysAgo(6), drawingCount:4,
+      quote:{ts:daysAgo(18), items:T2, amount:sum(T2), fileName:'광교점_타일_수량산출서.xlsx'},
+      confirm:{by:'본사담당(김본사)', at:daysAgo(15), decision:'확정', finalAmount:sum(T2), opinion:'금액 적정. 승인합니다.'},
+      sched:{planDate:daysAgo(-2), agreedAt:daysAgo(6), agreedBy:'하빈아이엔티(이소장)', place:'광교점 현장 1층 하역장', note:'오전 9시 도착 요청. 지게차 필요.'},
+      history:[oh(daysAgo(24),'본사담당(김본사)','발주 등록 · 도면 4매 제공'),
+               oh(daysAgo(18),'우석타일(견적팀)','견적서 제출'),
+               oh(daysAgo(15),'본사담당(김본사)','견적 확정'),
+               oh(daysAgo(6),'하빈아이엔티(이소장)','납품일 협의 완료')] },
+
+    { id:'O-2607-L003', type:'직영점', cat:'조명', supplier:'에이프러스', builder:'대경아이디',
+      site:'크리스피크림 판교점', openPlan:daysAgo(6), manager:'김본사',
+      createdAt:daysAgo(31), stage:'DELIVERED', stageAt:daysAgo(9), drawingCount:3,
+      quote:{ts:daysAgo(26), items:L1, amount:sum(L1), fileName:'판교점_조명_수량산출서.xlsx'},
+      confirm:{by:'본사담당(김본사)', at:daysAgo(23), decision:'확정', finalAmount:sum(L1), opinion:'승인.'},
+      sched:{planDate:daysAgo(10), agreedAt:daysAgo(16), agreedBy:'대경아이디(최소장)', place:'판교점 현장', note:''},
+      receipt:{receivedAt:daysAgo(9), receiver:'대경아이디(최소장)', signBy:'대경아이디(최소장)', signAt:daysAgo(9),
+               allOk:true, note:'전 품목 이상 없이 수령. 파손 없음.'},
+      history:[oh(daysAgo(31),'본사담당(김본사)','발주 등록 · 도면 3매 제공'),
+               oh(daysAgo(26),'에이프러스(영업팀)','견적서 제출'),
+               oh(daysAgo(23),'본사담당(김본사)','견적 확정'),
+               oh(daysAgo(16),'대경아이디(최소장)','납품일 협의 완료'),
+               oh(daysAgo(9),'대경아이디(최소장)','물품 수령 · 납품확인서 서명')] },
+
+    { id:'O-2606-T003', type:'가맹점', cat:'타일', supplier:'우석타일', builder:'초원',
+      site:'롯데리아 천안불당점', openPlan:daysAgo(28), manager:'정현장',
+      createdAt:daysAgo(52), stage:'SETTLED', stageAt:daysAgo(14), drawingCount:2,
+      quote:{ts:daysAgo(46), items:T2, amount:sum(T2), fileName:'천안불당점_타일_견적서.xlsx'},
+      confirm:{by:'초원(정현장)', at:daysAgo(44), decision:'확정', finalAmount:sum(T2), opinion:'확정합니다.'},
+      sched:{planDate:daysAgo(38), agreedAt:daysAgo(41), agreedBy:'초원(정현장)', place:'천안불당점 현장', note:''},
+      receipt:{receivedAt:daysAgo(38), receiver:'초원(정현장)', signBy:'초원(정현장)', signAt:daysAgo(38), allOk:true, note:'이상 없음'},
+      settle:{at:daysAgo(14), by:'본사담당(김본사)', method:'개별 정산 (대금지급)', month:ymOf(daysAgo(30)), amount:sum(T2), note:'가맹점 개별 대금지급 완료'},
+      history:[oh(daysAgo(52),'본사담당(김본사)','발주 등록'),
+               oh(daysAgo(46),'우석타일(견적팀)','견적서 제출'),
+               oh(daysAgo(44),'초원(정현장)','견적 확정'),
+               oh(daysAgo(41),'초원(정현장)','납품일 협의 완료'),
+               oh(daysAgo(38),'초원(정현장)','물품 수령 · 납품확인서 서명'),
+               oh(daysAgo(14),'본사담당(김본사)','정산 완료')] },
+
+    { id:'O-2607-L004', type:'직영점', cat:'조명', supplier:'에이프러스', builder:'가우',
+      site:'엔제리너스 대구동성로점', openPlan:daysAgo(1), manager:'김본사',
+      createdAt:daysAgo(27), stage:'DELIVERED', stageAt:daysAgo(5), drawingCount:2,
+      quote:{ts:daysAgo(22), items:L2, amount:sum(L2), fileName:'대구동성로점_조명_견적서.xlsx'},
+      confirm:{by:'본사담당(김본사)', at:daysAgo(20), decision:'확정', finalAmount:sum(L2), opinion:'승인.'},
+      sched:{planDate:daysAgo(6), agreedAt:daysAgo(12), agreedBy:'가우(한소장)', place:'대구동성로점 현장', note:''},
+      receipt:{receivedAt:daysAgo(5), receiver:'가우(한소장)', signBy:'가우(한소장)', signAt:daysAgo(5),
+               allOk:false, note:'트랙조명 1SET 외관 스크래치 — 교체 요청', shortItems:'트랙 조명 1SET 불량'},
+      history:[oh(daysAgo(27),'본사담당(김본사)','발주 등록'),
+               oh(daysAgo(22),'에이프러스(영업팀)','견적서 제출'),
+               oh(daysAgo(20),'본사담당(김본사)','견적 확정'),
+               oh(daysAgo(12),'가우(한소장)','납품일 협의 완료'),
+               oh(daysAgo(5),'가우(한소장)','물품 수령 · 일부 불량 기재')] },
+  ];
 }
 
 /* ================= 이미지 압축 ================= */
@@ -774,14 +1092,22 @@ function saveChatPrefs(){
     localStorage.setItem('bosuon_lastseen', JSON.stringify(state.lastSeen));
   }catch(e){}
 }
-function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; stopDetailFiles(); clearDraft(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
+function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; state.prevOrderSig={}; state.ordersInit=false;
+  if(state.unsubOrders){ try{state.unsubOrders()}catch(e){} state.unsubOrders=null; }
+  state.orders=[]; stopDetailFiles(); clearDraft(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
 
 let pickedRole=null;
 function pickRole(r){
   pickedRole=r;
   document.querySelectorAll('.rolebtn').forEach(b=>b.classList.toggle('on',b.dataset.r===r));
   document.getElementById('loginStoreWrap').style.display = r==='store'?'block':'none';
-  document.getElementById('loginNameWrap').style.display = (r==='hq'||r==='vendor')?'block':'none';
+  document.getElementById('loginNameWrap').style.display = (r==='store')?'none':'block';
+  const bw = document.getElementById('loginBuilderWrap');
+  bw.style.display = r==='builder'?'block':'none';
+  if(r==='builder'){
+    const sel = document.getElementById('lgBuilder');
+    sel.innerHTML = state.cfg.builders.map(b=>`<option>${esc(b)}</option>`).join('');
+  }
 }
 function fillStoreList(){
   const dl=document.getElementById('storeList');
@@ -791,11 +1117,19 @@ function doLogin(){
   const err = m => { const el=document.getElementById('lgErr'); el.textContent=m; el.style.display='block'; };
   if(!pickedRole){ err('소속을 선택해주세요'); return; }
   const code = document.getElementById('lgCode').value.trim();
-  let vendorCo = null;
+  let co = null;
   if(pickedRole==='vendor'){
-    if(code === state.cfg.codes.vendor) vendorCo = '토마토세븐';
-    else if(code === state.cfg.codes.vendor2) vendorCo = '우리아이엔티';
+    if(code === state.cfg.codes.vendor) co = '토마토세븐';
+    else if(code === state.cfg.codes.vendor2) co = '우리아이엔티';
     else { err('접속코드가 올바르지 않습니다'); return; }
+  } else if(pickedRole==='supplier'){
+    if(code === state.cfg.codes.supplier) co = '에이프러스';
+    else if(code === state.cfg.codes.supplier2) co = '우석타일';
+    else { err('접속코드가 올바르지 않습니다'); return; }
+  } else if(pickedRole==='builder'){
+    if(code !== state.cfg.codes.builder){ err('접속코드가 올바르지 않습니다'); return; }
+    co = document.getElementById('lgBuilder').value;
+    if(!co){ err('시공사를 선택해주세요'); return; }
   } else if(code !== state.cfg.codes[pickedRole]){ err('접속코드가 올바르지 않습니다'); return; }
   let name='', storeNm='';
   if(pickedRole==='store'){
@@ -805,12 +1139,12 @@ function doLogin(){
   } else {
     name = document.getElementById('lgName').value.trim() || ROLE_NM[pickedRole];
   }
-  state.user = {role:pickedRole, name, store:storeNm, co:vendorCo||''};
+  state.user = {role:pickedRole, name, store:storeNm, co:co||''};
   saveSession();
   document.getElementById('login').classList.remove('open');
-  if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); }
+  if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); subscribeOrders(); }
   loadChatPrefs(); ensureRooms();
-  state.view='dash'; render();
+  state.app = myApps()[0]; state.view = state.app==='order'?'odash':'dash'; render();
 }
 function showLogin(){
   fillStoreList();
@@ -833,7 +1167,18 @@ function refocusSearch(id){
   if(el){ el.focus(); const L = el.value.length; try{ el.setSelectionRange(L,L); }catch(e){} }
 }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',2400); }
-function setRole(r){ if(LIVE) return; state.user={role:r,name:ROLE_NM[r],store:r==='store'?state.cfg.stores[0]:'',co:r==='vendor'?'토마토세븐':''}; if(state.view==='new'&&r!=='store') state.view='dash'; if(state.view==='set'&&r!=='hq') state.view='dash'; render(); }
+function setRole(r){
+  if(LIVE) return;
+  const co = r==='vendor'?'토마토세븐' : r==='builder'?state.cfg.builders[0] : r==='supplier'?'에이프러스' : '';
+  const nm = { hq:'김본사', store:state.cfg.stores[0], vendor:'김기사', builder:'이소장', supplier:'영업팀' }[r] || ROLE_NM[r];
+  state.user = { role:r, name:nm, store:r==='store'?state.cfg.stores[0]:'', co };
+  if(!canApp(state.app)) state.app = myApps()[0];
+  const allowed = state.app==='order'
+    ? ['odash','olist','odetail','chat','chatroom'].concat(r==='hq'?['onew','settle','set']:[])
+    : ['dash','list','detail','chat','chatroom'].concat(r==='store'?['new']:[]).concat(r==='hq'?['set']:[]);
+  if(!allowed.includes(state.view)) state.view = state.app==='order'?'odash':'dash';
+  render();
+}
 function ensureRooms(){
   if(state.roomsSubbed || !state.user) return;
   state.roomsSubbed = true;
@@ -854,13 +1199,18 @@ function ensureRooms(){
 function goList(filter){ state.filter=filter; state.q=''; go('list'); }
 function go(v,id){
   if(state.view==='chatroom' && v!=='chatroom' && state.unsubMsgs){ try{state.unsubMsgs()}catch(e){} state.unsubMsgs=null; }
-  if(!(v==='detail' && id===state.filesFor)) stopDetailFiles();
-  state.view=v; state.detailId=id||null;
+  const wantKey = v==='detail' ? id : v==='odetail' ? 'O:'+(id||state.orderId) : null;
+  if(!(wantKey && wantKey===state.filesFor)) stopDetailFiles();
+  state.view = v;
+  if(v==='odetail') state.orderId = id || state.orderId;
+  else state.detailId = id || null;
   if(v==='chat') ensureRooms();
   render(); window.scrollTo(0,0);
   if(v==='detail'&&id) loadDetailFiles(id);
+  if(v==='odetail'&&state.orderId) loadDetailFiles('O:'+state.orderId);
   if(v==='chatroom') renderChatMsgs();
 }
+function goOrder(id){ go('odetail', id); }
 function togglePanel(open){ document.getElementById('panel').classList.toggle('open',open); if(open) renderNotis(); }
 function closeModal(){ document.getElementById('modal').classList.remove('open'); render(); }
 function openModal(html){ document.getElementById('modalIn').innerHTML=html; document.getElementById('modal').classList.add('open'); }
@@ -884,7 +1234,9 @@ function loadDetailFiles(id){
   stopDetailFiles();
   state.filesFor = id;
   state.unsubFiles = store.subscribeFiles(id, ()=>{
-    if(state.view==='detail' && state.detailId===id && !modalOpen()) render();
+    const stillHere = (state.view==='detail' && state.detailId===id) ||
+                      (state.view==='odetail' && ('O:'+state.orderId)===id);
+    if(stillHere && !modalOpen()) render();
   });
 }
 /* 사진이 안 보일 때 사용자가 직접 누르는 재시도 */
@@ -941,6 +1293,12 @@ function render(){
   else if(state.view==='set') m.innerHTML = vSet();
   else if(state.view==='chat') m.innerHTML = vChat();
   else if(state.view==='chatroom') m.innerHTML = vChatRoom();
+  /* ── 조명·타일 발주 ── */
+  else if(state.view==='odash') m.innerHTML = vODash();
+  else if(state.view==='olist') m.innerHTML = vOList();
+  else if(state.view==='odetail') m.innerHTML = vODetail();
+  else if(state.view==='onew'){ if(!document.getElementById('oSite')) m.innerHTML = vONew(); }
+  else if(state.view==='settle') m.innerHTML = vSettle();
 
   const cmtEl2 = document.getElementById('cmtIn');
   if(cmtEl2 && cmtVal) cmtEl2.value = cmtVal;
@@ -959,10 +1317,35 @@ function renderNav(){
   if(!state.user) return;
   const un = unreadRooms();
   const chatLabel = '💬 채팅' + (un?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${un}</span>`:'');
-  const tabs = [ ['dash','대시보드'], ['list','접수 목록'], ['chat',chatLabel] ];
-  if(role()==='store') tabs.push(['new','+ 신규 접수']);
-  if(role()==='hq') tabs.push(['set','설정']);
-  document.getElementById('nav').innerHTML = tabs.map(([v,t])=>`<button class="${(state.view===v||(state.view==='detail'&&v==='list')||(state.view==='chatroom'&&v==='chat'))?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
+  let tabs, alias;
+  if(state.app==='order'){
+    tabs = [ ['odash','대시보드'], ['olist','발주 목록'], ['chat',chatLabel] ];
+    if(role()==='hq'){ tabs.splice(2,0,['onew','+ 발주 등록']); tabs.push(['settle','정산']); tabs.push(['set','설정']); }
+    alias = { odetail:'olist', chatroom:'chat' };
+  } else {
+    tabs = [ ['dash','대시보드'], ['list','접수 목록'], ['chat',chatLabel] ];
+    if(role()==='store') tabs.push(['new','+ 신규 접수']);
+    if(role()==='hq') tabs.push(['set','설정']);
+    alias = { detail:'list', chatroom:'chat' };
+  }
+  document.getElementById('nav').innerHTML = tabs.map(([v,t])=>
+    `<button class="${(state.view===v || alias[state.view]===v)?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
+
+  /* 시스템 전환 바 — 두 시스템을 모두 쓸 수 있는 역할에게만 */
+  const sw = document.getElementById('appsw');
+  const apps = myApps();
+  if(apps.length>1){
+    sw.style.display='flex';
+    sw.innerHTML = apps.map(a=>`<button class="${state.app===a?'on':''}" onclick="switchApp('${a}')">${APP_ICON[a]} ${APP_NM[a]}</button>`).join('');
+  } else sw.style.display='none';
+}
+function switchApp(a){
+  if(!canApp(a) || state.app===a) return;
+  state.app = a;
+  stopDetailFiles();
+  state.view = a==='order' ? 'odash' : 'dash';
+  state.detailId=null; state.orderId=null;
+  render(); window.scrollTo(0,0);
 }
 const DEPTS = ['인테리어팀','산업안전팀','잘모르겠음'];
 function deptBadge(d){
@@ -971,8 +1354,24 @@ function deptBadge(d){
   return `<span class="badge ${cls}">${d}</span>`;
 }
 function roleNote(){
-  const t = { hq:'본사담당 모드 — 견적 검토·승인, 설정, 전체 현황 관리', store:'점포 모드 — 보수공사 접수 및 진행상황 열람', vendor:`${myCo()} 모드 — 실측·견적·일정 등록, 완료 처리 (담당 점포만 표시)` };
-  return `<div class="role-note">👤 ${t[role()]}</div>` + notiPrompt();
+  const co = (state.user && state.user.co) || '';
+  /* 보수공사 모드 */
+  const t = {
+    hq:'본사담당 모드 — 견적 검토·승인, 설정, 전체 현황 관리',
+    store:'점포 모드 — 보수공사 접수 및 진행상황 열람',
+    vendor:`${myCo()} 모드 — 실측·견적·일정 등록, 완료 처리 (담당 점포만 표시)`,
+    builder:`${co} 모드 — 인테리어 시공사 (조명·타일 발주 시스템 이용)`,
+    supplier:`${co} 모드 — 조명·타일 공급사 (발주 시스템 이용)`
+  };
+  /* 조명·타일 발주 모드 */
+  const ot = {
+    hq:'본사담당 모드 — 발주 등록, 도면 제공, 직영점 견적 확정, 정산 관리',
+    builder:`${co} 모드 — 가맹점 견적 확정, 납품일 협의, 물품 수령·납품확인서 서명`,
+    supplier:`${co} 모드 — 도면 확인, 수량산출·견적서 제출 (${CAT_OF[co]||'조명·타일'})`,
+    store:'점포 모드', vendor:`${myCo()} 모드`
+  };
+  const txt = (state.app==='order' ? ot[role()] : t[role()]) || t[role()] || ROLE_NM[role()] || '';
+  return `<div class="role-note">👤 ${txt}</div>` + notiPrompt();
 }
 /* 알림 권한을 아직 안 물어본 사용자에게 한 번 안내 (닫으면 다시 안 뜸) */
 function notiPrompt(){
@@ -1020,6 +1419,7 @@ function vDash(){
       <button class="tile" onclick="goList('OPEN')"><div class="n">${open.length}</div><div class="t">진행중 ›</div></button>
       <button class="tile alert" onclick="goList('OVER')"><div class="n">${over.length}</div><div class="t">기한 초과 ›</div></button>
       <button class="tile" onclick="goList('DONE')"><div class="n" style="color:var(--green)">${done.length}</div><div class="t">완료 ›</div></button>
+      <button class="tile" onclick="goList('OPENREQ')"><div class="n" style="color:#6B34B8">${rs.filter(r=>r.kind==='open').length}</div><div class="t">🏗 오픈 직후 ›</div></button>
     </div>
     <div class="card"><div class="h2">단계별 현황 <span style="font-size:10.5px;color:var(--sub);font-weight:600">터치하면 해당 목록으로 이동</span></div>${bars}</div>
     ${role()==='hq'?VENDORS.map(v=>partnerCard(rs.filter(r=>reqVendor(r)===v), v)).join(''):''}
@@ -1063,6 +1463,7 @@ function reqCard(r){
       <span class="id">${r.id}</span>
       <span class="badge ${STAGE_BADGE[r.stage]}">${waitLabel(r)}</span>
       ${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':''}
+      ${r.kind==='open'?'<span class="badge b-purple">🏗 오픈 직후</span>':''}
       ${r.dept&&r.dept!=='잘모르겠음'?deptBadge(r.dept):''}
       ${isOver(r)?`<span class="badge b-overdue">기한초과</span>`:''}
     </div>
@@ -1079,13 +1480,14 @@ function reqCardsHtml(){
   });
   if(state.filter==='OVER') rs = rs.filter(isOver);
   else if(state.filter==='OPEN') rs = rs.filter(r=>r.stage!=='DONE'&&r.stage!=='DROPPED');
+  else if(state.filter==='OPENREQ') rs = rs.filter(r=>r.kind==='open');
   else if(state.filter==='MINE') rs = rs.filter(r=>r.store===state.user.store);
   else if(state.filter!=='ALL') rs = rs.filter(r=>r.stage===state.filter);
   if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')+(r.dept||'')).toLowerCase().includes(String(state.q).toLowerCase()));
   return rs.length? rs.map(reqCard).join('') : '<div class="empty">조건에 맞는 접수 건이 없습니다</div>';
 }
 function vList(){
-  const chips = [['ALL','전체'],['OPEN','진행중'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
+  const chips = [['ALL','전체'],['OPEN','진행중'],['OPENREQ','🏗 오픈 직후'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
   const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
   return roleNote()+`
     <div class="search"><input id="listSq" placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;const el=document.getElementById('reqList');if(el)el.innerHTML=reqCardsHtml()"></div>
@@ -1105,7 +1507,7 @@ function stepper(r){
 function photosHtml(id, kind){
   const all = filesCache[id]||[];
   const out = [];
-  all.forEach((f,i)=>{ if(f.kind===kind && f.data) out.push(`<img src="${f.data}" loading="lazy" onclick="viewImg(${i})" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'imgfail',textContent:'⚠ 이미지 오류'}))">`); });
+  all.forEach((f,i)=>{ if(f.kind===kind && f.data) out.push(`<img src="${f.data}" loading="lazy" onclick="viewImg(${i},'${id}')" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'imgfail',textContent:'⚠ 이미지 오류'}))">`); });
   if(!out.length) return '';
   return `<div class="photos">${out.join('')}</div>`;
 }
@@ -1197,9 +1599,16 @@ function vDetail(){
   const rl = role();
   let secs = '';
 
-  secs += `<div class="sec"><div class="st">📋 1. 접수 내용</div>
+  const openDays = r.openDate!=null ? Math.floor((now()-r.openDate)/DAY) : null;
+  secs += `<div class="sec"><div class="st">📋 1. 접수 내용
+      ${r.kind==='open'?'<span class="badge b-purple">🏗 오픈 직후 추가요청</span>':''}</div>
     <div class="kv"><b>점포</b>${esc(r.store)}</div>
     <div class="kv"><b>접수일</b>${fmtDT(r.createdAt)}</div>
+    ${r.kind==='open'?`
+      <div class="kv"><b>오픈일</b>${r.openDate?fmtD(r.openDate):'-'}${openDays!=null?` <span class="badge ${openDays<=30?'b-amber':'b-gray'}" style="margin-left:5px">오픈 후 ${openDays}일</span>`:''}</div>
+      <div class="kv"><b>요청 구분</b><span class="badge b-purple">${esc(r.openType||'-')}</span></div>
+      <div class="kv"><b>오픈 시공사</b>${r.builder?esc(r.builder):'<span style="color:var(--sub)">미지정</span>'}</div>
+      ${openDays!=null&&openDays<=30?`<div class="note warn">🏗 오픈 후 30일 이내 요청입니다. ${r.builder?`<b>${esc(r.builder)}</b>의 `:''}시공 하자 여부를 먼저 확인해주세요.</div>`:''}`:''}
     <div class="kv"><b>긴급도</b>${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':'보통'}</div>
     <div class="kv"><b>담당부서</b>${deptBadge(r.dept)||'미지정'}${r.deptVendor&&r.dept&&r.deptVendor!==r.dept?` <span class="badge b-red">⚠ 업체 판단: ${r.deptVendor}</span>`:''}</div>
     <div class="kv"><b>시공업체</b><span class="badge ${reqVendor(r)==='우리아이엔티'?'b-blue':'b-gray'}">${reqVendor(r)}</span>${rl==='hq'&&r.stage!=='DONE'&&r.stage!=='DROPPED'?` <button style="font-size:11.5px;color:var(--sub);text-decoration:underline;font-weight:700" onclick="switchVendor('${r.id}')">변경</button>`:''}</div>
@@ -1363,8 +1772,8 @@ function slaTag(r,stage){
   if(d<0) return `<span class="badge b-overdue">기한 ${-d}일 초과</span>`;
   return `<span class="badge b-amber">기한 D-${d} (${fmtD(deadline(r))}까지)</span>`;
 }
-function viewImg(i){
-  const id = state.detailId;
+function viewImg(i, key){
+  const id = key || state.detailId;
   const f = fileAt(id, i);
   if(!f || !f.data){ toast('사진을 찾을 수 없습니다'); return; }
   openModal(`<img src="${f.data}" style="width:100%;border-radius:12px">
@@ -1379,7 +1788,8 @@ function viewImg(i){
    작성 중 내용은 임시저장한다.
    ① 백그라운드 실시간 갱신으로 render()가 돌아도 폼이 초기화되지 않도록
    ② 휴대폰에서 카메라·사진첩을 열었다 돌아오며 페이지가 재시작돼도 살아남도록 */
-const EMPTY_DRAFT = { store:'', title:'', desc:'', urg:'보통', dept:'잘모르겠음', photos:[] };
+const EMPTY_DRAFT = { store:'', title:'', desc:'', urg:'보통', dept:'잘모르겠음', photos:[],
+                      kind:'fix', openDate:'', openType:'공사 보완', builder:'' };
 let newDraft = {...EMPTY_DRAFT, photos:[]};
 let draftPhotoWarn = false;
 
@@ -1413,7 +1823,8 @@ function hasDraft(){
 function updDraft(){
   const g = id => { const el=document.getElementById(id); return el ? el.value : null; };
   const before = hasDraft();
-  const v = {store:g('nStore'), title:g('nTitle'), desc:g('nDesc'), urg:g('nUrg'), dept:g('nDept')};
+  const v = {store:g('nStore'), title:g('nTitle'), desc:g('nDesc'), urg:g('nUrg'), dept:g('nDept'),
+             openDate:g('nOpenDate'), openType:g('nOpenType'), builder:g('nBuilder')};
   Object.keys(v).forEach(k=>{ if(v[k]!==null) newDraft[k]=v[k]; });
   saveDraft();
   if(hasDraft() !== before) refreshDraftUI();   // 임시저장 안내·초기화 버튼 표시 전환
@@ -1430,18 +1841,31 @@ function vNew(){
   if(!newDraft.store) newDraft.store = state.user.store || '';
   const d = newDraft;
   const opt = (v,cur) => `<option${v===cur?' selected':''}>${v}</option>`;
+  const isOpen = d.kind==='open';
   return roleNote()+`<div class="card">
-    <div class="h2">🛠 보수공사 신규 접수</div>
+    <div class="h2">${isOpen?'🏗 오픈 직후 추가요청':'🛠 보수공사 신규 접수'}</div>
+    <div class="kindtab">
+      <button class="${isOpen?'':'on'}" onclick="setReqKind('fix')">🛠 보수공사<small>고장·누수·파손 등 일반 보수</small></button>
+      <button class="${isOpen?'on':''}" onclick="setReqKind('open')">🏗 오픈 직후 추가요청<small>오픈 후 공사 보완·변경 요청</small></button>
+    </div>
+    ${isOpen?`<div class="note">오픈 공사를 맡았던 인테리어 시공사 정보를 함께 남기면 하자 책임 구분과 A/S 요청이 빨라집니다.</div>
+    <label>오픈일</label>
+    <input id="nOpenDate" type="date" value="${esc(d.openDate)}" onchange="updDraft();openDayHint()">
+    <div class="note" id="nOpenHint" style="${d.openDate?'':'display:none'}"></div>
+    <label>요청 구분</label>
+    <select id="nOpenType" onchange="updDraft()">${OPEN_TYPES.map(t=>`<option${t===d.openType?' selected':''}>${t}</option>`).join('')}</select>
+    <label>오픈 시공사 (인테리어)</label>
+    <select id="nBuilder" onchange="updDraft()"><option value="">모르겠음 / 해당없음</option>${state.cfg.builders.map(b=>`<option${b===d.builder?' selected':''}>${esc(b)}</option>`).join('')}</select>`:''}
     <label>점포명 <span style="font-weight:500">(입력하면 전국 점포 목록에서 검색됩니다)</span></label>
     <div class="spwrap">
       <input id="nStore" value="${esc(d.store)}" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
         oninput="spFilter('nStore');updDraft()" onchange="updDraft()" onfocus="spFilter('nStore')" onblur="spHide('nStore');updDraft()">
       <div class="spdrop" id="nStoreDrop"></div>
     </div>
-    <label>공사 제목</label>
-    <input id="nTitle" value="${esc(d.title)}" placeholder="예) 주방 배수구 막힘 보수" oninput="updDraft()" onchange="updDraft()">
-    <label>공사 내용 (상세)</label>
-    <textarea id="nDesc" rows="4" placeholder="증상, 위치, 영업 지장 여부 등을 적어주세요" oninput="updDraft()" onchange="updDraft()">${esc(d.desc)}</textarea>
+    <label>${isOpen?'요청 제목':'공사 제목'}</label>
+    <input id="nTitle" value="${esc(d.title)}" placeholder="${isOpen?'예) 홀 조명 밝기 보완 및 스위치 위치 변경':'예) 주방 배수구 막힘 보수'}" oninput="updDraft()" onchange="updDraft()">
+    <label>${isOpen?'요청 내용 (상세)':'공사 내용 (상세)'}</label>
+    <textarea id="nDesc" rows="4" placeholder="${isOpen?'어떤 부분이 오픈 도면·계획과 다른지, 어떻게 보완이 필요한지 적어주세요':'증상, 위치, 영업 지장 여부 등을 적어주세요'}" oninput="updDraft()" onchange="updDraft()">${esc(d.desc)}</textarea>
     <label>긴급도</label>
     <select id="nUrg" onchange="updDraft()">${opt('보통',d.urg)}${opt('긴급',d.urg)}</select>
     <label>담당부서 (아는 범위에서 선택)</label>
@@ -1455,6 +1879,26 @@ function vNew(){
     <div id="nResetWrap">${resetBtnHtml()}</div>
     <div class="note">접수 즉시 모든 관계자 화면에 실시간 반영되며, 담당 시공업체가 ${state.cfg.sla.SURVEY}일 내 실측일정을 등록해야 합니다.</div>
   </div>`;
+}
+function setReqKind(k){
+  updDraft();
+  newDraft.kind = k;
+  if(k==='open' && !newDraft.openDate) newDraft.openDate = tsToDateInput(now()-7*DAY);
+  saveDraft();
+  document.getElementById('main').innerHTML = vNew();
+  openDayHint();
+}
+/* 오픈 후 며칠 지났는지 자동 계산해 보여준다 */
+function openDayHint(){
+  const el = document.getElementById('nOpenHint');
+  const inp = document.getElementById('nOpenDate');
+  if(!el || !inp) return;
+  if(!inp.value){ el.style.display='none'; return; }
+  const days = Math.floor((now() - new Date(inp.value+'T12:00:00').getTime())/DAY);
+  el.style.display='block';
+  el.innerHTML = days < 0 ? '오픈 예정일입니다.'
+    : days <= 30 ? `오픈 후 <b>${days}일</b> 경과 — 오픈 하자·보완 대상 기간(30일 이내)입니다.`
+    : `오픈 후 <b>${days}일</b> 경과 — 30일이 지나 일반 보수로 처리될 수 있습니다.`;
 }
 function draftPhotosHtml(){
   return (newDraft.photos||[]).map((p,i)=>
@@ -1508,9 +1952,20 @@ async function submitNew(){
   const btn = document.getElementById('nSubmit'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> 접수 중…';
   const d = new Date();
   const id = `R-${String(d.getFullYear()).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}-${rnd4()}`;
+  const isOpen = newDraft.kind==='open';
+  const openTs = isOpen && newDraft.openDate ? new Date(newDraft.openDate+'T12:00:00').getTime() : null;
+  const elapsed = openTs!=null ? Math.floor((now()-openTs)/DAY) : null;
   const r = { id, store:storeNm, title, desc, urgency:newDraft.urg||'보통', dept:newDraft.dept||'잘모르겠음', vendorCo:storeVendor(storeNm),
+    kind: isOpen?'open':'fix',
     createdAt:now(), stage:'SURVEY', stageAt:now(), estimates:[], comments:[], photoCount:photos.length,
-    history:[{ts:now(),actor:actorLabel(),action:`보수공사 접수 (사진 ${photos.length}장)`}] };
+    history:[{ts:now(),actor:actorLabel(),
+      action: isOpen ? `오픈 직후 추가요청 접수${elapsed!=null?` (오픈 후 ${elapsed}일)`:''}${photos.length?` · 사진 ${photos.length}장`:''}`
+                     : `보수공사 접수 (사진 ${photos.length}장)`}] };
+  if(isOpen){
+    if(openTs!=null) r.openDate = openTs;
+    r.openType = newDraft.openType || '공사 보완';
+    if(newDraft.builder) r.builder = newDraft.builder;
+  }
   try{
     await store.saveRequest(r);
     /* 사진은 1장씩 따로 저장 — 한 장이 실패해도 접수 자체는 살리고, 실제 저장된 장수를 기록한다 */
@@ -1533,7 +1988,10 @@ let mFileData=null, mFileName=null, mFileIsImg=false, mXlsxRows=null;
 function mEstimate(id){
   mFileData=null; mFileName=null; mXlsxRows=null;
   setTimeout(()=>{ const r=R(id); const el=document.getElementById('mDept'); if(el&&r&&r.dept) el.value=r.dept; }, 50);
+  const rq = R(id);
   openModal(`<h2>견적서 업로드</h2><div class="sub">${id}</div>
+    <div class="note">조명·타일 발주와 <b>동일한 표준 견적서 양식</b>입니다. 이 양식으로 올리면 항목·금액이 자동 검토됩니다.</div>
+    <button class="btn sec2 blk" style="margin-top:8px" onclick="downloadQuoteForm('bosu',{site:'${esc((rq&&rq.store)||'').replace(/'/g,"\\'")}',co:'${esc(myCo())}'})">⬇ 표준 견적서 양식(.xlsx) 내려받기</button>
     <label>견적 금액 (원)</label><input id="mAmt" type="number" inputmode="numeric" placeholder="예) 1500000">
     <label>견적일</label><input id="mEstDate" type="date" value="${tsToDateInput(now())}">
     <label>작업 예정일시 (공사 가능 일정)</label><input id="mWork" type="datetime-local">
@@ -2132,6 +2590,173 @@ async function parseXlsx(buf){
   return rows;
 }
 
+/* ═══════════ 표준 견적서 양식 (.xlsx 생성 — 외부 라이브러리 없이) ═══════════
+   보수공사·조명/타일 발주가 같은 양식을 씁니다.
+   제목행: 품명 · 규격 · 단위 · 수량 · 단가 · 금액 · 비고
+   하단행: 소계 / 일반관리비·이윤 / 합계
+   이 양식으로 올리면 앱이 품목·금액을 자동 인식합니다. */
+const QUOTE_COLS = ['품명','규격','단위','수량','단가','금액','비고'];
+
+/* ZIP(무압축 저장) 방식으로 .xlsx 를 만든다 */
+const CRC_TABLE = (()=>{ const t=new Uint32Array(256);
+  for(let n=0;n<256;n++){ let c=n; for(let k=0;k<8;k++) c = c&1 ? 0xEDB88320^(c>>>1) : c>>>1; t[n]=c>>>0; }
+  return t; })();
+function crc32(u8){ let c=0xFFFFFFFF; for(let i=0;i<u8.length;i++) c = CRC_TABLE[(c^u8[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function zipStore(files){   // files: [{name, text}]
+  const enc = new TextEncoder();
+  const locals = [], centrals = [];
+  let offset = 0;
+  files.forEach(f=>{
+    const nameB = enc.encode(f.name), dataB = enc.encode(f.text);
+    const crc = crc32(dataB);
+    const lh = new Uint8Array(30 + nameB.length);
+    const lv = new DataView(lh.buffer);
+    lv.setUint32(0,0x04034b50,true); lv.setUint16(4,20,true); lv.setUint16(6,0,true); lv.setUint16(8,0,true);
+    lv.setUint16(10,0,true); lv.setUint16(12,0,true);
+    lv.setUint32(14,crc,true); lv.setUint32(18,dataB.length,true); lv.setUint32(22,dataB.length,true);
+    lv.setUint16(26,nameB.length,true); lv.setUint16(28,0,true);
+    lh.set(nameB,30);
+    locals.push(lh, dataB);
+    const ch = new Uint8Array(46 + nameB.length);
+    const cv = new DataView(ch.buffer);
+    cv.setUint32(0,0x02014b50,true); cv.setUint16(4,20,true); cv.setUint16(6,20,true);
+    cv.setUint16(8,0,true); cv.setUint16(10,0,true); cv.setUint16(12,0,true); cv.setUint16(14,0,true);
+    cv.setUint32(16,crc,true); cv.setUint32(20,dataB.length,true); cv.setUint32(24,dataB.length,true);
+    cv.setUint16(28,nameB.length,true);
+    cv.setUint32(42,offset,true);
+    ch.set(nameB,46);
+    centrals.push(ch);
+    offset += lh.length + dataB.length;
+  });
+  const cdSize = centrals.reduce((s,c)=>s+c.length,0);
+  const end = new Uint8Array(22); const ev = new DataView(end.buffer);
+  ev.setUint32(0,0x06054b50,true);
+  ev.setUint16(8,files.length,true); ev.setUint16(10,files.length,true);
+  ev.setUint32(12,cdSize,true); ev.setUint32(16,offset,true);
+  const total = offset + cdSize + 22;
+  const out = new Uint8Array(total); let p=0;
+  locals.forEach(b=>{ out.set(b,p); p+=b.length; });
+  centrals.forEach(b=>{ out.set(b,p); p+=b.length; });
+  out.set(end,p);
+  return new Blob([out], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+}
+const xmlEsc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function sheetXml(rows){
+  const colLetter = i => { let s='', n=i+1; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); } return s; };
+  const body = rows.map((row,ri)=>{
+    const cells = row.map((v,ci)=>{
+      const ref = colLetter(ci)+(ri+1);
+      if(v===''||v===null||v===undefined) return '';
+      if(typeof v==='number') return `<c r="${ref}"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+    }).join('');
+    return `<row r="${ri+1}">${cells}</row>`;
+  }).join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<cols><col min="1" max="1" width="30" customWidth="1"/><col min="2" max="2" width="26" customWidth="1"/><col min="3" max="3" width="8" customWidth="1"/><col min="4" max="6" width="13" customWidth="1"/><col min="7" max="7" width="22" customWidth="1"/></cols>
+<sheetData>${body}</sheetData></worksheet>`;
+}
+function buildXlsx(rows, sheetName){
+  return zipStore([
+    {name:'[Content_Types].xml', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>`},
+    {name:'_rels/.rels', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`},
+    {name:'xl/workbook.xml', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="${xmlEsc(sheetName||'견적서')}" sheetId="1" r:id="rId1"/></sheets></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>`},
+    {name:'xl/worksheets/sheet1.xml', text:sheetXml(rows)}
+  ]);
+}
+/* 표준 견적서 양식 내려받기 — kind: 'bosu' | 'order' */
+function downloadQuoteForm(kind, meta){
+  const isOrder = kind==='order';
+  const title = isOrder ? '조명·타일 발주 견적서' : '보수공사 견적서';
+  const sample = isOrder
+    ? [['LED 다운라이트','6인치 15W 주백색','EA',48,18500,888000,''],
+       ['LED 라인조명','1200mm 40W','EA',12,64000,768000,''],
+       ['타일 접착제','25kg','포',34,18000,612000,'※ 예시 행입니다. 지우고 작성하세요']]
+    : [['철거 및 폐기물 처리','주방 바닥 트렌치 구간','식',1,350000,350000,''],
+       ['방수공','우레탄 2회','인',2,228286,456572,'※ 노무비는 표준노임단가 기준'],
+       ['타일 자재','300×300 논슬립','㎡',12,28500,342000,'※ 예시 행입니다. 지우고 작성하세요']];
+  const subTotal = sample.reduce((s,r)=>s+r[5],0);
+  const overhead = Math.round(subTotal*0.1);
+  const rows = [
+    [title, '', '', '', '', '', ''],
+    ['현장/점포', (meta&&meta.site)||'', '', '작성일', fmtD(now()), '', ''],
+    ['업체명', (meta&&meta.co)||'', '', '담당자', '', '', ''],
+    ['', '', '', '', '', '', ''],
+    QUOTE_COLS,
+    ...sample,
+    ['소계','','','','',subTotal,''],
+    ['일반관리비·이윤','','','','',overhead,'소계의 10% 기준'],
+    ['합계','','','','',subTotal+overhead,''],
+    ['', '', '', '', '', '', ''],
+    ['※ 제목행(품명·규격·단위·수량·단가·금액)은 지우지 마세요 — 앱이 이 행을 기준으로 품목을 자동 인식합니다.','','','','','',''],
+    ['※ 「소계 / 일반관리비·이윤 / 합계」 행도 그대로 두시면 자동 검산됩니다.','','','','','','']
+  ];
+  const blob = buildXlsx(rows, '견적서');
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `표준견적서_양식_${isOrder?'조명타일발주':'보수공사'}.xlsx`;
+  a.style.display='none'; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ try{ URL.revokeObjectURL(url); a.remove(); }catch(e){} }, 8000);
+  toast('표준 견적서 양식을 내려받았습니다');
+}
+
+/* 표준 양식(또는 유사 표)에서 품목을 뽑아낸다 — 발주 견적 자동 입력용 */
+function parseQuoteItems(rows){
+  const RE = { name:/품명|품목|항목|내역|자재|공종/, spec:/규격|사양|스펙/, unit:/단위/, qty:/수량/, price:/단가/, amt:/금액|공급가/ };
+  let hi=-1, c={};
+  for(let i=0;i<Math.min(rows.length,30);i++){
+    const cells = rows[i].map(x=>String(x).replace(/\s/g,''));
+    if(cells.some(x=>RE.name.test(x)) && cells.some(x=>RE.price.test(x)||RE.amt.test(x))){
+      hi=i;
+      cells.forEach((x,j)=>{
+        if(c.name===undefined && RE.name.test(x)) c.name=j;
+        if(c.spec===undefined && RE.spec.test(x)) c.spec=j;
+        if(c.unit===undefined && RE.unit.test(x) && !RE.price.test(x)) c.unit=j;
+        if(c.qty===undefined && RE.qty.test(x)) c.qty=j;
+        if(c.price===undefined && RE.price.test(x)) c.price=j;
+        if(c.amt===undefined && RE.amt.test(x) && !RE.price.test(x)) c.amt=j;
+      });
+      break;
+    }
+  }
+  if(hi<0 || c.name===undefined) return [];
+  const items=[];
+  for(let i=hi+1;i<rows.length;i++){
+    const name = String(rows[i][c.name]??'').trim();
+    const nm = name.replace(/\s/g,'');
+    if(!name) continue;
+    if(/^소계$|^합계$|^총계$|^계$|일반관리비|이윤|제경비|간접비|부가세|VAT/i.test(nm)) continue;
+    if(/^※/.test(name)) continue;
+    const qty = toNum(rows[i][c.qty]) ?? 0;
+    const price = toNum(rows[i][c.price]) ?? 0;
+    const amt = toNum(rows[i][c.amt]);
+    if(!qty && !price && amt===null) continue;
+    items.push({
+      name, spec:String(rows[i][c.spec]??'').trim(),
+      unit:String(rows[i][c.unit]??'EA').trim()||'EA',
+      qty, price,
+      amount: amt!==null ? amt : qty*price
+    });
+  }
+  return items;
+}
+
 /* ===== 견적 자동검토 (규칙 기반) ===== */
 const toNum = v => { const n = parseFloat(String(v??'').replace(/[,₩원\s]/g,'')); return isNaN(n)?null:n; };
 function analyzeEstimate(rows, inputAmount){
@@ -2263,8 +2888,9 @@ function vSet(){
       <input type="number" min="1" value="${state.cfg.sla[s]}" style="width:70px;text-align:center" onchange="updSla('${s}',this.value)">
       <span style="color:var(--sub);font-size:13px">일 이내</span>
     </div>`).join('');
-  const CODE_NM = {hq:'본사담당', store:'점포', vendor:'토마토세븐', vendor2:'우리아이엔티'};
-  const codeRows = ['hq','store','vendor','vendor2'].map(rk=>`
+  const CODE_NM = {hq:'본사담당', store:'점포', vendor:'토마토세븐', vendor2:'우리아이엔티',
+                   builder:'인테리어 시공사', supplier:'에이프러스(조명)', supplier2:'우석타일(타일)'};
+  const codeRows = ['hq','store','vendor','vendor2','builder','supplier','supplier2'].map(rk=>`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
       <span style="width:110px;font-weight:700;font-size:14px">${CODE_NM[rk]}</span>
       <input value="${esc(state.cfg.codes[rk]||'')}" onchange="updCode('${rk}',this.value)">
@@ -2284,6 +2910,28 @@ function vSet(){
     <div class="h2">🔑 소속별 접속코드</div>
     <div class="note" style="margin:0 0 14px">코드를 변경하면 이후 로그인부터 적용됩니다. 점포·업체에 새 코드를 공지하세요.</div>
     ${codeRows}
+  </div>
+  <div class="card">
+    <div class="h2">🏗 인테리어 시공사 <span class="badge b-gray">${state.cfg.builders.length}개사</span></div>
+    <div class="note" style="margin:0 0 10px">조명·타일 발주와 「오픈 직후 추가요청」에서 선택 목록으로 제공됩니다.</div>
+    <div id="bdRows">${builderRowsHtml()}</div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="addBdIn" placeholder="새 시공사명 추가">
+      <button class="btn sm" style="flex-shrink:0" onclick="addBuilder()">추가</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="h2">📦 조명·타일 공급사</div>
+    <div class="note" style="margin:0 0 10px">품목별 공급사는 각 1개사로 고정되어 있습니다.</div>
+    <div class="kv"><b>💡 조명</b><strong>에이프러스</strong></div>
+    <div class="kv"><b>🧱 타일</b><strong>우석타일</strong></div>
+    <div class="h2" style="margin-top:16px;font-size:15px">⏱ 발주 단계별 처리기한</div>
+    ${O_STAGES.slice(0,5).map(s=>`
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="flex:1;font-weight:700;font-size:14px">${O_NM[s]}</span>
+        <input type="number" min="1" value="${state.cfg.osla[s]}" style="width:70px;text-align:center" onchange="updOSla('${s}',this.value)">
+        <span style="color:var(--sub);font-size:13px">일 이내</span>
+      </div>`).join('')}
   </div>
   <div class="card">
     <div class="h2">🏪 점포 목록 <span class="badge b-gray">${state.cfg.stores.length}개</span></div>
@@ -2322,6 +2970,28 @@ async function updSla(s,v){ const sla={...state.cfg.sla}; sla[s]=Math.max(1,Numb
 async function updCode(rk,v){ if(!v.trim()){ toast('코드는 비울 수 없습니다'); render(); return;} const codes={...state.cfg.codes}; codes[rk]=v.trim(); try{ await store.saveConfig({codes}); toast('접속코드가 변경되었습니다'); }catch(e){ toast('저장 실패'); } }
 async function addStore(){ const v=document.getElementById('addStoreIn').value.trim(); if(!v) return; try{ await store.saveConfig({stores:[...state.cfg.stores,v]}); render(); }catch(e){ toast('저장 실패'); } }
 async function delStore(i){ const arr=state.cfg.stores.slice(); arr.splice(i,1); try{ await store.saveConfig({stores:arr}); render(); }catch(e){ toast('저장 실패'); } }
+/* ── 인테리어 시공사 · 발주 SLA ── */
+function builderRowsHtml(){
+  return state.cfg.builders.map((b,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="flex:1;font-size:14px">🏗 ${esc(b)}</span>
+      <button class="btn sec2 sm" onclick="delBuilder(${i})">삭제</button>
+    </div>`).join('') || '<div class="empty" style="padding:14px 0">등록된 시공사가 없습니다</div>';
+}
+async function addBuilder(){
+  const el = document.getElementById('addBdIn');
+  const v = el.value.trim(); if(!v) return;
+  if(state.cfg.builders.includes(v)){ toast('이미 등록된 시공사입니다'); return; }
+  try{ await store.saveConfig({builders:[...state.cfg.builders, v]}); el.value=''; toast(`${v} 추가됨`); render(); }
+  catch(e){ toast('저장 실패'); }
+}
+async function delBuilder(i){
+  const arr = state.cfg.builders.slice();
+  if(!confirm(`「${arr[i]}」을(를) 목록에서 삭제할까요?`)) return;
+  arr.splice(i,1);
+  try{ await store.saveConfig({builders:arr}); render(); }catch(e){ toast('저장 실패'); }
+}
+async function updOSla(s,v){ const osla={...state.cfg.osla}; osla[s]=Math.max(1,Number(v)||1); try{ await store.saveConfig({osla}); toast('저장되었습니다'); render(); }catch(e){ toast('저장 실패'); } }
 let storeUploadList = [];
 async function pickStoreFile(inp){
   const f = inp.files[0]; if(!f) return;
@@ -2416,6 +3086,877 @@ function renderNotis(){
     </div>`).join('') : '<div class="empty">알림이 없습니다</div>');
 }
 
+/* ══════════════════════════════════════════════════════════
+   조명·타일 발주 시스템
+   도면제공 → 견적 → 확정 → 납품일협의 → 납품·확인서 → 정산
+   ══════════════════════════════════════════════════════════ */
+const oRoleNote = () => roleNote();
+
+/* ── 발주 대시보드 ── */
+function vODash(){
+  const list = visibleOrders();
+  const cnt = s => list.filter(o=>o.stage===s).length;
+  const over = list.filter(oIsOver);
+  const thisYm = ymOf(now());
+  /* 정산 대기 = 납품 완료됐지만 아직 정산 안 된 건 */
+  const pending = list.filter(o=>o.stage==='DELIVERED');
+  const pendingAmt = pending.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const doneAmt = list.filter(o=>o.stage==='SETTLED' && o.settle && ymOf(o.settle.at)===thisYm)
+                      .reduce((s,o)=>s+(oAmount(o)||0),0);
+  const badRcpt = list.filter(o=>o.receipt && o.receipt.allOk===false);
+
+  const tile = (v,label,val,cls) => `<button class="tile ${cls||''}" onclick="oGoList('${v}')">
+    <div class="n">${val}</div><div class="t">${label} ›</div></button>`;
+
+  return oRoleNote()+`
+  <div class="card">
+    <div class="h2">📦 발주 진행 현황</div>
+    <div class="tiles">
+      ${tile('DRAWING','견적 대기',cnt('DRAWING'))}
+      ${tile('QUOTE','확정 대기',cnt('QUOTE'))}
+      ${tile('CONFIRM','납품일 협의',cnt('CONFIRM'))}
+      ${tile('SCHED','납품 대기',cnt('SCHED'))}
+      ${tile('DELIVERED','정산 대기',cnt('DELIVERED'))}
+      ${tile('ALL','전체',list.length)}
+    </div>
+  </div>
+
+  ${over.length?`<div class="card">
+    <div class="h2">⚠ 기한 초과 <span class="badge b-overdue">${over.length}건</span></div>
+    ${over.slice(0,5).map(o=>`<button class="rowbtn" onclick="goOrder('${o.id}')" style="width:100%;text-align:left">
+      <div class="note warn" style="margin-top:6px">[${o.id}] ${esc(o.site)} · ${O_NM[o.stage]} ${-oDdays(o)}일 초과 — ${O_OWNER(o)} 조치 필요</div>
+    </button>`).join('')}
+  </div>`:''}
+
+  ${badRcpt.length?`<div class="card">
+    <div class="h2">🚨 납품 이상 보고 <span class="badge b-red">${badRcpt.length}건</span></div>
+    ${badRcpt.map(o=>`<button style="width:100%;text-align:left" onclick="goOrder('${o.id}')">
+      <div class="note warn" style="margin-top:6px">[${o.id}] ${esc(o.site)} · ${esc(o.receipt.shortItems||o.receipt.note||'이상 있음')}</div></button>`).join('')}
+  </div>`:''}
+
+  <div class="card">
+    <div class="h2">💰 정산 현황</div>
+    <div class="kv"><b style="width:118px">정산 대기</b><strong>${money(pendingAmt)}</strong> <span style="color:var(--sub);font-size:12.5px;margin-left:6px">${pending.length}건</span></div>
+    <div class="kv"><b style="width:118px">${ymLabel(thisYm)} 완료</b><strong style="color:var(--green)">${money(doneAmt)}</strong></div>
+    <div class="kv"><b style="width:118px">└ 직영점 대기</b>${pending.filter(o=>o.type==='직영점').length}건 · ${money(pending.filter(o=>o.type==='직영점').reduce((s,o)=>s+(oAmount(o)||0),0))}</div>
+    <div class="kv"><b style="width:118px">└ 가맹점 대기</b>${pending.filter(o=>o.type==='가맹점').length}건 · ${money(pending.filter(o=>o.type==='가맹점').reduce((s,o)=>s+(oAmount(o)||0),0))}</div>
+    ${role()==='hq'?`<button class="btn sec2 blk" onclick="go('settle')">📊 월별 정산 관리로 이동</button>`:''}
+  </div>
+
+  <div class="card">
+    <div class="h2">🕒 최근 발주</div>
+    ${list.slice().sort((a,b)=>b.stageAt-a.stageAt).slice(0,6).map(oRow).join('') || '<div class="empty">발주 건이 없습니다</div>'}
+  </div>`;
+}
+function oGoList(f){ state.oFilter=f; state.oCat='ALL'; state.oq=''; go('olist'); }
+
+/* ── 발주 목록 ── */
+function oRow(o){
+  const amt = oAmount(o);
+  const idx = O_STAGES.indexOf(o.stage);
+  const bar = O_STAGES.slice(0,5).map((s,i)=>`<i class="${i<idx?'done':(i===idx&&o.stage!=='SETTLED'?'cur':(o.stage==='SETTLED'?'done':''))}"></i>`).join('');
+  return `<button class="card req" onclick="goOrder('${o.id}')">
+    <div class="row1">
+      <span class="id">${o.id}</span>
+      <span class="badge ${O_BADGE[o.stage]}">${O_WAIT[o.stage]}</span>
+      <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
+      <span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
+      ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
+    </div>
+    <h3>${esc(o.site)}</h3>
+    <div class="meta">${esc(o.supplier)} → ${esc(o.builder)}${amt!=null?` · ${money(amt)}`:''}</div>
+    <div class="row2"><div class="minibar">${bar}</div>${o.stage==='SETTLED'?'<span class="badge b-green">정산완료</span>':oDdayBadge(o)}</div>
+  </button>`;
+}
+function vOList(){
+  let list = visibleOrders();
+  if(state.oFilter!=='ALL') list = list.filter(o=>o.stage===state.oFilter);
+  if(state.oCat!=='ALL') list = list.filter(o=>o.cat===state.oCat);
+  const q = (state.oq||'').trim().toLowerCase();
+  if(q) list = list.filter(o=>[o.id,o.site,o.builder,o.supplier].join(' ').toLowerCase().includes(q));
+  list = list.slice().sort((a,b)=>b.createdAt-a.createdAt);
+
+  const chip = (v,label,cur,fn) => `<button class="${cur===v?'on':''}" onclick="${fn}('${v}')">${label}</button>`;
+  return oRoleNote()+`<div class="card">
+    <input id="oq" placeholder="🔍 현장·시공사·발주번호 검색" value="${esc(state.oq||'')}"
+      oninput="state.oq=this.value;render();refocusSearch('oq')">
+    <div class="chips" style="margin-top:10px">
+      ${chip('ALL','전체',state.oFilter,'oSetFilter')}
+      ${O_STAGES.map(s=>chip(s,O_NM[s],state.oFilter,'oSetFilter')).join('')}
+    </div>
+    <div class="chips">
+      ${chip('ALL','조명+타일',state.oCat,'oSetCat')}
+      ${chip('조명','💡 조명',state.oCat,'oSetCat')}
+      ${chip('타일','🧱 타일',state.oCat,'oSetCat')}
+    </div>
+    <div style="font-size:12.5px;color:var(--sub);margin-bottom:8px">${list.length}건</div>
+    ${list.map(oRow).join('') || '<div class="empty">해당하는 발주 건이 없습니다</div>'}
+  </div>`;
+}
+function oSetFilter(v){ state.oFilter=v; render(); }
+function oSetCat(v){ state.oCat=v; render(); }
+
+/* ── 발주 상세 ── */
+/* 6단계라 스테퍼에서는 짧은 이름을 쓴다 */
+const O_SHORT = { DRAWING:'도면', QUOTE:'견적', CONFIRM:'확정', SCHED:'납품일', DELIVERED:'납품', SETTLED:'정산' };
+function oStepper(o){
+  const idx = O_STAGES.indexOf(o.stage);
+  return `<div class="stepper">${O_STAGES.map((s,i)=>{
+    const done = i<idx || o.stage==='SETTLED';
+    return `<div class="step ${done?'done':(i===idx?'cur':'')}"><div class="dot">${done?'✓':i+1}</div>${O_SHORT[s]}</div>`;
+  }).join('')}</div>`;
+}
+function itemsTable(items, editable){
+  const total = items.reduce((s,x)=>s+(x.amount||0),0);
+  return `<div class="tscroll"><table class="itab">
+    <thead><tr><th>품목</th><th>규격</th><th class="num">단위</th><th class="num">수량</th><th class="num">단가</th><th class="num">금액</th></tr></thead>
+    <tbody>${items.map(x=>`<tr>
+      <td style="font-weight:700">${esc(x.name)}</td><td style="color:var(--sub)">${esc(x.spec||'')}</td>
+      <td class="num">${esc(x.unit||'')}</td><td class="num">${Number(x.qty).toLocaleString('ko-KR')}</td>
+      <td class="num">${Number(x.price).toLocaleString('ko-KR')}</td><td class="num">${Number(x.amount).toLocaleString('ko-KR')}</td>
+    </tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="5">합계 (${items.length}개 품목)</td><td class="num">${total.toLocaleString('ko-KR')}</td></tr></tfoot>
+  </table></div>`;
+}
+function oSlaTag(o, stage){
+  if(o.stage!==stage) return '';
+  const d = oDdays(o);
+  if(d===null) return '';
+  if(d<0) return `<span class="badge b-overdue">기한 ${-d}일 초과</span>`;
+  return `<span class="badge b-amber">기한 D-${d}</span>`;
+}
+function vODetail(){
+  const o = O(state.orderId);
+  if(!o) return '<div class="empty">발주 건을 찾을 수 없습니다</div>';
+  const rl = role();
+  let s = '';
+
+  /* 1. 발주 개요 · 도면 */
+  s += `<div class="sec"><div class="st">📐 1. 발주 정보 · 도면 ${oSlaTag(o,'DRAWING')}</div>
+    <div class="kv"><b>현장</b>${esc(o.site)}</div>
+    <div class="kv"><b>구분</b><span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
+      <span class="badge b-gray" style="margin-left:5px">${CAT_ICON[o.cat]} ${o.cat}</span></div>
+    <div class="kv"><b>공급사</b>${esc(o.supplier)}</div>
+    <div class="kv"><b>시공사</b>${esc(o.builder)}</div>
+    <div class="kv"><b>GRS 담당</b>${esc(o.manager||'-')}</div>
+    <div class="kv"><b>오픈 예정</b>${o.openPlan?fmtD(o.openPlan):'-'}</div>
+    <div class="kv"><b>도면</b>${o.drawingCount?`${o.drawingCount}매 제공됨`:'미제공'}</div>
+    <div class="kv"><b>확정 권한</b>${oConfirmer(o)} <span style="font-size:11.5px;color:var(--sub);margin-left:4px">(${o.type} 프로세스)</span></div>
+    <div class="kv"><b>정산 방식</b>${oSettleNm(o)}</div>`;
+  s += fileListHtml('O:'+o.id, ['drawing'], '📥 제공 도면');
+  if(rl==='hq' && o.stage==='DRAWING')
+    s += `<input type="file" id="oDwF" accept="image/*,.pdf" multiple style="display:none" onchange="oAddDrawing('${o.id}',this)">
+      <button class="btn sec2 blk" onclick="document.getElementById('oDwF').click()">📎 도면 추가 제공</button>`;
+  s += `</div>`;
+
+  /* 2. 수량산출·견적 */
+  s += `<div class="sec"><div class="st">📋 2. 수량산출·견적서 ${oSlaTag(o,'QUOTE')}</div>`;
+  if(o.quote){
+    s += `<div class="kv"><b>견적금액</b><strong style="font-size:15px">${money(o.quote.amount)}</strong></div>
+      <div class="kv"><b>견적일</b>${fmtD(o.quote.ts)}</div>
+      ${o.quote.readyDate?`<div class="kv"><b>납품 가능일</b><strong>${fmtD(o.quote.readyDate)}</strong></div>`:''}
+      ${o.quote.fileName?`<div class="kv"><b>첨부</b>📎 ${esc(o.quote.fileName)}</div>`:''}
+      ${o.quote.note?`<div class="kv"><b>비고</b>${esc(o.quote.note)}</div>`:''}
+      ${itemsTable(o.quote.items||[])}`;
+    if(o.quote.analysis) s += analysisHtml(o.quote.analysis);
+    s += fileListHtml('O:'+o.id, ['quote'], '📥 견적서 파일');
+  } else {
+    s += `<div class="note">${o.supplier}의 수량산출·견적서 제출 대기중입니다.</div>`;
+  }
+  if(oCanAct(o,'DRAWING'))
+    s += `<button class="btn blk" onclick="oQuoteModal('${o.id}')">📤 수량산출·견적서 제출</button>`;
+  if(rl==='supplier' && o.supplier===myCo() && o.stage==='QUOTE')
+    s += `<button class="btn sec2 blk" onclick="oQuoteModal('${o.id}')">✏ 견적 수정 (확정 전)</button>`;
+  s += `</div>`;
+
+  /* 3. 검토·확정 */
+  s += `<div class="sec"><div class="st">✅ 3. 검토·확정 ${oSlaTag(o,'CONFIRM')}
+    <span class="badge b-gray">${oConfirmer(o)}</span></div>`;
+  if(o.confirm){
+    s += `<div class="kv"><b>결과</b><span class="badge ${o.confirm.decision==='확정'?'b-green':'b-red'}">${o.confirm.decision}</span></div>
+      <div class="kv"><b>확정금액</b><strong>${money(o.confirm.finalAmount)}</strong></div>
+      <div class="kv"><b>검토자</b>${esc(o.confirm.by)} · ${fmtDT(o.confirm.at)}</div>
+      ${o.confirm.opinion?`<div class="kv"><b>의견</b>${esc(o.confirm.opinion)}</div>`:''}`;
+  } else s += `<div class="note">${o.quote?`${oConfirmer(o)} 검토 대기중입니다.`:'견적 제출 후 검토합니다.'}</div>`;
+  if(oCanAct(o,'QUOTE'))
+    s += `<button class="btn blk" onclick="oConfirmModal('${o.id}')">✍ 견적 검토·확정</button>`;
+  s += `</div>`;
+
+  /* 4. 납품일 협의 */
+  s += `<div class="sec"><div class="st">🚚 4. 납품일 협의 ${oSlaTag(o,'CONFIRM')}
+    <span class="badge b-gray">시공사 ↔ 공급사</span></div>`;
+  if(o.sched){
+    s += `<div class="kv"><b>납품 예정일</b><strong>${fmtD(o.sched.planDate)}</strong></div>
+      <div class="kv"><b>납품 장소</b>${esc(o.sched.place||'-')}</div>
+      <div class="kv"><b>협의</b>${esc(o.sched.agreedBy)} · ${fmtDT(o.sched.agreedAt)}</div>
+      ${o.sched.note?`<div class="kv"><b>요청사항</b>${esc(o.sched.note)}</div>`:''}`;
+  } else s += `<div class="note">${o.confirm?'시공사와 공급사가 납품일을 협의해 등록해주세요.':'견적 확정 후 협의합니다.'}</div>`;
+  if(oCanAct(o,'CONFIRM'))
+    s += `<button class="btn blk" onclick="oSchedModal('${o.id}')">📅 납품일 협의 등록</button>`;
+  if(o.stage==='SCHED' && ((rl==='builder'&&o.builder===myCo())||(rl==='supplier'&&o.supplier===myCo())))
+    s += `<button class="btn sec2 blk" onclick="oSchedModal('${o.id}')">✏ 납품일 변경</button>`;
+  s += `</div>`;
+
+  /* 5. 납품 · 물품납품확인서 */
+  s += `<div class="sec"><div class="st">📦 5. 물품 납품·확인서 ${oSlaTag(o,'SCHED')}</div>`;
+  if(o.receipt){
+    s += `<div class="kv"><b>수령일</b>${fmtDT(o.receipt.receivedAt)}</div>
+      <div class="kv"><b>수령자</b>${esc(o.receipt.receiver)}</div>
+      <div class="kv"><b>검수결과</b>${o.receipt.allOk
+        ? '<span class="badge b-green">전 품목 이상 없음</span>'
+        : `<span class="badge b-red">이상 있음</span>`}</div>
+      ${o.receipt.shortItems?`<div class="note warn">🚨 ${esc(o.receipt.shortItems)}</div>`:''}
+      ${o.receipt.note?`<div class="kv"><b>비고</b>${esc(o.receipt.note)}</div>`:''}`;
+    /* 납품 사진 */
+    const dp = photosHtml('O:'+o.id, 'delivery');
+    s += `<div class="kv" style="margin-top:6px"><b>납품 사진</b>${o.receipt.photoCount||((filesCache['O:'+o.id]||[]).filter(f=>f.kind==='delivery').length)||0}장</div>`;
+    s += dp || `<div class="note">첨부된 납품 사진이 없습니다.</div>`;
+    if(oCanAct2Receipt(o))
+      s += `<input type="file" id="rcAddF" accept="image/*" multiple style="display:none" onchange="oAddDeliveryPhotos('${o.id}',this)">
+        <button class="btn sec2 blk" onclick="document.getElementById('rcAddF').click()">📷 납품 사진 추가</button>`;
+    s += `<div class="kv" style="margin-top:8px"><b>서명</b><span class="badge b-green">서명 완료</span>&nbsp;${esc(o.receipt.signBy)} · ${fmtDT(o.receipt.signAt)}</div>`;
+    const sg = (filesCache['O:'+o.id]||[]).find(f=>f.kind==='osign');
+    if(sg) s += `<img class="signimg" src="${sg.data}" alt="서명">`;
+    s += `<button class="btn sec2 blk" onclick="printReceipt('${o.id}')">📄 물품납품확인서 출력 (PDF 저장)</button>`;
+  } else {
+    s += `<div class="note">${o.sched?`납품 예정일 ${fmtD(o.sched.planDate)} — 물품 수령 후 시공사가 납품확인서를 작성·서명합니다.`:'납품일 협의 후 진행합니다.'}</div>`;
+  }
+  if(oCanAct(o,'SCHED'))
+    s += `<button class="btn blk grn" onclick="oReceiptModal('${o.id}')">✍ 물품 수령 · 납품확인서 작성</button>`;
+  s += `</div>`;
+
+  /* 6. 정산 */
+  s += `<div class="sec"><div class="st">💰 6. 정산 <span class="badge b-gray">${oSettleNm(o)}</span></div>`;
+  if(o.settle){
+    s += `<div class="kv"><b>정산금액</b><strong>${money(o.settle.amount)}</strong></div>
+      <div class="kv"><b>정산방식</b>${esc(o.settle.method)}</div>
+      <div class="kv"><b>정산월</b>${ymLabel(o.settle.month)}</div>
+      <div class="kv"><b>처리</b>${esc(o.settle.by)} · ${fmtDT(o.settle.at)}</div>
+      ${o.settle.note?`<div class="kv"><b>비고</b>${esc(o.settle.note)}</div>`:''}`;
+  } else s += `<div class="note">${o.receipt?`납품확인 완료 — ${oSettleNm(o)} 대기중입니다.`:'납품 확인 후 정산합니다.'}</div>`;
+  if(oCanAct(o,'DELIVERED'))
+    s += `<button class="btn blk" onclick="oSettleModal('${o.id}')">💳 정산 처리</button>`;
+  s += `</div>`;
+
+  /* 전체 첨부파일 */
+  {
+    const key = 'O:'+o.id;
+    const all = filesCache[key]||[];
+    const box = fileListHtml(key, ['drawing','quote','delivery','osign'], '전체 첨부파일');
+    s += `<div class="sec"><div class="st">📎 첨부파일 <span class="badge b-gray">${all.length}</span></div>
+      ${box || '<div class="note">첨부된 파일이 없습니다.</div>'}</div>`;
+  }
+
+  /* 이력 */
+  s += `<div class="sec"><div class="st">🕘 처리 이력</div><div class="hist">
+    ${(o.history||[]).slice().sort((a,b)=>b.ts-a.ts).map(h=>`<div class="hitem"><div>${esc(h.actor)} — ${esc(h.action)}</div><div class="ts">${fmtDT(h.ts)}</div></div>`).join('')}
+  </div></div>`;
+
+  const overWarn = oIsOver(o) ? `<div class="note warn" style="margin-bottom:10px">⚠ 「${O_NM[o.stage]}」 단계가 처리기한을 ${-oDdays(o)}일 초과했습니다. (${O_OWNER(o)} 조치 필요)</div>` : '';
+
+  return `<button class="back" onclick="go('olist')">← 목록으로</button>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--sub);font-weight:700">${o.id}</span>
+        <span class="badge ${O_BADGE[o.stage]}">${O_WAIT[o.stage]}</span>
+        <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
+      </div>
+      <h3 style="font-size:18px;font-weight:800;margin-top:6px">${CAT_ICON[o.cat]} ${esc(o.site)} · ${o.cat} 발주</h3>
+      <div style="color:var(--sub);font-size:13px">${esc(o.supplier)} → ${esc(o.builder)}</div>
+      ${oStepper(o)} ${overWarn} ${s}
+    </div>`;
+}
+
+/* ── 발주 등록 (본사) ── */
+function vONew(){
+  const bs = state.cfg.builders;
+  return oRoleNote()+`<div class="card">
+    <div class="h2">📦 조명·타일 발주 등록</div>
+    <div class="note" style="margin:0 0 12px">GRS가 도면을 제공하면 공급사가 수량을 산출해 견적서를 제출합니다.</div>
+    <label>현장(점포)명</label>
+    <div class="spwrap">
+      <input id="oSite" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
+        oninput="spFilter('oSite')" onfocus="spFilter('oSite')" onblur="spHide('oSite')">
+      <div class="spdrop" id="oSiteDrop"></div>
+    </div>
+    <label>운영 구분</label>
+    <select id="oType" onchange="oTypeHint()"><option>직영점</option><option>가맹점</option></select>
+    <div class="note" id="oTypeNote">직영점 — 견적 확정은 <b>GRS 공사담당자</b>, 정산은 <b>월단위</b>입니다.</div>
+    <label>발주 품목</label>
+    <select id="oCat" onchange="oCatHint()"><option>조명</option><option>타일</option></select>
+    <div class="note" id="oCatNote">공급사: <b>에이프러스</b></div>
+    <label>인테리어 시공사</label>
+    <select id="oBuilder">${bs.map(b=>`<option>${esc(b)}</option>`).join('')}</select>
+    <label>오픈 예정일</label>
+    <input id="oOpen" type="date" value="${tsToDateInput(now()+14*DAY)}">
+    <label>GRS 담당자</label>
+    <input id="oMgr" value="${esc(state.user.name||'')}" placeholder="예) 김본사">
+    <label>도면 첨부 (사진·PDF)</label>
+    <input type="file" id="oNewF" accept="image/*,.pdf" multiple style="display:none" onchange="oPickDrawings(this)">
+    <button class="file-add" onclick="document.getElementById('oNewF').click()">📐 도면 추가 (여러 장 가능)</button>
+    <div class="photos" id="oPrev"></div>
+    <button class="btn blk" id="oSubmit" onclick="submitOrder()">발주 등록 · 견적 요청</button>
+  </div>`;
+}
+function oTypeHint(){
+  const t = document.getElementById('oType').value;
+  document.getElementById('oTypeNote').innerHTML = t==='직영점'
+    ? '직영점 — 견적 확정은 <b>GRS 공사담당자</b>, 정산은 <b>월단위</b>입니다.'
+    : '가맹점 — 견적 확정은 <b>시공사 현장소장</b>, 정산은 <b>개별 대금지급</b>입니다.';
+}
+function oCatHint(){
+  const c = document.getElementById('oCat').value;
+  document.getElementById('oCatNote').innerHTML = `공급사: <b>${SUPPLIER_OF[c]}</b>`;
+}
+let oNewDrawings = [];
+async function oPickDrawings(inp){
+  for(const f of [...inp.files]){
+    try{
+      const d = f.type.startsWith('image/') ? await compressImage(f,1600,0.72) : await readSmallFile(f);
+      oNewDrawings.push({name:f.name, data:d});
+    }catch(e){ toast('도면 처리 실패: '+f.name+' — '+e.message); }
+  }
+  inp.value='';
+  document.getElementById('oPrev').innerHTML = oNewDrawings.map(d=>
+    d.data.startsWith('data:image') ? `<img src="${d.data}">` : `<div class="imgfail">📕 ${esc(d.name.slice(0,14))}</div>`).join('');
+}
+async function submitOrder(){
+  const site = document.getElementById('oSite').value.trim();
+  if(!site){ toast('현장명을 입력해주세요'); return; }
+  const type = document.getElementById('oType').value;
+  const cat  = document.getElementById('oCat').value;
+  const d = new Date();
+  const id = `O-${String(d.getFullYear()).slice(2)}${pad2(d.getMonth()+1)}-${cat==='조명'?'L':'T'}${rnd4().slice(0,3)}`;
+  const o = {
+    id, type, cat, supplier:SUPPLIER_OF[cat], builder:document.getElementById('oBuilder').value,
+    site, openPlan:new Date(document.getElementById('oOpen').value+'T12:00:00').getTime(),
+    manager:document.getElementById('oMgr').value.trim()||state.user.name,
+    createdAt:now(), stage:'DRAWING', stageAt:now(), drawingCount:oNewDrawings.length,
+    history:[{ts:now(), actor:actorLabel(), action:`발주 등록 · 도면 ${oNewDrawings.length}매 제공`}]
+  };
+  const btn = document.getElementById('oSubmit');
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> 등록 중…'; }
+  try{
+    await store.saveOrder(o);
+    let saved=0;
+    for(const dw of oNewDrawings){
+      try{ await store.addFile('O:'+id, {kind:'drawing', name:dw.name, data:dw.data, ts:now()}); saved++; }
+      catch(e){ console.warn('drawing', e); }
+    }
+    if(saved !== oNewDrawings.length) await store.updateOrder(id, {drawingCount:saved});
+    filesLoaded['O:'+id]=true;
+    oNewDrawings = [];
+    toast(`${o.supplier}에 견적이 요청되었습니다`);
+    goOrder(id);
+  }catch(e){
+    toast('저장 실패: '+(e.code||e.message));
+    if(btn){ btn.disabled=false; btn.textContent='발주 등록 · 견적 요청'; }
+  }
+}
+async function oAddDrawing(id, inp){
+  const o = O(id); if(!o) return;
+  let n=0;
+  for(const f of [...inp.files]){
+    try{
+      const d = f.type.startsWith('image/') ? await compressImage(f,1600,0.72) : await readSmallFile(f);
+      await store.addFile('O:'+id, {kind:'drawing', name:f.name, data:d, ts:now()}); n++;
+    }catch(e){ toast('도면 처리 실패: '+e.message); }
+  }
+  inp.value='';
+  filesLoaded['O:'+id]=true;
+  if(n){
+    try{ await store.updateOrder(id, {drawingCount:(o.drawingCount||0)+n}, oEntry(`도면 ${n}매 추가 제공`)); }
+    catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+  }
+  render();
+}
+const oEntry = action => ({ts:now(), actor:actorLabel(), action});
+/* 서명 후에도 담당 시공사·본사는 납품 사진을 추가할 수 있다 (정산 전 증빙 보완) */
+function oCanAct2Receipt(o){
+  if(o.stage!=='DELIVERED') return false;
+  return role()==='hq' || (role()==='builder' && o.builder===myCo());
+}
+async function oAddDeliveryPhotos(id, inp){
+  const o = O(id); if(!o) return;
+  const files = [...inp.files]; if(!files.length) return;
+  let n=0;
+  toast(`사진 ${files.length}장 처리 중…`);
+  for(const f of files){
+    try{
+      const base = ((filesCache['O:'+id]||[]).filter(x=>x.kind==='delivery').length)+1;
+      await store.addFile('O:'+id, {kind:'delivery', name:`납품사진_${base}.jpg`, data:await compressImage(f), ts:now()});
+      n++;
+    }catch(e){ toast('사진 처리 실패: '+f.name+' — '+(e.message||'')); }
+  }
+  inp.value='';
+  filesLoaded['O:'+id]=true;
+  if(n){
+    const total = (filesCache['O:'+id]||[]).filter(x=>x.kind==='delivery').length;
+    try{ await store.updateOrder(id, {receipt:Object.assign({}, o.receipt, {photoCount:total})}, oEntry(`납품 사진 ${n}장 추가`)); }
+    catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+    toast(`납품 사진 ${n}장 추가되었습니다`);
+  }
+  render();
+}
+
+/* ── 발주 액션 모달 ── */
+let oQItems = [], oqAnalysis = null;
+function oQuoteModal(id){
+  const o = O(id); if(!o) return;
+  oQItems = o.quote && o.quote.items ? JSON.parse(JSON.stringify(o.quote.items)) : [];
+  oqAnalysis = (o.quote && o.quote.analysis) || null;
+  oqFileData = null; oqFileName = null;
+  openModal(`<h2>수량산출·견적서 제출</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${o.cat} · ${esc(o.supplier)}</div>
+    <div class="note">보수공사와 <b>동일한 표준 견적서 양식</b>을 사용합니다. 양식으로 작성해 올리면 품목·금액이 자동 입력됩니다.</div>
+    <button class="btn sec2 blk" style="margin-top:8px" onclick="downloadQuoteForm('order',{site:'${esc(o.site).replace(/'/g,"\\'")}',co:'${esc(o.supplier)}'})">⬇ 표준 견적서 양식(.xlsx) 내려받기</button>
+    <label>견적서 파일 (엑셀 업로드 시 자동 인식 · PDF/사진 가능)</label>
+    <input type="file" id="oqF" accept="image/*,.pdf,.xlsx" style="display:none" onchange="oqPickFile(this)">
+    <button class="file-add" onclick="document.getElementById('oqF').click()"><span id="oqFn">📎 파일 선택</span></button>
+    <div id="oqAnalysis"></div>
+    <label>견적일</label><input id="oqDate" type="date" value="${tsToDateInput((o.quote&&o.quote.ts)||now())}">
+    <label>납품 가능일</label><input id="oqReady" type="date" value="${o.quote&&o.quote.readyDate?tsToDateInput(o.quote.readyDate):''}">
+    <label>수량산출 내역</label>
+    <div id="oqRows"></div>
+    <button class="btn sec2 blk" onclick="oqAdd()">＋ 품목 추가</button>
+    <div class="kv" style="margin-top:12px;font-size:16px"><b>견적금액</b><strong id="oqTotal">0원</strong></div>
+    <label>비고</label>
+    <textarea id="oqNote" rows="2" placeholder="예) 로스율 5% 반영, 색온도 확인 필요">${esc((o.quote&&o.quote.note)||'')}</textarea>
+    <button class="btn blk" onclick="oQuoteSave('${id}')">견적서 제출</button>`);
+  setTimeout(()=>{ if(!oQItems.length) oqAdd(); else oqRender(); oqAnalysisRender(); }, 30);
+}
+function oqAnalysisRender(){
+  const el = document.getElementById('oqAnalysis');
+  if(el) el.innerHTML = oqAnalysis ? analysisHtml(oqAnalysis) : '';
+}
+function oqAdd(){ oQItems.push({name:'',spec:'',unit:'EA',qty:'',price:''}); oqRender(); }
+function oqDel(i){ oQItems.splice(i,1); if(!oQItems.length) oqAdd(); else oqRender(); }
+function oqSet(i,k,v){
+  oQItems[i][k] = (k==='qty'||k==='price') ? (v===''?'':Number(v)) : v;
+  oqTotalUpd();
+}
+function oqTotalUpd(){
+  const t = oQItems.reduce((s,x)=>s+((+x.qty||0)*(+x.price||0)),0);
+  const el = document.getElementById('oqTotal'); if(el) el.textContent = money(t);
+}
+function oqRender(){
+  const box = document.getElementById('oqRows'); if(!box) return;
+  box.innerHTML = oQItems.map((x,i)=>`
+    <div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+        <strong style="font-size:12px;color:var(--sub)">품목 ${i+1}</strong>
+        <button style="margin-left:auto;color:var(--red-dark);font-weight:800;font-size:12px" onclick="oqDel(${i})">삭제</button>
+      </div>
+      <input placeholder="품목명 (예: LED 다운라이트)" value="${esc(x.name)}" oninput="oqSet(${i},'name',this.value)">
+      <input placeholder="규격 (예: 6인치 15W 주백색)" value="${esc(x.spec)}" oninput="oqSet(${i},'spec',this.value)" style="margin-top:6px">
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <input placeholder="단위" value="${esc(x.unit)}" oninput="oqSet(${i},'unit',this.value)" style="width:70px">
+        <input type="number" inputmode="numeric" placeholder="수량" value="${x.qty}" oninput="oqSet(${i},'qty',this.value)" style="flex:1">
+        <input type="number" inputmode="numeric" placeholder="단가" value="${x.price}" oninput="oqSet(${i},'price',this.value)" style="flex:1.3">
+      </div>
+    </div>`).join('');
+  oqTotalUpd();
+}
+let oqFileData=null, oqFileName=null;
+async function oqPickFile(inp){
+  const f = inp.files[0]; if(!f) return;
+  const label = document.getElementById('oqFn');
+  try{
+    if(/\.xlsx$/i.test(f.name)){
+      /* 표준 양식이면 품목·금액을 자동으로 채운다 (보수 견적서와 동일한 방식) */
+      const rows = await parseXlsx(await f.arrayBuffer());
+      const items = parseQuoteItems(rows);
+      oqAnalysis = analyzeEstimate(rows, null);
+      if(items.length){
+        oQItems = items.map(x=>({name:x.name, spec:x.spec, unit:x.unit, qty:x.qty, price:x.price}));
+        oqRender();
+        label.textContent = `📊 ${f.name} — ${items.length}개 품목 자동 인식됨`;
+        toast(`품목 ${items.length}건을 자동으로 불러왔습니다`);
+      } else {
+        label.textContent = `📊 ${f.name} — 표 인식 실패 (품목은 직접 입력해주세요)`;
+        toast('표준 양식의 제목행(품명·규격·단위·수량·단가·금액)을 확인해주세요');
+      }
+      oqAnalysisRender();
+      try{ oqFileData = await readSmallFile(f); }
+      catch(err){ oqFileData = null; toast('견적 내용은 반영됐지만 파일 첨부는 용량 초과로 생략됩니다'); }
+    }
+    else if(f.type.startsWith('image/')){ oqFileData = await compressImage(f,1400,0.72); label.textContent='📎 '+f.name; }
+    else { oqFileData = await readSmallFile(f); label.textContent='📎 '+f.name; }
+    oqFileName = f.name;
+  }catch(e){ oqFileData=null; toast(e.message||'파일 처리 실패'); }
+  inp.value = '';
+}
+async function oQuoteSave(id){
+  const o = O(id); if(!o) return;
+  const items = oQItems.filter(x=>x.name && +x.qty>0 && +x.price>0)
+    .map(x=>({name:x.name, spec:x.spec, unit:x.unit||'EA', qty:+x.qty, price:+x.price, amount:(+x.qty)*(+x.price)}));
+  if(!items.length){ toast('품목을 1개 이상 입력해주세요 (수량·단가 필수)'); return; }
+  const amount = items.reduce((s,x)=>s+x.amount,0);
+  const first = !o.quote;
+  const dv = document.getElementById('oqDate').value;
+  const rv = document.getElementById('oqReady').value;
+  if(oqAnalysis) { try{ oqAnalysis = Object.assign({}, oqAnalysis); }catch(e){} }
+  o.quote = { ts: dv ? new Date(dv+'T12:00:00').getTime() : now(),
+              readyDate: rv ? new Date(rv+'T12:00:00').getTime() : null,
+              items, amount, fileName:oqFileName||'',
+              note:document.getElementById('oqNote').value.trim(),
+              analysis: oqAnalysis || null };
+  const patch = { quote: o.quote };
+  if(o.stage==='DRAWING'){ patch.stage='QUOTE'; patch.stageAt=now(); }
+  const fd = oqFileData, fn = oqFileName;
+  oqFileData=null; oqFileName=null; oqAnalysis=null;
+  try{
+    await store.updateOrder(id, patch, oEntry(`${first?'견적서 제출':'견적 수정'} (${money(amount)} · ${items.length}개 품목)`));
+    if(fd){
+      try{ await store.addFile('O:'+id, {kind:'quote', name:fn||'견적서', data:fd, ts:now()}); }
+      catch(fe){ toast('견적은 저장됐지만 파일 첨부에 실패했습니다: '+(fe.code||fe.message)); }
+    }
+    closeModal(); toast('견적서가 제출되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+function oConfirmModal(id){
+  const o = O(id); if(!o) return;
+  openModal(`<h2>견적 검토·확정</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${oConfirmer(o)} 권한</div>
+    <div class="kv"><b>제출금액</b><strong>${money(o.quote.amount)}</strong></div>
+    <label>검토 결과</label>
+    <select id="ocDec"><option value="확정">확정 — 납품일 협의 진행</option><option value="보완요청">보완요청 — 재견적</option></select>
+    <label>확정 금액 (조정 시 수정)</label>
+    <input id="ocAmt" type="number" inputmode="numeric" value="${o.quote.amount}">
+    <label>검토 의견</label>
+    <textarea id="ocOp" rows="3" placeholder="예) 수량 적정, 확정합니다 / 다운라이트 수량 과다, 재산출 요청"></textarea>
+    <button class="btn blk" onclick="oConfirmSave('${id}')">검토 완료</button>`);
+}
+async function oConfirmSave(id){
+  const o = O(id); if(!o) return;
+  const dec = document.getElementById('ocDec').value;
+  const amt = Number(document.getElementById('ocAmt').value)||o.quote.amount;
+  const op = document.getElementById('ocOp').value.trim();
+  try{
+    if(dec==='보완요청'){
+      if(!op){ toast('보완요청 사유를 입력해주세요'); return; }
+      await store.updateOrder(id, {confirm:null, stage:'DRAWING', stageAt:now()},
+        oEntry(`견적 보완요청 → 재견적 대기 (${op})`));
+      closeModal(); toast('보완요청이 전달되었습니다'); return;
+    }
+    await store.updateOrder(id,
+      {confirm:{by:actorLabel(), at:now(), decision:'확정', finalAmount:amt, opinion:op}, stage:'CONFIRM', stageAt:now()},
+      oEntry(`견적 확정 (${money(amt)})`));
+    closeModal(); toast('견적이 확정되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+function oSchedModal(id){
+  const o = O(id); if(!o) return;
+  const sc = o.sched||{};
+  openModal(`<h2>납품일 협의 등록</h2>
+    <div class="sub">${o.id} · 시공사 ↔ 공급사 협의 결과를 입력합니다</div>
+    <label>납품 예정일</label>
+    <input id="osDate" type="date" value="${sc.planDate?tsToDateInput(sc.planDate):tsToDateInput(now()+7*DAY)}">
+    <label>납품 장소</label>
+    <input id="osPlace" value="${esc(sc.place||'')}" placeholder="예) ○○점 현장 1층 하역장">
+    <label>요청사항</label>
+    <textarea id="osNote" rows="2" placeholder="예) 오전 9시 도착 요청, 지게차 필요">${esc(sc.note||'')}</textarea>
+    <button class="btn blk" onclick="oSchedSave('${id}')">협의 완료 등록</button>`);
+}
+async function oSchedSave(id){
+  const o = O(id); if(!o) return;
+  const dv = document.getElementById('osDate').value;
+  if(!dv){ toast('납품 예정일을 선택해주세요'); return; }
+  const first = !o.sched;
+  const sched = { planDate:new Date(dv+'T12:00:00').getTime(), agreedAt:now(), agreedBy:actorLabel(),
+                  place:document.getElementById('osPlace').value.trim(), note:document.getElementById('osNote').value.trim() };
+  const patch = { sched };
+  if(o.stage==='CONFIRM'){ patch.stage='SCHED'; patch.stageAt=now(); }
+  try{
+    await store.updateOrder(id, patch, oEntry(`${first?'납품일 협의 완료':'납품일 변경'} (${fmtD(sched.planDate)})`));
+    closeModal(); toast('납품일이 등록되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* 물품납품확인서 — 시공사가 수령 확인 후 서명 */
+let rcSgCv=null, rcSgCtx=null, rcSgDirty=false, rcSgPrev=null;
+let rcPhotos = [];
+function oReceiptModal(id){
+  const o = O(id); if(!o) return;
+  rcSgDirty=false; rcPhotos=[];
+  openModal(`<h2>물품납품확인서</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${esc(o.supplier)} 납품분</div>
+    <div class="note">아래 품목을 수령하셨음을 확인하고 서명해주세요. 서명 즉시 정산 대상이 됩니다.</div>
+    ${itemsTable((o.quote&&o.quote.items)||[])}
+    <label>수령일시</label>
+    <input id="rcAt" type="datetime-local" value="${tsToDtInput(now())}">
+    <label>납품 사진 <span style="font-weight:500;color:var(--red-dark)">(권장 — 수령 물품·수량 확인용)</span></label>
+    <input type="file" id="rcF" accept="image/*" multiple style="display:none" onchange="rcPickPhotos(this)">
+    <button class="file-add" onclick="document.getElementById('rcF').click()">📷 납품 사진 추가 (여러 장 가능)</button>
+    <div class="photos" id="rcPrev"></div>
+    <label>검수 결과</label>
+    <select id="rcOk" onchange="rcOkChange()">
+      <option value="1">전 품목 이상 없이 수령</option>
+      <option value="0">수량 부족·불량 있음</option>
+    </select>
+    <div id="rcBad" style="display:none">
+      <label>부족·불량 내역</label>
+      <input id="rcShort" placeholder="예) 트랙 조명 1SET 외관 스크래치">
+      <div class="note">불량·부족 부위가 보이도록 사진을 함께 올려주세요. 정산 전 본사가 확인합니다.</div>
+    </div>
+    <label>비고</label>
+    <textarea id="rcNote" rows="2" placeholder="특이사항이 있으면 적어주세요"></textarea>
+    <label>수령자 서명</label>
+    <div class="sgwrap"><canvas id="rcSg"></canvas><div class="sghint" id="rcHint">여기에 서명</div></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn sec2" style="flex:1" onclick="rcClear()">지우기</button>
+      <button class="btn grn" style="flex:2" onclick="oReceiptSave('${id}')">확인서 서명 저장</button>
+    </div>`);
+  setTimeout(()=>initSignPad('rcSg','rcHint'), 60);
+}
+function rcOkChange(){
+  document.getElementById('rcBad').style.display = document.getElementById('rcOk').value==='0'?'block':'none';
+}
+async function rcPickPhotos(inp){
+  const files = [...inp.files]; if(!files.length) return;
+  toast(`사진 ${files.length}장 처리 중…`);
+  for(const f of files){
+    try{ rcPhotos.push(await compressImage(f)); }
+    catch(e){ toast('사진 처리 실패: '+f.name); }
+  }
+  inp.value='';
+  rcPrevRender();
+  toast(`납품 사진 ${rcPhotos.length}장 첨부됨`);
+}
+function rcPrevRender(){
+  const el = document.getElementById('rcPrev'); if(!el) return;
+  el.innerHTML = rcPhotos.map((p,i)=>
+    `<span style="position:relative;display:inline-block">
+       <img src="${p}">
+       <button onclick="rcDelPhoto(${i})" title="삭제"
+         style="position:absolute;top:-5px;right:-5px;width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;font-size:13px;font-weight:800;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.3)">×</button>
+     </span>`).join('');
+}
+function rcDelPhoto(i){ rcPhotos.splice(i,1); rcPrevRender(); }
+function initSignPad(cvId, hintId){
+  rcSgCv = document.getElementById(cvId); if(!rcSgCv) return;
+  const w = rcSgCv.offsetWidth, h = rcSgCv.offsetHeight, dpr = window.devicePixelRatio||1;
+  rcSgCv.width = w*dpr; rcSgCv.height = h*dpr;
+  rcSgCtx = rcSgCv.getContext('2d');
+  rcSgCtx.scale(dpr,dpr);
+  rcSgCtx.fillStyle='#fff'; rcSgCtx.fillRect(0,0,w,h);
+  rcSgCtx.strokeStyle='#1F2430'; rcSgCtx.lineWidth=2.5; rcSgCtx.lineCap='round'; rcSgCtx.lineJoin='round';
+  const pos = e => { const r=rcSgCv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; };
+  rcSgCv.addEventListener('pointerdown', e=>{ e.preventDefault(); rcSgCv.setPointerCapture(e.pointerId); rcSgPrev=pos(e); rcSgDirty=true; const hh=document.getElementById(hintId); if(hh) hh.style.display='none'; });
+  rcSgCv.addEventListener('pointermove', e=>{ if(!rcSgPrev) return; e.preventDefault(); const p=pos(e); rcSgCtx.beginPath(); rcSgCtx.moveTo(rcSgPrev.x,rcSgPrev.y); rcSgCtx.lineTo(p.x,p.y); rcSgCtx.stroke(); rcSgPrev=p; });
+  const up = ()=>{ rcSgPrev=null; };
+  rcSgCv.addEventListener('pointerup', up); rcSgCv.addEventListener('pointercancel', up);
+}
+function rcClear(){
+  if(!rcSgCtx) return;
+  rcSgCtx.fillStyle='#fff'; rcSgCtx.fillRect(0,0,rcSgCv.offsetWidth,rcSgCv.offsetHeight);
+  rcSgDirty=false; const h=document.getElementById('rcHint'); if(h) h.style.display='flex';
+}
+async function oReceiptSave(id){
+  const o = O(id); if(!o) return;
+  if(!rcSgDirty){ toast('수령자 서명을 해주세요'); return; }
+  const ok = document.getElementById('rcOk').value==='1';
+  const shortItems = ok ? '' : document.getElementById('rcShort').value.trim();
+  if(!ok && !shortItems){ toast('부족·불량 내역을 입력해주세요'); return; }
+  if(!ok && !rcPhotos.length && !confirm('불량·부족 내역이 있는데 사진이 없습니다. 사진 없이 저장할까요?')) return;
+  const at = document.getElementById('rcAt').value;
+  const sig = rcSgCv.toDataURL('image/png');
+  const photos = rcPhotos.slice();
+  const btn = document.querySelector('#modalIn .btn.grn');
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span> 저장 중…'; }
+  try{
+    /* 사진·서명을 먼저 올리고, 실제로 저장된 장수를 확인서에 기록한다 */
+    let saved = 0;
+    for(let i=0;i<photos.length;i++){
+      try{ await store.addFile('O:'+id, {kind:'delivery', name:`납품사진_${i+1}.jpg`, data:photos[i], ts:now()}); saved++; }
+      catch(e){ console.warn('delivery photo', e); }
+    }
+    try{ await store.addFile('O:'+id, {kind:'osign', name:'납품확인_서명.png', data:sig, ts:now()}); }
+    catch(e){ console.warn('sign', e); }
+    filesLoaded['O:'+id]=true;
+    const receipt = {
+      receivedAt: at ? new Date(at).getTime() : now(),
+      receiver: actorLabel(), signBy: actorLabel(), signAt: now(),
+      allOk: ok, shortItems, note: document.getElementById('rcNote').value.trim(),
+      photoCount: saved
+    };
+    await store.updateOrder(id, {receipt, stage:'DELIVERED', stageAt:now()},
+      oEntry(`물품 수령 · 납품확인서 서명${saved?` (사진 ${saved}장)`:''}${ok?'':' · 일부 이상 기재'}`));
+    rcPhotos = [];
+    closeModal();
+    toast(saved!==photos.length ? `확인서 저장 — 사진 ${saved}/${photos.length}장 저장됨` : '납품확인서가 저장되었습니다');
+  }catch(e){
+    toast('저장 실패: '+(e.code||e.message));
+    if(btn){ btn.disabled=false; btn.textContent='확인서 서명 저장'; }
+  }
+}
+
+function oSettleModal(id){
+  const o = O(id); if(!o) return;
+  const isDir = o.type==='직영점';
+  openModal(`<h2>정산 처리</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${oSettleNm(o)}</div>
+    ${o.receipt && !o.receipt.allOk ? `<div class="note warn">🚨 납품 이상 기재 건입니다: ${esc(o.receipt.shortItems)}<br>금액 조정 여부를 확인하세요.</div>`:''}
+    <label>정산 금액</label>
+    <input id="stAmt" type="number" inputmode="numeric" value="${oAmount(o)}">
+    <label>정산 ${isDir?'귀속월':'지급월'}</label>
+    <input id="stMonth" type="month" value="${ymOf(now())}">
+    <label>비고</label>
+    <textarea id="stNote" rows="2" placeholder="${isDir?'예) 8월 정산분 일괄 처리':'예) 가맹점 개별 대금지급 완료'}"></textarea>
+    <button class="btn blk grn" onclick="oSettleSave('${id}')">정산 완료 처리</button>`);
+}
+async function oSettleSave(id){
+  const o = O(id); if(!o) return;
+  const amt = Number(document.getElementById('stAmt').value);
+  if(!amt){ toast('정산 금액을 입력해주세요'); return; }
+  const settle = { at:now(), by:actorLabel(), method:oSettleNm(o), month:document.getElementById('stMonth').value,
+                   amount:amt, note:document.getElementById('stNote').value.trim() };
+  try{
+    await store.updateOrder(id, {settle, stage:'SETTLED', stageAt:now()},
+      oEntry(`정산 완료 (${money(amt)} · ${ymLabel(settle.month)})`));
+    closeModal(); toast('정산이 완료되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* ── 월별 정산 관리 (본사) ── */
+function vSettle(){
+  const list = visibleOrders();
+  const ym = state.settleMonth || ymOf(now());
+  /* 정산 대기: 납품 완료 건 / 정산 완료: 해당 월 귀속 건 */
+  const waiting = list.filter(o=>o.stage==='DELIVERED');
+  const done = list.filter(o=>o.stage==='SETTLED' && o.settle && o.settle.month===ym);
+  const bySupplier = {};
+  waiting.concat(done).forEach(o=>{
+    const k = o.supplier;
+    if(!bySupplier[k]) bySupplier[k] = {wait:0, waitAmt:0, done:0, doneAmt:0};
+    if(o.stage==='DELIVERED'){ bySupplier[k].wait++; bySupplier[k].waitAmt += oAmount(o)||0; }
+    else { bySupplier[k].done++; bySupplier[k].doneAmt += oAmount(o)||0; }
+  });
+  const dirWait = waiting.filter(o=>o.type==='직영점');
+  const frWait  = waiting.filter(o=>o.type==='가맹점');
+  const sumOf = a => a.reduce((s,o)=>s+(oAmount(o)||0),0);
+
+  const rowsOf = (arr) => arr.length ? arr.map(o=>`
+    <button style="width:100%;text-align:left;padding:10px 0;border-top:1px solid var(--line)" onclick="goOrder('${o.id}')">
+      <div class="oline"><span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
+        <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
+        ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}</div>
+      <div style="font-weight:700;font-size:13.5px;margin-top:3px">${esc(o.site)} <span style="color:var(--sub);font-weight:500">· ${esc(o.supplier)}</span></div>
+      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 수령 ${o.receipt?fmtD(o.receipt.receivedAt):'-'} · <strong style="color:var(--ink)">${money(oAmount(o))}</strong></div>
+    </button>`).join('') : '<div class="empty">해당 건이 없습니다</div>';
+
+  return oRoleNote()+`
+  <div class="card">
+    <div class="h2">📊 정산 관리</div>
+    <label>정산 귀속월</label>
+    <input type="month" value="${ym}" onchange="state.settleMonth=this.value;render()">
+    <div class="tscroll"><table class="itab" style="margin-top:12px">
+      <thead><tr><th>공급사</th><th class="num">정산대기</th><th class="num">대기금액</th><th class="num">${ymLabel(ym)} 완료</th><th class="num">완료금액</th></tr></thead>
+      <tbody>${SUPPLIERS.map(sp=>{
+        const b = bySupplier[sp]||{wait:0,waitAmt:0,done:0,doneAmt:0};
+        return `<tr><td style="font-weight:700">${CAT_ICON[CAT_OF[sp]]} ${esc(sp)}</td>
+          <td class="num">${b.wait}건</td><td class="num">${b.waitAmt.toLocaleString('ko-KR')}</td>
+          <td class="num">${b.done}건</td><td class="num">${b.doneAmt.toLocaleString('ko-KR')}</td></tr>`;
+      }).join('')}</tbody>
+      <tfoot><tr><td>합계</td>
+        <td class="num">${waiting.length}건</td><td class="num">${sumOf(waiting).toLocaleString('ko-KR')}</td>
+        <td class="num">${done.length}건</td><td class="num">${sumOf(done).toLocaleString('ko-KR')}</td></tr></tfoot>
+    </table></div>
+    <button class="btn sec2 blk" onclick="exportSettleCSV()">⬇ 정산 내역 CSV 내려받기</button>
+  </div>
+
+  <div class="card">
+    <div class="h2">🏢 직영점 — 월단위 정산 대기 <span class="badge b-amber">${dirWait.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">납품확인서 서명이 완료된 건입니다. 월단위로 묶어 정산합니다. 합계 <strong>${money(sumOf(dirWait))}</strong></div>
+    ${rowsOf(dirWait)}
+  </div>
+
+  <div class="card">
+    <div class="h2">🏬 가맹점 — 개별 정산 대기 <span class="badge b-amber">${frWait.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">건별 대금지급 대상입니다. 합계 <strong>${money(sumOf(frWait))}</strong></div>
+    ${rowsOf(frWait)}
+  </div>
+
+  <div class="card">
+    <div class="h2">✅ ${ymLabel(ym)} 정산 완료 <span class="badge b-green">${done.length}건</span></div>
+    ${rowsOf(done)}
+  </div>`;
+}
+function exportSettleCSV(){
+  const head = ['발주번호','구분','품목','현장','공급사','시공사','견적금액','확정금액','수령일','검수결과','정산상태','정산월','정산금액'];
+  const rows = visibleOrders().map(o=>[
+    o.id, o.type, o.cat, o.site, o.supplier, o.builder,
+    o.quote?o.quote.amount:'', o.confirm?o.confirm.finalAmount:'',
+    o.receipt?fmtD(o.receipt.receivedAt):'', o.receipt?(o.receipt.allOk?'이상없음':'이상: '+(o.receipt.shortItems||'')):'',
+    O_NM[o.stage], o.settle?o.settle.month:'', o.settle?o.settle.amount:''
+  ]);
+  const csv = '﻿'+[head,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = '조명타일_발주정산.csv'; a.click();
+  toast('CSV 파일이 다운로드되었습니다');
+}
+
+/* ── 물품납품확인서 인쇄 ── */
+function printReceipt(id){
+  const o = O(id); if(!o || !o.receipt) return;
+  const items = (o.quote&&o.quote.items)||[];
+  const ofiles = filesCache['O:'+o.id]||[];
+  const sg = ofiles.find(f=>f.kind==='osign');
+  const photos = ofiles.filter(f=>f.kind==='delivery');
+  const box = 'border:1px solid #999;padding:6px 10px;';
+  const total = items.reduce((s,x)=>s+x.amount,0);
+  document.getElementById('printArea').innerHTML = `
+  <div style="font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:700px;margin:0 auto">
+    <div style="text-align:center;border-bottom:3px solid #C0392B;padding-bottom:10px;margin-bottom:16px">
+      <div style="font-size:22pt;font-weight:800">물품납품확인서</div>
+      <div style="font-size:10pt;color:#555;margin-top:4px">GRS 보수ON · 조명/타일 발주 시스템</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11pt;margin-bottom:14px">
+      <tr><td style="${box}background:#f2f2f2;width:100px;font-weight:700">발주번호</td><td style="${box}">${esc(o.id)}</td>
+          <td style="${box}background:#f2f2f2;width:100px;font-weight:700">구분</td><td style="${box}">${o.type} / ${o.cat}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">현장</td><td style="${box}">${esc(o.site)}</td>
+          <td style="${box}background:#f2f2f2;font-weight:700">수령일시</td><td style="${box}">${fmtDT(o.receipt.receivedAt)}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">공급사</td><td style="${box}">${esc(o.supplier)}</td>
+          <td style="${box}background:#f2f2f2;font-weight:700">시공사</td><td style="${box}">${esc(o.builder)}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">납품 장소</td><td style="${box}" colspan="3">${esc((o.sched&&o.sched.place)||'-')}</td></tr>
+    </table>
+    <div style="font-weight:800;font-size:11pt;margin:10px 0 6px">■ 납품 품목</div>
+    <table style="width:100%;border-collapse:collapse;font-size:10pt">
+      <tr style="background:#f2f2f2;font-weight:700">
+        <td style="${box}">품목</td><td style="${box}">규격</td><td style="${box}text-align:center">단위</td>
+        <td style="${box}text-align:right">수량</td><td style="${box}text-align:right">단가</td><td style="${box}text-align:right">금액</td></tr>
+      ${items.map(x=>`<tr><td style="${box}">${esc(x.name)}</td><td style="${box}">${esc(x.spec||'')}</td>
+        <td style="${box}text-align:center">${esc(x.unit||'')}</td><td style="${box}text-align:right">${x.qty.toLocaleString('ko-KR')}</td>
+        <td style="${box}text-align:right">${x.price.toLocaleString('ko-KR')}</td><td style="${box}text-align:right">${x.amount.toLocaleString('ko-KR')}</td></tr>`).join('')}
+      <tr style="font-weight:800;background:#f8f8f8"><td style="${box}" colspan="5">합계</td><td style="${box}text-align:right">${total.toLocaleString('ko-KR')}원</td></tr>
+    </table>
+    <div style="font-weight:800;font-size:11pt;margin:16px 0 6px">■ 검수 결과</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11pt">
+      <tr><td style="${box}background:#f2f2f2;width:100px;font-weight:700">검수</td>
+          <td style="${box}" colspan="3">${o.receipt.allOk?'전 품목 이상 없이 수령':'⚠ 이상 있음 — '+esc(o.receipt.shortItems||'')}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">비고</td><td style="${box}" colspan="3">${esc(o.receipt.note||'-')}</td></tr>
+    </table>
+    ${photos.length?`<div style="font-weight:800;font-size:11pt;margin:16px 0 6px">■ 납품 사진 (${photos.length}장)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${photos.slice(0,6).map(f=>`<img src="${f.data}" style="width:160px;height:120px;object-fit:cover;border:1px solid #999">`).join('')}</div>`:''}
+    <div style="margin-top:22px;font-size:11pt;line-height:1.9">
+      위 물품을 정히 수령하였음을 확인합니다.
+      <div style="text-align:center;margin-top:6px;font-size:12pt;font-weight:700">${fmtD(o.receipt.signAt)}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11pt;margin-top:12px">
+      <tr><td style="${box}background:#f2f2f2;width:100px;font-weight:700">수령자</td>
+          <td style="${box}">${esc(o.receipt.receiver)}</td>
+          <td style="${box}background:#f2f2f2;width:80px;font-weight:700">서명</td>
+          <td style="${box}">${sg?`<img src="${sg.data}" style="height:60px">`:'(서명 이미지 없음)'}</td></tr>
+    </table>
+    <div style="margin-top:20px;font-size:9pt;color:#777;text-align:right">본 확인서는 GRS 보수ON에서 ${fmtDT(now())}에 자동 생성되었습니다.</div>
+  </div>`;
+  const imgs = document.getElementById('printArea').querySelectorAll('img');
+  Promise.all([...imgs].map(im=>im.complete?1:new Promise(res=>{im.onload=im.onerror=res;}))).then(()=>window.print());
+}
+
 /* ===== 서버 연결 진단 =====
    사진이 안 보이는 원인(권한 / 용량 / 네트워크)을 화면에서 바로 확인 */
 async function runDiag(){
@@ -2477,12 +4018,13 @@ async function runDiag(){
 
 /* ===== CSV ===== */
 function exportCSV(){
-  const head = ['접수번호','점포','공사명','긴급도','담당부서','시공업체','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','일정승인','작업시작(실제)','작업종료(실제)','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
+  const head = ['접수번호','접수유형','오픈일','오픈요청구분','오픈시공사','점포','공사명','긴급도','담당부서','시공업체','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','일정승인','작업시작(실제)','작업종료(실제)','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
   const rows = state.reqs.map(r=>{
     const last = (r.estimates||[])[(r.estimates||[]).length-1];
     const d = ddays(r);
     const od = (r.overdues||[]).map(o=>`${STAGE_NM[o.stage]||o.stage} ${o.days}일`).join('; ');
-    return [r.id, r.store, r.title, r.urgency, r.dept||'', reqVendor(r), fmtD(r.createdAt), waitLabel(r),
+    return [r.id, REQ_KIND_NM[r.kind||'fix'], r.openDate?fmtD(r.openDate):'', r.openType||'', r.builder||'',
+      r.store, r.title, r.urgency, r.dept||'', reqVendor(r), fmtD(r.createdAt), waitLabel(r),
       (r.stage==='DONE'||r.stage==='DROPPED')?'-':(d<0?`기한초과 ${-d}일`:`D-${d}`), last?last.amount:'',
       r.surveySkipped?'미실측('+(r.surveySkipReason||'')+')':(r.surveyDate?fmtD(r.surveyDate):''), r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'',
       r.schedStatus==='승인'?`승인(${r.schedBy||''})`:(r.schedStatus||''), r.workStart?fmtDT(r.workStart):'', r.workEnd?fmtDT(r.workEnd):'', r.completedAt?fmtD(r.completedAt):'',
@@ -2505,11 +4047,13 @@ function exportCSV(){
   loadDraft();   // 작성 중이던 신규 접수 내용 복원
   if(LIVE){
     const sess = loadSession();
-    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); loadChatPrefs(); ensureRooms(); }
+    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); subscribeOrders(); loadChatPrefs(); ensureRooms(); }
   } else {
-    state.user = {role:'hq', name:'본사담당', store:''}; // 데모: 본사 화면으로 시작
+    state.user = {role:'hq', name:'본사담당', store:'', co:''}; // 데모: 본사 화면으로 시작
     loadChatPrefs(); ensureRooms();
   }
+  if(state.user && !canApp(state.app)) state.app = myApps()[0];
+  if(state.app==='order' && state.view==='dash') state.view='odash';
   render();
   // 1분마다 D-day/기한초과 재계산
   setInterval(()=>{ if(state.user && !modalOpen()) render(); }, 60000);
