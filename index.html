@@ -774,7 +774,7 @@ function saveChatPrefs(){
     localStorage.setItem('bosuon_lastseen', JSON.stringify(state.lastSeen));
   }catch(e){}
 }
-function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; stopDetailFiles(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
+function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; stopDetailFiles(); clearDraft(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
 
 let pickedRole=null;
 function pickRole(r){
@@ -935,7 +935,9 @@ function render(){
   if(state.view==='dash') m.innerHTML = vDash();
   else if(state.view==='list') m.innerHTML = vList();
   else if(state.view==='detail') m.innerHTML = vDetail();
-  else if(state.view==='new') m.innerHTML = vNew();
+  /* 접수 폼은 이미 그려져 있으면 다시 그리지 않는다 —
+     실시간 갱신·1분 타이머가 돌아도 입력 중인 내용이 날아가지 않도록 */
+  else if(state.view==='new'){ if(!document.getElementById('nTitle')) m.innerHTML = vNew(); }
   else if(state.view==='set') m.innerHTML = vSet();
   else if(state.view==='chat') m.innerHTML = vChat();
   else if(state.view==='chatroom') m.innerHTML = vChatRoom();
@@ -1373,66 +1375,155 @@ function viewImg(i){
     <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
 }
 
-/* ===== 신규 접수 (점포) ===== */
-let newPhotos = [];
+/* ===== 신규 접수 (점포) =====
+   작성 중 내용은 임시저장한다.
+   ① 백그라운드 실시간 갱신으로 render()가 돌아도 폼이 초기화되지 않도록
+   ② 휴대폰에서 카메라·사진첩을 열었다 돌아오며 페이지가 재시작돼도 살아남도록 */
+const EMPTY_DRAFT = { store:'', title:'', desc:'', urg:'보통', dept:'잘모르겠음', photos:[] };
+let newDraft = {...EMPTY_DRAFT, photos:[]};
+let draftPhotoWarn = false;
+
+function saveDraft(){
+  try{
+    localStorage.setItem('bosuon_draft', JSON.stringify(newDraft));
+    draftPhotoWarn = false;
+  }catch(e){
+    /* 사진까지 담기엔 저장공간이 부족한 경우 — 글은 반드시 지킨다 */
+    try{
+      localStorage.setItem('bosuon_draft', JSON.stringify({...newDraft, photos:[]}));
+      draftPhotoWarn = true;
+    }catch(e2){}
+  }
+}
+function loadDraft(){
+  try{
+    const d = JSON.parse(localStorage.getItem('bosuon_draft')||'null');
+    if(d && typeof d==='object') newDraft = {...EMPTY_DRAFT, ...d, photos:Array.isArray(d.photos)?d.photos:[]};
+  }catch(e){}
+}
+function clearDraft(){
+  newDraft = {...EMPTY_DRAFT, photos:[]};
+  draftPhotoWarn = false;
+  try{ localStorage.removeItem('bosuon_draft'); }catch(e){}
+}
+function hasDraft(){
+  return !!(newDraft.title || newDraft.desc || (newDraft.photos||[]).length);
+}
+/* 입력할 때마다 화면 값을 임시저장에 반영 */
+function updDraft(){
+  const g = id => { const el=document.getElementById(id); return el ? el.value : null; };
+  const before = hasDraft();
+  const v = {store:g('nStore'), title:g('nTitle'), desc:g('nDesc'), urg:g('nUrg'), dept:g('nDept')};
+  Object.keys(v).forEach(k=>{ if(v[k]!==null) newDraft[k]=v[k]; });
+  saveDraft();
+  if(hasDraft() !== before) refreshDraftUI();   // 임시저장 안내·초기화 버튼 표시 전환
+}
+function resetNew(){
+  if(hasDraft() && !confirm('작성 중인 내용과 사진을 모두 지울까요?')) return;
+  clearDraft();
+  const m = document.getElementById('main');
+  if(m) m.innerHTML = vNew();
+  toast('작성 내용을 지웠습니다');
+}
+
 function vNew(){
-  newPhotos = [];
-  const myStore = state.user.store || '';
+  if(!newDraft.store) newDraft.store = state.user.store || '';
+  const d = newDraft;
+  const opt = (v,cur) => `<option${v===cur?' selected':''}>${v}</option>`;
   return roleNote()+`<div class="card">
     <div class="h2">🛠 보수공사 신규 접수</div>
     <label>점포명 <span style="font-weight:500">(입력하면 전국 점포 목록에서 검색됩니다)</span></label>
     <div class="spwrap">
-      <input id="nStore" value="${esc(myStore)}" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
-        oninput="spFilter('nStore')" onfocus="spFilter('nStore')" onblur="spHide('nStore')">
+      <input id="nStore" value="${esc(d.store)}" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
+        oninput="spFilter('nStore');updDraft()" onchange="updDraft()" onfocus="spFilter('nStore')" onblur="spHide('nStore');updDraft()">
       <div class="spdrop" id="nStoreDrop"></div>
     </div>
     <label>공사 제목</label>
-    <input id="nTitle" placeholder="예) 주방 배수구 막힘 보수">
+    <input id="nTitle" value="${esc(d.title)}" placeholder="예) 주방 배수구 막힘 보수" oninput="updDraft()" onchange="updDraft()">
     <label>공사 내용 (상세)</label>
-    <textarea id="nDesc" rows="4" placeholder="증상, 위치, 영업 지장 여부 등을 적어주세요"></textarea>
+    <textarea id="nDesc" rows="4" placeholder="증상, 위치, 영업 지장 여부 등을 적어주세요" oninput="updDraft()" onchange="updDraft()">${esc(d.desc)}</textarea>
     <label>긴급도</label>
-    <select id="nUrg"><option>보통</option><option>긴급</option></select>
+    <select id="nUrg" onchange="updDraft()">${opt('보통',d.urg)}${opt('긴급',d.urg)}</select>
     <label>담당부서 (아는 범위에서 선택)</label>
-    <select id="nDept"><option>잘모르겠음</option><option>인테리어팀</option><option>산업안전팀</option></select>
+    <select id="nDept" onchange="updDraft()">${opt('잘모르겠음',d.dept)}${opt('인테리어팀',d.dept)}${opt('산업안전팀',d.dept)}</select>
     <label>현장 사진 (자동 압축 저장)</label>
     <input type="file" id="nFiles" accept="image/*" multiple style="display:none" onchange="pickPhotos(this)">
-    <button class="file-add" onclick="document.getElementById('nFiles').click()">📷 사진 추가 (여러 장 가능)</button>
-    <div class="photos" id="nPrev"></div>
+    <button class="file-add" onclick="updDraft();document.getElementById('nFiles').click()">📷 사진 추가 (여러 장 가능)</button>
+    <div class="photos" id="nPrev">${draftPhotosHtml()}</div>
+    <div id="nDraftNote">${draftNoteHtml()}</div>
     <button class="btn blk" id="nSubmit" onclick="submitNew()">접수하기</button>
+    <div id="nResetWrap">${resetBtnHtml()}</div>
     <div class="note">접수 즉시 모든 관계자 화면에 실시간 반영되며, 담당 시공업체가 ${state.cfg.sla.SURVEY}일 내 실측일정을 등록해야 합니다.</div>
   </div>`;
 }
+function draftPhotosHtml(){
+  return (newDraft.photos||[]).map((p,i)=>
+    `<span style="position:relative;display:inline-block">
+       <img src="${p}">
+       <button onclick="delDraftPhoto(${i})" title="삭제"
+         style="position:absolute;top:-5px;right:-5px;width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;font-size:13px;font-weight:800;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.3)">×</button>
+     </span>`).join('');
+}
+function draftNoteHtml(){
+  if(draftPhotoWarn && (newDraft.photos||[]).length)
+    return `<div class="note warn">⚠ 사진이 많아 임시저장에는 글만 보관됩니다. 앱을 껐다 켜면 사진은 다시 첨부해주세요.</div>`;
+  if(hasDraft()) return `<div class="note">💾 작성 중인 내용은 자동 임시저장됩니다. 앱을 껐다 켜도 이어서 작성할 수 있습니다.</div>`;
+  return '';
+}
+function resetBtnHtml(){
+  return hasDraft() ? `<button class="btn sec2 blk" onclick="resetNew()">🗑 작성 내용 지우고 새로 쓰기</button>` : '';
+}
+function refreshDraftUI(){
+  const pv = document.getElementById('nPrev');      if(pv) pv.innerHTML = draftPhotosHtml();
+  const nt = document.getElementById('nDraftNote'); if(nt) nt.innerHTML = draftNoteHtml();
+  const rw = document.getElementById('nResetWrap'); if(rw) rw.innerHTML = resetBtnHtml();
+}
+function delDraftPhoto(i){
+  (newDraft.photos||[]).splice(i,1);
+  saveDraft(); refreshDraftUI();
+}
 async function pickPhotos(inp){
-  for(const f of [...inp.files]){
-    try{ newPhotos.push(await compressImage(f)); }catch(e){ toast('사진 처리 실패: '+f.name); }
+  updDraft();                       // 사진 처리 전에 현재 입력값부터 확보
+  const files = [...inp.files];
+  if(!files.length) return;
+  if(!newDraft.photos) newDraft.photos = [];
+  toast(`사진 ${files.length}장 처리 중…`);
+  for(const f of files){
+    try{ newDraft.photos.push(await compressImage(f)); }
+    catch(e){ toast('사진 처리 실패: '+f.name); }
   }
-  document.getElementById('nPrev').innerHTML = newPhotos.map(p=>`<img src="${p}">`).join('');
+  inp.value = '';                   // 같은 사진을 다시 고를 수 있도록 초기화
+  saveDraft();
+  refreshDraftUI();
+  toast(`사진 ${newDraft.photos.length}장 첨부됨`);
 }
 async function submitNew(){
-  const title = document.getElementById('nTitle').value.trim();
-  const desc = document.getElementById('nDesc').value.trim();
-  const storeNm = document.getElementById('nStore').value.trim();
+  updDraft();
+  const title = (newDraft.title||'').trim();
+  const desc = (newDraft.desc||'').trim();
+  const storeNm = (newDraft.store||'').trim();
   if(!storeNm){ toast('점포명을 입력해주세요'); return; }
   if(!title){ toast('공사 제목을 입력해주세요'); return; }
+  const photos = (newDraft.photos||[]).slice();
   const btn = document.getElementById('nSubmit'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> 접수 중…';
   const d = new Date();
   const id = `R-${String(d.getFullYear()).slice(2)}${String(d.getMonth()+1).padStart(2,'0')}-${rnd4()}`;
-  const r = { id, store:storeNm, title, desc, urgency:document.getElementById('nUrg').value, dept:document.getElementById('nDept').value, vendorCo:storeVendor(storeNm),
-    createdAt:now(), stage:'SURVEY', stageAt:now(), estimates:[], comments:[], photoCount:newPhotos.length,
-    history:[{ts:now(),actor:actorLabel(),action:`보수공사 접수 (사진 ${newPhotos.length}장)`}] };
+  const r = { id, store:storeNm, title, desc, urgency:newDraft.urg||'보통', dept:newDraft.dept||'잘모르겠음', vendorCo:storeVendor(storeNm),
+    createdAt:now(), stage:'SURVEY', stageAt:now(), estimates:[], comments:[], photoCount:photos.length,
+    history:[{ts:now(),actor:actorLabel(),action:`보수공사 접수 (사진 ${photos.length}장)`}] };
   try{
     await store.saveRequest(r);
     /* 사진은 1장씩 따로 저장 — 한 장이 실패해도 접수 자체는 살리고, 실제 저장된 장수를 기록한다 */
     let saved = 0, failed = 0;
-    for(let i=0;i<newPhotos.length;i++){
-      try{ await store.addFile(id,{kind:'photo',name:`photo_${i+1}.jpg`,data:newPhotos[i],ts:now()}); saved++; }
+    for(let i=0;i<photos.length;i++){
+      try{ await store.addFile(id,{kind:'photo',name:`photo_${i+1}.jpg`,data:photos[i],ts:now()}); saved++; }
       catch(fe){ failed++; console.warn('photo save', fe); }
     }
-    if(saved !== newPhotos.length){
+    if(saved !== photos.length){
       try{ await store.updateRequest(id, {photoCount:saved}); }catch(e){}
     }
-    toast(failed ? `접수 완료 — 사진 ${saved}/${newPhotos.length}장 저장 (${failed}장 실패)` : '접수가 완료되었습니다');
-    newPhotos = [];
+    toast(failed ? `접수 완료 — 사진 ${saved}/${photos.length}장 저장 (${failed}장 실패)` : '접수가 완료되었습니다');
+    clearDraft();                   // 접수에 성공했을 때만 임시저장을 비운다
     go('detail', id);
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); btn.disabled=false; btn.textContent='접수하기'; }
 }
@@ -1926,6 +2017,7 @@ function spPick(inputId, val){
   const inp = document.getElementById(inputId);
   inp.value = val;
   document.getElementById(inputId+'Drop').style.display='none';
+  if(inputId==='nStore' && typeof updDraft==='function') updDraft();
 }
 function spHide(inputId){ setTimeout(()=>{ const d=document.getElementById(inputId+'Drop'); if(d) d.style.display='none'; }, 200); }
 
@@ -2410,6 +2502,7 @@ function exportCSV(){
   }catch(e){
     state.ready=true; state.dbError = e.code||e.message;
   }
+  loadDraft();   // 작성 중이던 신규 접수 내용 복원
   if(LIVE){
     const sess = loadSession();
     if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); loadChatPrefs(); ensureRooms(); }
