@@ -112,6 +112,20 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .file-add{border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--sub);font-weight:700;font-size:13px;width:100%}
   .note{font-size:12.5px;color:var(--sub);background:var(--gray-bg);border-radius:8px;padding:8px 10px;margin-top:8px}
   .warn{background:var(--red-bg);color:var(--red-dark);font-weight:700}
+  .spin.dk{border-color:rgba(0,0,0,.18);border-top-color:var(--sub)}
+  .imgfail{width:86px;height:86px;border-radius:10px;border:1px dashed var(--line);background:var(--gray-bg);color:var(--sub);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px}
+  .filebox{margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .filehd{background:var(--gray-bg);font-size:12px;font-weight:800;color:var(--sub);padding:7px 11px}
+  .filerow{display:flex;align-items:center;gap:8px;padding:9px 11px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .filerow .fname{flex:1;min-width:150px;font-size:13px;font-weight:700;word-break:break-all}
+  .filerow .fmeta{display:block;font-size:11px;color:var(--sub);font-weight:500;margin-top:1px}
+  .filerow .facts{display:flex;gap:6px;flex-shrink:0}
+  .btn.dl{background:var(--ink)}
+  .togrow{display:flex;align-items:center;gap:10px;background:var(--gray-bg);border-radius:12px;padding:11px 13px;margin-bottom:8px}
+  .togrow .tl{flex:1;font-weight:800;font-size:14px}
+  .togrow .tl div{font-size:11.5px;color:var(--sub);font-weight:500;margin-top:1px}
+  .swi{width:52px;height:28px;border-radius:99px;position:relative;transition:.2s;flex-shrink:0}
+  .swi span{position:absolute;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.2s}
 
   .cmt{background:var(--gray-bg);border-radius:10px;padding:10px 12px;margin-bottom:8px}
   .cmt .who{font-size:12px;font-weight:800;margin-bottom:2px}
@@ -350,9 +364,17 @@ const state = {
   cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE },
   reqs:[], ready:false, dbError:null,
   chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:'',
-  chatNoti:false, lastSeen:{}, prevRoomTs:{}, roomsInit:false
+  chatNoti:false, lastSeen:{}, prevRoomTs:{}, roomsInit:false,
+  /* 진행상황 알림 */
+  reqNoti:true, reqNotiMine:false, prevReqSig:{}, reqsInit:false,
+  /* 첨부파일 실시간 구독 */
+  unsubFiles:null, filesFor:null
 };
-const filesCache = {};   // reqId -> [{kind,name,data,ts}]
+const filesCache  = {};  // reqId -> [{kind,name,data,ts}]
+const filesLoaded = {};  // reqId -> true (한 번이라도 성공적으로 조회됨)
+const filesErr    = {};  // reqId -> 마지막 조회 오류 코드
+/* Firestore 문서 1건 최대 1,048,576 bytes — 안전 여유를 두고 900KB로 제한 */
+const MAX_FILE_CHARS = 900000;
 
 /* ================= 저장소 계층 (Firestore / 데모 메모리) ================= */
 let fs=null;
@@ -426,17 +448,59 @@ const store = {
     }
   },
   async addFile(reqId, file){ // file={kind,name,data,ts}
+    if(file && file.data && file.data.length > MAX_FILE_CHARS)
+      throw new Error(`파일 용량 초과 (${Math.round(file.data.length/1024)}KB / 최대 ${Math.round(MAX_FILE_CHARS/1024)}KB)`);
     if(LIVE) await FB.addDoc(FB.collection(fs,'requests',reqId,'files'), file);
     if(!filesCache[reqId]) filesCache[reqId]=[];
     filesCache[reqId].push(file);
+    filesLoaded[reqId] = true; filesErr[reqId] = null;
   },
-  async getFiles(reqId){
-    if(filesCache[reqId]) return filesCache[reqId];
-    if(LIVE){
-      const snap = await FB.getDocs(FB.query(FB.collection(fs,'requests',reqId,'files'), FB.orderBy('ts')));
-      filesCache[reqId] = snap.docs.map(d=>d.data());
-    } else filesCache[reqId] = filesCache[reqId]||[];
-    return filesCache[reqId];
+  /* 한 번 조회 — 실패하면 캐시에 남기지 않고 오류를 기록해 재시도가 가능하게 한다 */
+  async getFiles(reqId, force){
+    if(!force && filesLoaded[reqId]) return filesCache[reqId]||[];
+    if(!LIVE){ filesCache[reqId] = filesCache[reqId]||[]; filesLoaded[reqId]=true; return filesCache[reqId]; }
+    const pull = async (useOrder) => {
+      const col = FB.collection(fs,'requests',reqId,'files');
+      const snap = await FB.getDocs(useOrder ? FB.query(col, FB.orderBy('ts')) : col);
+      return snap.docs.map(d=>d.data()).sort((a,b)=>(a.ts||0)-(b.ts||0));
+    };
+    try{
+      filesCache[reqId] = await pull(true);
+      filesLoaded[reqId] = true; filesErr[reqId] = null;
+    }catch(e){
+      /* ts 필드 누락 등 정렬 실패 대비 — 정렬 없이 한 번 더 시도 */
+      try{
+        filesCache[reqId] = await pull(false);
+        filesLoaded[reqId] = true; filesErr[reqId] = null;
+      }catch(e2){
+        filesErr[reqId] = e2.code || e2.message || String(e2);
+        console.warn('getFiles', reqId, e2);
+      }
+    }
+    return filesCache[reqId]||[];
+  },
+  /* 실시간 구독 — 다른 사람이 올린 사진·견적서가 새로고침 없이 바로 보인다 */
+  subscribeFiles(reqId, cb){
+    if(!LIVE){ filesLoaded[reqId]=true; cb(); return ()=>{}; }
+    let unsub = null;
+    try{
+      unsub = FB.onSnapshot(FB.collection(fs,'requests',reqId,'files'),
+        snap=>{
+          filesCache[reqId] = snap.docs.map(d=>d.data()).sort((a,b)=>(a.ts||0)-(b.ts||0));
+          filesLoaded[reqId] = true; filesErr[reqId] = null;
+          cb();
+        },
+        err=>{
+          filesErr[reqId] = err.code || String(err);
+          console.warn('subscribeFiles', reqId, err);
+          /* 구독이 막히면 1회 조회로 폴백 */
+          store.getFiles(reqId, true).then(cb).catch(()=>cb());
+        });
+    }catch(e){
+      filesErr[reqId] = e.code || e.message || String(e);
+      store.getFiles(reqId, true).then(cb).catch(()=>cb());
+    }
+    return ()=>{ if(unsub){ try{unsub()}catch(e){} } };
   },
   /* ---- 채팅 ---- */
   subscribeRooms(cb){
@@ -485,10 +549,67 @@ function subscribeReqs(onReqs){
     q = FB.query(FB.collection(fs,'requests'), FB.orderBy('createdAt','desc'), FB.limit(500));
   }
   state.unsubReqs = FB.onSnapshot(q, snap=>{
-    state.reqs = snap.docs.map(d=>d.data()).sort((a,b)=>b.createdAt-a.createdAt);
+    const list = snap.docs.map(d=>d.data()).sort((a,b)=>b.createdAt-a.createdAt);
+    try{ detectReqNotis(list); }catch(e){ console.warn('noti', e); }
+    state.reqs = list;
     state.ready = true; state.dbError=null;
     onReqs();
   }, err=>{ state.dbError = err.code||String(err); state.ready=true; onReqs(); });
+}
+
+/* ============ 진행상황 알림 ============
+   접수건 실시간 구독 결과를 직전 상태와 비교해 "새로 생긴 변화"만 골라 알린다.
+   (앱이 열려 있거나 백그라운드 탭일 때 동작) */
+function notiRelevant(r){
+  const rl = role();
+  if(rl==='vendor') return reqVendor(r)===myCo();
+  if(rl==='store')  return !state.user.store || r.store===state.user.store;
+  return true; // 본사담당은 전체
+}
+/* 내가 다음으로 조치해야 하는 건인지 */
+function needsMyAction(r){
+  const rl = role();
+  if(r.stage==='DONE' || r.stage==='DROPPED') return rl==='store' && r.stage==='DONE' && !r.signBy;
+  if(r.stage==='SCHEDULE' && r.schedStatus==='제안') return rl==='store';
+  const owner = STAGE_OWNER[r.stage];
+  return (owner==='본사담당' && rl==='hq') || (owner==='시공업체' && rl==='vendor');
+}
+function detectReqNotis(list){
+  const me = actorLabel();
+  const fresh = [];
+  list.forEach(r=>{
+    const hist = r.history||[];
+    const cmts = r.comments||[];
+    const sig = { n:hist.length, c:cmts.length, stage:r.stage };
+    const prev = state.prevReqSig[r.id];
+    state.prevReqSig[r.id] = sig;
+    if(!state.reqsInit || !prev) return;               // 첫 로딩분은 알리지 않음
+    if(!state.reqNoti || !notiRelevant(r)) return;
+    if(state.reqNotiMine && !needsMyAction(r)) return; // "내 조치 필요분만" 옵션
+
+    if(sig.n > prev.n){
+      const last = hist[hist.length-1];
+      if(last && last.actor !== me){
+        const icon = r.stage==='DONE' ? '🏁' : sig.stage!==prev.stage ? '📌' : '🔔';
+        fresh.push({
+          title: `${icon} ${r.store} · ${r.title||r.id}`,
+          body : `${last.action} (${last.actor})${needsMyAction(r)?'\n▶ 내 조치가 필요합니다':''}`,
+          tag  : 'req-'+r.id, reqId: r.id
+        });
+      }
+    } else if(sig.c > prev.c){
+      const cm = cmts[cmts.length-1];
+      if(cm && cm.author !== me)
+        fresh.push({ title:`💬 ${r.store} · 새 의견`, body:`${cm.author}: ${cm.text}`, tag:'cmt-'+r.id, reqId:r.id });
+    }
+  });
+  state.reqsInit = true;
+  /* 한 번에 여러 건이 바뀌면 개별 알림 대신 요약 1건 */
+  if(fresh.length > 3){
+    showNotif('🔔 보수ON 진행상황', `${fresh.length}건이 업데이트되었습니다`, 'bulk', null);
+  } else {
+    fresh.forEach(f=>showNotif(f.title, f.body, f.tag, f.reqId));
+  }
 }
 
 /* 데모 채팅 데이터 */
@@ -557,34 +678,57 @@ function seed(){
   filesCache['R-2607-G7H8']=[{kind:'photo',name:'p1',data:svg('간판 LED','#744210'),ts:daysAgo(15)}];
   filesCache['R-2606-K1L2']=[{kind:'photo',name:'p1',data:svg('후드 모터','#702459'),ts:daysAgo(34)},{kind:'done',name:'d1',data:svg('교체 완료','#22543D'),ts:daysAgo(8)}];
   filesCache['R-2607-M3N4']=[{kind:'photo',name:'p1',data:svg('카운터','#4C3B2A'),ts:daysAgo(8)}];
+  Object.keys(filesCache).forEach(k=>{ filesLoaded[k]=true; });
 }
 
 /* ================= 이미지 압축 ================= */
+/* 저장 한도(900KB)를 넘지 않을 때까지 자동으로 화질·크기를 낮춘다 —
+   한도를 넘긴 사진은 Firestore 저장이 실패해 "다른 사람에게 안 보이는" 원인이 된다 */
 function compressImage(file, maxW=1000, quality=0.65){
   return new Promise((res,rej)=>{
     const rd = new FileReader();
     rd.onload = ev => {
       const img = new Image();
       img.onload = () => {
-        const scale = Math.min(1, maxW/img.width);
-        const cv = document.createElement('canvas');
-        cv.width = Math.round(img.width*scale); cv.height = Math.round(img.height*scale);
-        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
-        res(cv.toDataURL('image/jpeg', quality));
+        try{
+          let w = maxW, q = quality, out = '';
+          for(let i=0;i<7;i++){
+            const scale = Math.min(1, w/img.width);
+            const cv = document.createElement('canvas');
+            cv.width  = Math.max(1, Math.round(img.width*scale));
+            cv.height = Math.max(1, Math.round(img.height*scale));
+            const cx = cv.getContext('2d');
+            cx.fillStyle = '#fff'; cx.fillRect(0,0,cv.width,cv.height);
+            cx.drawImage(img,0,0,cv.width,cv.height);
+            out = cv.toDataURL('image/jpeg', q);
+            if(out.length <= MAX_FILE_CHARS) break;
+            q = Math.max(0.32, q - 0.12);
+            w = Math.round(w * 0.8);
+          }
+          if(out.length > MAX_FILE_CHARS){ rej(new Error('사진 용량이 너무 큽니다. 다시 촬영해 등록해주세요')); return; }
+          res(out);
+        }catch(e){ rej(e); }
       };
-      img.onerror = rej;
+      img.onerror = () => rej(new Error('이미지를 읽을 수 없습니다 (지원하지 않는 형식일 수 있습니다)'));
       img.src = ev.target.result;
     };
-    rd.onerror = rej;
+    rd.onerror = () => rej(new Error('파일을 읽을 수 없습니다'));
     rd.readAsDataURL(file);
   });
 }
-function readSmallFile(file, maxKB=700){ // PDF 등 비이미지
+function readSmallFile(file, maxKB=650){ // PDF·엑셀 등 비이미지 (base64로 약 1.34배 커짐)
   return new Promise((res,rej)=>{
-    if(file.size > maxKB*1024){ rej(new Error(`파일이 너무 큽니다 (최대 ${maxKB}KB). PDF 대신 견적서 사진 촬영을 권장합니다.`)); return; }
+    if(file.size > maxKB*1024){
+      rej(new Error(`파일이 너무 큽니다 (${Math.round(file.size/1024)}KB / 최대 ${maxKB}KB).\n엑셀은 이미지·불필요 시트를 지우거나, 견적서를 사진으로 촬영해 올려주세요.`));
+      return;
+    }
     const rd = new FileReader();
-    rd.onload = ev => res(ev.target.result);
-    rd.onerror = rej;
+    rd.onload = ev => {
+      const d = ev.target.result;
+      if(String(d).length > MAX_FILE_CHARS){ rej(new Error('파일이 너무 큽니다. 용량을 줄여 다시 올려주세요')); return; }
+      res(d);
+    };
+    rd.onerror = () => rej(new Error('파일을 읽을 수 없습니다'));
     rd.readAsDataURL(file);
   });
 }
@@ -617,16 +761,20 @@ function loadSession(){ try{ return JSON.parse(localStorage.getItem('bosuon_sess
 function loadChatPrefs(){
   try{
     state.chatNoti = localStorage.getItem('bosuon_chatnoti')==='1';
+    state.reqNoti  = localStorage.getItem('bosuon_reqnoti') !== '0';   // 기본 켜짐
+    state.reqNotiMine = localStorage.getItem('bosuon_reqnotimine')==='1';
     state.lastSeen = JSON.parse(localStorage.getItem('bosuon_lastseen')||'{}');
   }catch(e){}
 }
 function saveChatPrefs(){
   try{
     localStorage.setItem('bosuon_chatnoti', state.chatNoti?'1':'0');
+    localStorage.setItem('bosuon_reqnoti', state.reqNoti?'1':'0');
+    localStorage.setItem('bosuon_reqnotimine', state.reqNotiMine?'1':'0');
     localStorage.setItem('bosuon_lastseen', JSON.stringify(state.lastSeen));
   }catch(e){}
 }
-function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
+function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; stopDetailFiles(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
 
 let pickedRole=null;
 function pickRole(r){
@@ -706,6 +854,7 @@ function ensureRooms(){
 function goList(filter){ state.filter=filter; state.q=''; go('list'); }
 function go(v,id){
   if(state.view==='chatroom' && v!=='chatroom' && state.unsubMsgs){ try{state.unsubMsgs()}catch(e){} state.unsubMsgs=null; }
+  if(!(v==='detail' && id===state.filesFor)) stopDetailFiles();
   state.view=v; state.detailId=id||null;
   if(v==='chat') ensureRooms();
   render(); window.scrollTo(0,0);
@@ -726,9 +875,26 @@ function waitLabel(r){
 const money = n => n==null?'-':Number(n).toLocaleString('ko-KR')+'원';
 const role = () => state.user ? state.user.role : null;
 
-async function loadDetailFiles(id){
-  await store.getFiles(id);
-  if(state.view==='detail' && state.detailId===id && !modalOpen()) render();
+function stopDetailFiles(){
+  if(state.unsubFiles){ try{ state.unsubFiles(); }catch(e){} }
+  state.unsubFiles = null; state.filesFor = null;
+}
+function loadDetailFiles(id){
+  if(state.filesFor === id && state.unsubFiles) return;   // 이미 구독 중
+  stopDetailFiles();
+  state.filesFor = id;
+  state.unsubFiles = store.subscribeFiles(id, ()=>{
+    if(state.view==='detail' && state.detailId===id && !modalOpen()) render();
+  });
+}
+/* 사진이 안 보일 때 사용자가 직접 누르는 재시도 */
+async function retryFiles(id){
+  filesErr[id]=null; filesLoaded[id]=false;
+  toast('첨부파일을 다시 불러오는 중…');
+  await store.getFiles(id, true);
+  loadDetailFiles(id);
+  if(!modalOpen()) render();
+  if(filesErr[id]) toast('불러오기 실패: '+filesErr[id]);
 }
 
 /* ================= 렌더 ================= */
@@ -804,7 +970,31 @@ function deptBadge(d){
 }
 function roleNote(){
   const t = { hq:'본사담당 모드 — 견적 검토·승인, 설정, 전체 현황 관리', store:'점포 모드 — 보수공사 접수 및 진행상황 열람', vendor:`${myCo()} 모드 — 실측·견적·일정 등록, 완료 처리 (담당 점포만 표시)` };
-  return `<div class="role-note">👤 ${t[role()]}</div>`;
+  return `<div class="role-note">👤 ${t[role()]}</div>` + notiPrompt();
+}
+/* 알림 권한을 아직 안 물어본 사용자에게 한 번 안내 (닫으면 다시 안 뜸) */
+function notiPrompt(){
+  if(typeof Notification==='undefined') return '';
+  if(Notification.permission!=='default') return '';
+  try{ if(localStorage.getItem('bosuon_notiask')==='1') return ''; }catch(e){}
+  return `<div class="card" id="notiAsk" style="display:flex;align-items:center;gap:10px;border-left:4px solid var(--red)">
+    <span style="flex:1;font-size:13px;font-weight:700">🔔 알림을 켜면 단계 변경·견적·채팅이 도착할 때 바로 알려드립니다.
+      <div style="font-size:11.5px;color:var(--sub);font-weight:500;margin-top:2px">휴대폰은 「홈 화면에 추가」 후 켜주세요</div></span>
+    <button class="btn sm" onclick="askNoti()">켜기</button>
+    <button class="btn sec2 sm" onclick="dismissNotiAsk()">나중에</button>
+  </div>`;
+}
+async function askNoti(){
+  dismissNotiAsk(true);
+  if(!await ensureNotiPerm()) { render(); return; }
+  state.reqNoti = true; state.chatNoti = true; saveChatPrefs();
+  showNotif('GRS 보수ON', '알림이 켜졌습니다!', 'welcome', null);
+  toast('알림을 켰습니다'); render();
+}
+function dismissNotiAsk(silent){
+  try{ localStorage.setItem('bosuon_notiask','1'); }catch(e){}
+  const el = document.getElementById('notiAsk'); if(el) el.remove();
+  if(!silent) toast('알림 패널(🔔)에서 언제든 켤 수 있습니다');
 }
 
 /* ===== 대시보드 ===== */
@@ -911,9 +1101,94 @@ function stepper(r){
   }).join('')}</div>`;
 }
 function photosHtml(id, kind){
-  const fl = (filesCache[id]||[]).filter(f=>f.kind===kind);
-  if(!fl.length) return '';
-  return `<div class="photos">${fl.map(f=>`<img src="${f.data}" onclick="viewImg(this.src)">`).join('')}</div>`;
+  const all = filesCache[id]||[];
+  const out = [];
+  all.forEach((f,i)=>{ if(f.kind===kind && f.data) out.push(`<img src="${f.data}" loading="lazy" onclick="viewImg(${i})" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'imgfail',textContent:'⚠ 이미지 오류'}))">`); });
+  if(!out.length) return '';
+  return `<div class="photos">${out.join('')}</div>`;
+}
+/* 사진이 아직 안 보이는 상태를 정확히 구분해서 알려준다 (무한 "불러오는 중" 방지) */
+function photoPlaceholder(r, kind, expected){
+  const id = r.id;
+  if(filesErr[id]){
+    const ec = String(filesErr[id]);
+    let hint = ec;
+    if(ec.includes('permission-denied')) hint = '접근 권한 없음 — Firestore 보안 규칙에서 requests 하위 files 컬렉션 읽기를 허용해야 합니다';
+    else if(ec.includes('unavailable')||ec.includes('network')) hint = '네트워크 오류 — 연결 확인 후 다시 시도해주세요';
+    return `<div class="note warn">⚠ 첨부파일을 불러오지 못했습니다<div style="font-size:11.5px;margin-top:3px">${esc(hint)}</div>
+      <button class="btn sec2 sm" style="margin-top:8px" onclick="retryFiles('${id}')">🔄 다시 불러오기</button></div>`;
+  }
+  if(!filesLoaded[id]) return `<div class="note"><span class="spin dk"></span> 사진 불러오는 중…</div>`;
+  if(expected) return `<div class="note">접수 시 사진 ${expected}장이 등록되었으나 파일을 찾을 수 없습니다.
+    <button class="btn sec2 sm" style="margin-top:8px" onclick="retryFiles('${id}')">🔄 다시 불러오기</button></div>`;
+  return '';
+}
+/* 첨부파일 다운로드 — data URL은 브라우저에 따라 저장이 막히므로 Blob으로 변환해 내려받는다 */
+function dataUrlToBlob(d){
+  const s = String(d||'');
+  const i = s.indexOf(',');
+  if(i < 0) throw new Error('잘못된 파일 형식');
+  const head = s.slice(0,i), body = s.slice(i+1);
+  const mime = (head.match(/data:([^;,]+)/)||[])[1] || 'application/octet-stream';
+  if(/;base64/i.test(head)){
+    const bin = atob(body);
+    const u8 = new Uint8Array(bin.length);
+    for(let k=0;k<bin.length;k++) u8[k] = bin.charCodeAt(k);
+    return new Blob([u8], {type:mime});
+  }
+  /* base64가 아닌 data URL (예: SVG) */
+  return new Blob([decodeURIComponent(body)], {type:mime});
+}
+function fileAt(reqId, i){ return (filesCache[reqId]||[])[i]; }
+const MIME_EXT = {'image/jpeg':'jpg','image/png':'png','image/webp':'webp','image/svg+xml':'svg','application/pdf':'pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx','application/vnd.ms-excel':'xls'};
+/* 저장될 파일명 — 확장자가 없으면 실제 형식에서 유추한다 */
+function dlName(reqId, f){
+  let n = (f.name||'').trim();
+  if(/\.[a-z0-9]{2,5}$/i.test(n)) return n;
+  const mime = (String(f.data||'').match(/data:([^;,]+)/)||[])[1] || '';
+  const ext = MIME_EXT[mime] || 'dat';
+  const base = n || `${reqId}_${f.kind||'file'}`;
+  return `${base}.${ext}`;
+}
+function dlFile(reqId, i){
+  const f = fileAt(reqId, i);
+  if(!f || !f.data){ toast('파일을 찾을 수 없습니다. 「다시 불러오기」를 눌러주세요'); return; }
+  try{
+    const url = URL.createObjectURL(dataUrlToBlob(f.data));
+    const a = document.createElement('a');
+    a.href = url; a.download = dlName(reqId, f);
+    a.style.display='none'; document.body.appendChild(a); a.click();
+    setTimeout(()=>{ try{URL.revokeObjectURL(url); a.remove();}catch(e){} }, 8000);
+    toast('다운로드를 시작했습니다');
+  }catch(e){ openFile(reqId, i); }
+}
+function openFile(reqId, i){
+  const f = fileAt(reqId, i);
+  if(!f || !f.data){ toast('파일을 찾을 수 없습니다'); return; }
+  try{
+    const url = URL.createObjectURL(dataUrlToBlob(f.data));
+    window.open(url, '_blank');
+    setTimeout(()=>{ try{URL.revokeObjectURL(url);}catch(e){} }, 30000);
+  }catch(e){ toast('파일을 열 수 없습니다'); }
+}
+const FILE_ICON = n => /\.xlsx?$/i.test(n||'') ? '📊' : /\.pdf$/i.test(n||'') ? '📕' : /\.(png|jpe?g|webp|heic)$/i.test(n||'') ? '🖼' : '📎';
+/* 견적서·첨부파일 목록 (다운로드 / 열기) */
+function fileListHtml(reqId, kinds, label){
+  const all = filesCache[reqId]||[];
+  const rows = [];
+  all.forEach((f,i)=>{
+    if(!kinds.includes(f.kind)) return;
+    const kb = f.data ? Math.max(1, Math.round(f.data.length*0.75/1024)) : 0;
+    rows.push(`<div class="filerow">
+      <span class="fname">${FILE_ICON(f.name)} ${esc(f.name||'첨부파일')}<span class="fmeta">${kb}KB · ${fmtDT(f.ts)}</span></span>
+      <span class="facts">
+        <button class="btn sec2 sm" onclick="openFile('${reqId}',${i})">열기</button>
+        <button class="btn sm dl" onclick="dlFile('${reqId}',${i})">⬇ 다운로드</button>
+      </span></div>`);
+  });
+  if(!rows.length) return '';
+  return `<div class="filebox"><div class="filehd">${label}</div>${rows.join('')}</div>`;
 }
 function vDetail(){
   const r = R(state.detailId); if(!r) return '<div class="empty">접수 건을 찾을 수 없습니다</div>';
@@ -927,7 +1202,7 @@ function vDetail(){
     <div class="kv"><b>담당부서</b>${deptBadge(r.dept)||'미지정'}${r.deptVendor&&r.dept&&r.deptVendor!==r.dept?` <span class="badge b-red">⚠ 업체 판단: ${r.deptVendor}</span>`:''}</div>
     <div class="kv"><b>시공업체</b><span class="badge ${reqVendor(r)==='우리아이엔티'?'b-blue':'b-gray'}">${reqVendor(r)}</span>${rl==='hq'&&r.stage!=='DONE'&&r.stage!=='DROPPED'?` <button style="font-size:11.5px;color:var(--sub);text-decoration:underline;font-weight:700" onclick="switchVendor('${r.id}')">변경</button>`:''}</div>
     <div class="kv"><b>공사내용</b>${esc(r.desc)}</div>
-    ${photosHtml(r.id,'photo') || (r.photoCount?'<div class="note">사진 불러오는 중…</div>':'')}
+    ${photosHtml(r.id,'photo') || photoPlaceholder(r,'photo',r.photoCount||0)}
   </div>`;
 
   secs += `<div class="sec"><div class="st">📐 2. 실측 일정 ${slaTag(r,'SURVEY')}</div>`;
@@ -957,8 +1232,15 @@ function vDetail(){
       ${ev.workPlan?`<div class="kv"><b>작업예정</b><strong>${fmtDT(ev.workPlan)}</strong></div>`:''}
       <div class="kv"><b>업로드</b>${fmtDT(ev.ts)}</div>`).join('<hr style="border:none;border-top:1px dashed var(--line);margin:8px 0">');
     secs += photosHtml(r.id,'estimate');
-    const pdfs = (filesCache[r.id]||[]).filter(f=>f.kind==='estimate-file');
-    if(pdfs.length) secs += pdfs.map(f=>`<div style="margin-top:8px"><a class="btn sec2 sm" href="${f.data}" download="${esc(f.name)}">📄 ${esc(f.name)} 내려받기</a></div>`).join('');
+    secs += fileListHtml(r.id, ['estimate-file','estimate'], '📥 견적서 파일 (다운로드 가능)');
+    const anyEstFile = (filesCache[r.id]||[]).some(f=>f.kind==='estimate-file'||f.kind==='estimate');
+    if(!anyEstFile){
+      if(filesErr[r.id]) secs += photoPlaceholder(r,'estimate',0);
+      else if(!filesLoaded[r.id]) secs += `<div class="note"><span class="spin dk"></span> 견적서 파일 불러오는 중…</div>`;
+      else if((r.estimates||[]).some(ev=>ev.fileName && ev.fileName!=='(파일 없음)'))
+        secs += `<div class="note">첨부 파일이 저장되지 않았습니다 (업로드 당시 용량 초과 가능). 시공업체에 재업로드를 요청해주세요.
+          <button class="btn sec2 sm" style="margin-top:8px" onclick="retryFiles('${r.id}')">🔄 다시 불러오기</button></div>`;
+    }
   } else secs += `<div class="note">아직 견적서가 등록되지 않았습니다.</div>`;
   if(rl==='vendor' && r.stage==='ESTIMATE') secs += `<button class="btn blk" onclick="mEstimate('${r.id}')">📤 견적서 업로드</button>`;
   secs += `</div>`;
@@ -1007,7 +1289,7 @@ function vDetail(){
 
   secs += `<div class="sec"><div class="st">✅ 5. 공사 완료 ${slaTag(r,'CONSTRUCT')}</div>`;
   if(r.stage==='DONE'){
-    secs += `<div class="kv"><b>완료일</b>${fmtDT(r.completedAt)}</div>${photosHtml(r.id,'done')}`;
+    secs += `<div class="kv"><b>완료일</b>${fmtDT(r.completedAt)}</div>${photosHtml(r.id,'done') || photoPlaceholder(r,'done',0)}`;
     const signFile = (filesCache[r.id]||[]).find(f=>f.kind==='sign');
     if(r.signBy){
       secs += `<div class="kv" style="margin-top:8px"><b>점포 확인</b><span class="badge b-green">서명 완료</span>&nbsp; ${esc(r.signBy)} · ${fmtDT(r.signAt)}</div>`;
@@ -1030,6 +1312,18 @@ function vDetail(){
     secs += `<button class="btn blk grn" onclick="mDone('${r.id}')">🏁 공사 완료 처리</button>`;
   }
   secs += `</div>`;
+
+  /* 전체 첨부파일 — 본사담당이 사진·견적서를 한 곳에서 내려받을 수 있게 */
+  {
+    const allF = filesCache[r.id]||[];
+    const box = fileListHtml(r.id, ['photo','survey','estimate','estimate-file','done','sign'], '전체 첨부파일');
+    secs += `<div class="sec"><div class="st">📎 첨부파일 <span class="badge b-gray">${allF.length}</span>
+      <button class="btn sec2 sm" style="margin-left:auto" onclick="retryFiles('${r.id}')">🔄 새로고침</button></div>`;
+    secs += box || (filesErr[r.id] ? photoPlaceholder(r,'photo',0)
+      : !filesLoaded[r.id] ? `<div class="note"><span class="spin dk"></span> 불러오는 중…</div>`
+      : `<div class="note">첨부된 파일이 없습니다.</div>`);
+    secs += `</div>`;
+  }
 
   secs += `<div class="sec"><div class="st">💬 의견·댓글 <span class="badge b-gray">${(r.comments||[]).length}</span></div>
     ${(r.comments||[]).slice().sort((a,b)=>a.ts-b.ts).map(cm=>`<div class="cmt"><div class="who">${esc(cm.author)}<span>${fmtDT(cm.ts)}</span></div>${esc(cm.text)}</div>`).join('')}
@@ -1067,9 +1361,15 @@ function slaTag(r,stage){
   if(d<0) return `<span class="badge b-overdue">기한 ${-d}일 초과</span>`;
   return `<span class="badge b-amber">기한 D-${d} (${fmtD(deadline(r))}까지)</span>`;
 }
-function viewImg(src){
-  openModal(`<img src="${src}" style="width:100%;border-radius:12px">
-    <a class="btn blk" style="text-decoration:none" href="${src}" download="bosuon_${state.detailId||'photo'}_${Date.now()}.jpg">⬇ 사진 다운로드</a>
+function viewImg(i){
+  const id = state.detailId;
+  const f = fileAt(id, i);
+  if(!f || !f.data){ toast('사진을 찾을 수 없습니다'); return; }
+  openModal(`<img src="${f.data}" style="width:100%;border-radius:12px">
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn sec2" style="flex:1" onclick="openFile('${id}',${i})">새 창에서 열기</button>
+      <button class="btn dl" style="flex:1.3" onclick="dlFile('${id}',${i})">⬇ 다운로드</button>
+    </div>
     <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
 }
 
@@ -1122,8 +1422,17 @@ async function submitNew(){
     history:[{ts:now(),actor:actorLabel(),action:`보수공사 접수 (사진 ${newPhotos.length}장)`}] };
   try{
     await store.saveRequest(r);
-    for(const p of newPhotos) await store.addFile(id,{kind:'photo',name:'photo.jpg',data:p,ts:now()});
-    toast('접수가 완료되었습니다');
+    /* 사진은 1장씩 따로 저장 — 한 장이 실패해도 접수 자체는 살리고, 실제 저장된 장수를 기록한다 */
+    let saved = 0, failed = 0;
+    for(let i=0;i<newPhotos.length;i++){
+      try{ await store.addFile(id,{kind:'photo',name:`photo_${i+1}.jpg`,data:newPhotos[i],ts:now()}); saved++; }
+      catch(fe){ failed++; console.warn('photo save', fe); }
+    }
+    if(saved !== newPhotos.length){
+      try{ await store.updateRequest(id, {photoCount:saved}); }catch(e){}
+    }
+    toast(failed ? `접수 완료 — 사진 ${saved}/${newPhotos.length}장 저장 (${failed}장 실패)` : '접수가 완료되었습니다');
+    newPhotos = [];
     go('detail', id);
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); btn.disabled=false; btn.textContent='접수하기'; }
 }
@@ -1158,12 +1467,17 @@ async function pickEstFile(inp){
       if(quick.ok && !document.getElementById('mAmt').value)
         document.getElementById('mAmt').value = quick.sheetTotal??quick.calcTotal;
       mFileIsImg = false;
-      mFileData = f.size<=700*1024 ? await readSmallFile(f) : null;
+      try{ mFileData = await readSmallFile(f); }
+      catch(err){
+        mFileData = null;
+        document.getElementById('mFn').textContent = `⚠ ${f.name} — 용량 초과로 파일은 첨부되지 않습니다 (금액·분석만 반영)`;
+        toast(err.message);
+      }
     }
-    else if(f.type.startsWith('image/')){ mFileData = await compressImage(f,1200,0.7); mFileIsImg=true; document.getElementById('mFn').textContent='📎 '+f.name; }
+    else if(f.type.startsWith('image/')){ mFileData = await compressImage(f,1400,0.72); mFileIsImg=true; document.getElementById('mFn').textContent='📎 '+f.name; }
     else { mFileData = await readSmallFile(f); mFileIsImg=false; document.getElementById('mFn').textContent='📎 '+f.name; }
     mFileName = f.name;
-  }catch(e){ toast(e.message); }
+  }catch(e){ mFileData=null; toast(e.message||'파일 처리 실패'); }
 }
 async function doEstimate(id){
   const amt = Number(document.getElementById('mAmt').value);
@@ -1185,7 +1499,19 @@ async function doEstimate(id){
   try{
     await store.updateRequest(id, {estimates:[...(r.estimates||[]), est], stage:'REVIEW', stageAt:now(), ...deptPatch},
       {ts:now(),actor:actorLabel(),action:`견적서 업로드 (${money(amt)}${est.workPlan?`, 작업예정 ${fmtDT(est.workPlan)}`:''})`});
-    if(mFileData) await store.addFile(id,{kind:mFileIsImg?'estimate':'estimate-file',name:mFileName,data:mFileData,ts:now()});
+    if(mFileData){
+      try{
+        await store.addFile(id,{kind:mFileIsImg?'estimate':'estimate-file',name:mFileName||'견적서',data:mFileData,ts:now()});
+      }catch(fe){
+        closeModal();
+        toast('견적 금액은 등록됐지만 파일 첨부에 실패했습니다: '+(fe.code||fe.message));
+        return;
+      }
+    } else if(mFileName){
+      closeModal();
+      toast('견적 금액은 등록됐습니다 (파일은 첨부되지 않음 — 용량 초과)');
+      return;
+    }
     closeModal(); toast('견적서가 업로드되었습니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
@@ -1466,31 +1792,63 @@ async function pickSurveyPhotos(id, inp){
 function maybeNotify(room, meta){
   if(!state.chatNoti) return;
   if(state.view==='chatroom' && state.chatRoom===room && !document.hidden) return; // 그 방을 보고 있으면 생략
-  showNotif(`💬 ${room}`, `${meta.lastBy}: ${meta.lastMsg||''}`.slice(0,90), room);
+  showNotif(`💬 ${room}`, `${meta.lastBy}: ${meta.lastMsg||''}`.slice(0,90), 'chat-'+room, null, room);
   renderNav();
 }
-async function showNotif(title, body, tag){
+async function showNotif(title, body, tag, reqId, room){
   try{
     if(typeof Notification==='undefined' || Notification.permission!=='granted') return;
-    const opts = { body, tag:'bosuon-'+tag, icon:'./icon-192.png', badge:'./icon-192.png' };
+    const opts = {
+      body, tag:'bosuon-'+tag, renotify:true,
+      icon:'./icon-192.png', badge:'./icon-192.png',
+      vibrate:[80,40,80],
+      data:{ reqId: reqId||null, room: room||null, url: location.href }
+    };
     const reg = ('serviceWorker' in navigator) ? await navigator.serviceWorker.getRegistration() : null;
-    if(reg && reg.showNotification) reg.showNotification(title, opts);
-    else new Notification(title, opts);
+    if(reg && reg.showNotification){ reg.showNotification(title, opts); return; }
+    const n = new Notification(title, opts);
+    n.onclick = ()=>{ try{ window.focus(); openFromNoti(reqId, room); n.close(); }catch(e){} };
   }catch(e){ console.warn('notify', e); }
 }
-async function toggleChatNoti(){
-  if(state.chatNoti){
-    state.chatNoti = false; saveChatPrefs(); renderNotis(); toast('채팅 알림을 껐습니다'); return;
-  }
+/* 알림을 눌렀을 때 해당 화면으로 이동 */
+function openFromNoti(reqId, room){
+  if(!state.user) return;
+  if(reqId && R(reqId)) go('detail', reqId);
+  else if(room){ try{ openRoom(room); }catch(e){ go('chat'); } }
+}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', ev=>{
+    const d = ev.data||{};
+    if(d.type==='noti-click'){ try{ openFromNoti(d.reqId, d.room); }catch(e){} }
+  });
+}
+/* 알림 권한 확보 (최초 1회 브라우저 권한 요청) */
+async function ensureNotiPerm(){
   if(typeof Notification==='undefined'){
-    toast('이 브라우저는 알림을 지원하지 않습니다 (아이폰은 홈 화면에 추가 후 앱에서 켜주세요)'); return;
+    toast('이 브라우저는 알림을 지원하지 않습니다 (아이폰은 홈 화면에 추가한 뒤 앱에서 켜주세요)'); return false;
   }
   let perm = Notification.permission;
   if(perm==='default') perm = await Notification.requestPermission();
-  if(perm!=='granted'){ toast('브라우저 알림 권한이 거부되어 있습니다. 브라우저 설정에서 허용해주세요'); return; }
+  if(perm!=='granted'){ toast('알림 권한이 거부되어 있습니다. 브라우저 설정에서 이 사이트의 알림을 허용해주세요'); return false; }
+  return true;
+}
+async function toggleChatNoti(){
+  if(state.chatNoti){ state.chatNoti=false; saveChatPrefs(); renderNotis(); toast('채팅 알림을 껐습니다'); return; }
+  if(!await ensureNotiPerm()) return;
   state.chatNoti = true; saveChatPrefs(); renderNotis();
-  showNotif('GRS 보수ON', '채팅 알림이 켜졌습니다. 새 메시지가 오면 이렇게 알려드려요!', 'test');
+  showNotif('GRS 보수ON', '채팅 알림이 켜졌습니다. 새 메시지가 오면 이렇게 알려드려요!', 'test', null);
   toast('채팅 알림을 켰습니다');
+}
+async function toggleReqNoti(){
+  if(state.reqNoti){ state.reqNoti=false; saveChatPrefs(); renderNotis(); toast('진행상황 알림을 껐습니다'); return; }
+  if(!await ensureNotiPerm()) return;
+  state.reqNoti = true; saveChatPrefs(); renderNotis();
+  showNotif('GRS 보수ON', '진행상황 알림이 켜졌습니다. 단계 변경·견적·검토·완료 시 알려드려요!', 'test2', null);
+  toast('진행상황 알림을 켰습니다');
+}
+function toggleReqNotiMine(){
+  state.reqNotiMine = !state.reqNotiMine; saveChatPrefs(); renderNotis();
+  toast(state.reqNotiMine ? '내 조치가 필요한 건만 알립니다' : '모든 진행상황을 알립니다');
 }
 
 /* ===== 완료확인 전자서명 ===== */
@@ -1820,6 +2178,12 @@ function vSet(){
       <input value="${esc(state.cfg.codes[rk]||'')}" onchange="updCode('${rk}',this.value)">
     </div>`).join('');
   return roleNote()+`<div class="card">
+    <div class="h2">🩺 서버 연결 진단</div>
+    <div class="note" style="margin:0 0 10px">사진·견적서가 안 보이거나 저장이 안 될 때 눌러주세요. 실제 저장·조회를 시험해 원인을 알려드립니다.</div>
+    <button class="btn sec2 blk" style="margin-top:0" onclick="runDiag()">🔍 진단 실행</button>
+    <div id="diagOut"></div>
+  </div>
+  <div class="card">
     <div class="h2">⏱ 단계별 처리기한 (SLA)</div>
     <div class="note" style="margin:0 0 14px">각 단계 진입 후 아래 일수를 초과하면 기한초과 알림이 표시됩니다. ${LIVE?'변경 시 전체 사용자에게 즉시 적용됩니다.':''}</div>
     ${slaRows}
@@ -1945,16 +2309,78 @@ async function pickLaborFile(inp){
 /* ===== 알림 ===== */
 function renderNotis(){
   const list = allNotis();
-  const togg = `<div style="display:flex;align-items:center;gap:10px;background:var(--gray-bg);border-radius:12px;padding:11px 13px;margin-bottom:12px">
-    <span style="flex:1;font-weight:800;font-size:14px">💬 채팅 푸시 알림<div style="font-size:11.5px;color:var(--sub);font-weight:500">앱이 켜져 있는 동안 새 메시지 도착 시 알림</div></span>
-    <button onclick="toggleChatNoti()" style="width:52px;height:28px;border-radius:99px;position:relative;background:${state.chatNoti?'var(--green)':'#C9CDD4'};transition:.2s">
-      <span style="position:absolute;top:3px;${state.chatNoti?'right:3px':'left:3px'};width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)"></span>
-    </button>
-  </div>`;
+  const sw = (on, fn) => `<button class="swi" onclick="${fn}" style="background:${on?'var(--green)':'#C9CDD4'}"><span style="${on?'right:3px':'left:3px'}"></span></button>`;
+  const permBad = (typeof Notification!=='undefined' && Notification.permission==='denied')
+    ? `<div class="note warn">⚠ 브라우저에서 이 사이트의 알림이 차단되어 있습니다. 주소창 왼쪽 자물쇠 → 알림 → 허용으로 바꿔주세요.</div>` : '';
+  const togg = `
+    <div class="togrow"><span class="tl">🔔 진행상황 알림<div>단계 변경·견적 등록·검토 결과·일정·완료 시 알림</div></span>${sw(state.reqNoti,'toggleReqNoti()')}</div>
+    ${state.reqNoti?`<div class="togrow" style="margin-left:14px"><span class="tl" style="font-size:13px">▶ 내 조치가 필요한 것만<div>끄면 담당 건의 모든 변경을 받습니다</div></span>${sw(state.reqNotiMine,'toggleReqNotiMine()')}</div>`:''}
+    <div class="togrow"><span class="tl">💬 채팅 알림<div>새 채팅 메시지 도착 시 알림</div></span>${sw(state.chatNoti,'toggleChatNoti()')}</div>
+    ${permBad}
+    <div class="note" style="margin-bottom:12px">📱 휴대폰에서는 브라우저 메뉴 → <b>홈 화면에 추가</b>로 앱을 설치한 뒤 알림을 켜주세요. 알림은 앱이 실행 중이거나 백그라운드에 있을 때 도착합니다.</div>`;
   document.getElementById('notiList').innerHTML = togg + (list.length ? list.map(n=>`
     <div class="noti ${n.type==='over'?'over':''}" onclick="togglePanel(false);go('detail','${n.reqId}')">
       ${n.type==='over'?'⚠️ ':''}${esc(n.text)}<div class="ts">${fmtDT(n.ts)} · 터치하여 상세보기</div>
     </div>`).join('') : '<div class="empty">알림이 없습니다</div>');
+}
+
+/* ===== 서버 연결 진단 =====
+   사진이 안 보이는 원인(권한 / 용량 / 네트워크)을 화면에서 바로 확인 */
+async function runDiag(){
+  const out = document.getElementById('diagOut');
+  const rows = [];
+  const line = (ok, label, detail) => rows.push(
+    `<div class="kv" style="align-items:flex-start"><b style="width:26px">${ok===null?'⏳':ok?'✅':'❌'}</b>
+     <span style="flex:1"><b style="width:auto;color:var(--ink)">${label}</b>${detail?`<div style="font-size:12px;color:var(--sub);margin-top:2px;word-break:break-all">${esc(detail)}</div>`:''}</span></div>`);
+  const paint = () => out.innerHTML = `<div class="sec" style="margin-top:12px">${rows.join('')}</div>`;
+
+  out.innerHTML = `<div class="note" style="margin-top:12px"><span class="spin dk"></span> 진단 중…</div>`;
+
+  if(!LIVE){ out.innerHTML = `<div class="note warn" style="margin-top:12px">데모 모드입니다. Firebase 설정이 없어 저장되지 않습니다.</div>`; return; }
+  line(!!window.FB, 'Firebase SDK 로드', window.FB ? '정상' : (window.FB_LOAD_ERROR||'실패'));
+  line(!!fs, 'Firestore 연결', fs ? `프로젝트 ${FIREBASE_CONFIG.projectId} / DB "${FIRESTORE_DB_ID}"` : '미연결');
+  line(!state.dbError, '접수 목록 읽기', state.dbError ? String(state.dbError) : `${state.reqs.length}건 수신`);
+  paint();
+  if(!fs){ return; }
+
+  const testId = '__diag__';
+  /* 1) 하위 컬렉션 쓰기 */
+  let wrote = false;
+  try{
+    await FB.addDoc(FB.collection(fs,'requests',testId,'files'), {kind:'diag', name:'diag.txt', data:'data:text/plain;base64,'+btoa('ok'), ts:now()});
+    wrote = true; line(true, '첨부파일 저장 (requests/{id}/files 쓰기)', '정상');
+  }catch(e){
+    const c = e.code||String(e);
+    line(false, '첨부파일 저장 (requests/{id}/files 쓰기)',
+      c.includes('permission-denied') ? '권한 거부 — 보안 규칙에 files 하위 컬렉션 쓰기 허용이 없습니다' : c);
+  }
+  paint();
+  /* 2) 하위 컬렉션 목록 조회 (list 권한 — 사진이 안 보이는 가장 흔한 원인) */
+  try{
+    const snap = await FB.getDocs(FB.collection(fs,'requests',testId,'files'));
+    line(true, '첨부파일 목록 조회 (files 읽기/list)', `${snap.size}건 조회됨`);
+  }catch(e){
+    const c = e.code||String(e);
+    line(false, '첨부파일 목록 조회 (files 읽기/list)',
+      c.includes('permission-denied')
+        ? '★ 권한 거부 — 이것이 「사진 불러오는 중」의 원인입니다. Firestore 보안 규칙에 match /requests/{id}/files/{fileId} 읽기 허용을 추가하세요 (하위 컬렉션은 상위 규칙을 물려받지 않습니다)'
+        : c);
+  }
+  paint();
+  /* 3) 실제 접수건의 첨부파일 조회 */
+  const real = state.reqs.find(r=>(r.photoCount||0)>0);
+  if(real){
+    await store.getFiles(real.id, true);
+    const n = (filesCache[real.id]||[]).length;
+    line(!filesErr[real.id] && n>0, `실제 접수건 첨부 조회 (${real.id})`,
+      filesErr[real.id] ? String(filesErr[real.id]) : `사진 ${real.photoCount}장 등록 / 파일 ${n}건 조회됨${n<real.photoCount?' — 업로드 당시 저장 실패로 보입니다':''}`);
+  }
+  /* 4) 브라우저 알림 */
+  const perm = (typeof Notification==='undefined') ? '미지원' : Notification.permission;
+  line(perm==='granted', '브라우저 알림 권한', perm==='granted'?'허용됨':perm==='denied'?'차단됨 — 브라우저 설정에서 허용 필요':'아직 요청하지 않음');
+  line(!!navigator.serviceWorker, '서비스 워커(PWA)', navigator.serviceWorker ? '사용 가능' : '미지원');
+  paint();
+  toast('진단이 완료되었습니다');
 }
 
 /* ===== CSV ===== */
