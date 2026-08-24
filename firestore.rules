@@ -62,6 +62,20 @@ service cloud.firestore {
       }
     }
 
+    /* 개선요청 게시판 */
+    match /posts/{postId} {
+      allow read, write: if signedIn();
+
+      /* 첨부한 화면 캡처 */
+      match /files/{fileId} {
+        allow read, write: if signedIn();
+      }
+
+      match /{sub=**} {
+        allow read, write: if signedIn();
+      }
+    }
+
     /* 채팅방 */
     match /chats/{room} {
       allow read, write: if signedIn();
