@@ -122,6 +122,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .filerow .fmeta{display:block;font-size:11px;color:var(--sub);font-weight:500;margin-top:1px}
   .filerow .facts{display:flex;gap:6px;flex-shrink:0}
   .btn.dl{background:var(--ink)}
+  .btn.delx{background:var(--red-bg);color:var(--red-dark)}
   /* 시스템 전환 (보수공사 ↔ 조명·타일 발주) */
   .appsw{display:flex;gap:6px;padding:8px 14px 0;background:var(--red)}
   .appsw button{flex:1;padding:9px 6px;border-radius:10px 10px 0 0;font-weight:800;font-size:13.5px;background:rgba(255,255,255,.16);color:rgba(255,255,255,.85)}
@@ -141,6 +142,37 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .kindtab button{flex:1;padding:12px 8px;border-radius:12px;border:2px solid var(--line);background:#fff;font-weight:800;font-size:13.5px;color:var(--sub);line-height:1.35}
   .kindtab button.on{border-color:var(--red);background:var(--red-bg);color:var(--red-dark)}
   .kindtab button small{display:block;font-weight:500;font-size:11px;margin-top:2px;opacity:.85}
+  /* 표준 품목 선택기 */
+  .specrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}
+  .specrow:active{background:var(--gray-bg)}
+  .specrow img{width:46px;height:46px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff;flex-shrink:0}
+  .specrow .si{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .specrow .si b{font-size:12.5px}
+  .specrow .si span{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .specrow .si .sm{font-size:11.5px;color:var(--sub)}
+  .specrow .sp{flex-shrink:0;font-weight:800;font-size:13px;text-align:right}
+  .specrow .sp small{display:block;font-weight:500;font-size:10.5px;color:var(--sub)}
+  /* 견적 입력 행 */
+  .qrow{border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px}
+  .qhd{display:flex;align-items:flex-start;gap:8px}
+  .qhd img{width:42px;height:42px;object-fit:contain;border:1px solid var(--line);border-radius:8px;background:#fff;flex-shrink:0}
+  .qnoimg{width:42px;height:42px;display:flex;align-items:center;justify-content:center;background:var(--gray-bg);border-radius:8px;flex-shrink:0}
+  .qhd .qt{flex:1;min-width:0;font-size:13px;line-height:1.4}
+  .qhd .qs{font-size:11.5px;color:var(--sub);margin-top:1px}
+  .qdel{color:var(--red-dark);font-weight:800;font-size:12px;flex-shrink:0}
+  .itab .ic{width:38px;height:38px;object-fit:contain;border:1px solid var(--line);border-radius:6px;background:#fff}
+  /* 로그인 화면 — 카카오 안내 */
+  .kakao{margin-top:12px;background:#FEE500;border-radius:12px;padding:12px 14px;text-align:center}
+  .kakao .kk-t{font-size:13px;font-weight:800;color:#3C1E1E;margin-bottom:4px}
+  .kakao a{font-size:12.5px;font-weight:700;color:#3C1E1E;text-decoration:underline;word-break:break-all}
+  /* 개선요청 게시판 */
+  .bdrow{width:100%;text-align:left;padding:12px 0;border-top:1px solid var(--line)}
+  .bdrow:first-child{border-top:none}
+  .bdrow h4{font-size:14.5px;font-weight:800;margin:4px 0 2px}
+  .bdrow .bm{font-size:12px;color:var(--sub)}
+  .bdbody{white-space:pre-wrap;font-size:14px;line-height:1.55}
+  .reply{background:var(--blue-bg);border-radius:10px;padding:10px 12px;margin-top:8px}
+  .reply .who{font-size:12px;font-weight:800;color:var(--blue);margin-bottom:2px}
   .togrow{display:flex;align-items:center;gap:10px;background:var(--gray-bg);border-radius:12px;padding:11px 13px;margin-bottom:8px}
   .togrow .tl{flex:1;font-weight:800;font-size:14px}
   .togrow .tl div{font-size:11.5px;color:var(--sub);font-weight:500;margin-top:1px}
@@ -256,6 +288,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
     <div id="loginBuilderWrap" style="display:none">
       <label>시공사 선택</label>
       <select id="lgBuilder"></select>
+      <div class="note" style="margin-top:6px">업체별 전용 접속코드를 받으셨다면 그 코드를 입력하세요.</div>
     </div>
     <div id="loginNameWrap" style="display:none">
       <label>이름 (담당자)</label>
@@ -266,6 +299,13 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
     <button class="btn blk" id="lgBtn" onclick="doLogin()">입장하기</button>
     <div class="login-err" id="lgErr"></div>
     <div class="note" style="margin-top:14px">접속코드는 본사 보수담당자에게 문의하세요.</div>
+
+    <a class="btn sec2 blk" style="text-decoration:none" href="./manual.pdf" target="_blank" rel="noopener">📖 사용 매뉴얼 내려받기 (PDF)</a>
+
+    <div class="kakao">
+      <div class="kk-t">📱 장비 M/T 접수 관련 아래 링크 참고</div>
+      <a href="http://pf.kakao.com/_JExbnj" target="_blank" rel="noopener">http://pf.kakao.com/_JExbnj</a>
+    </div>
   </div>
 </div>
 
@@ -307,8 +347,8 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
 try{
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
   const { getAuth, signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
-  const { getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
-  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion };
+  const { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
+  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion };
 }catch(e){ window.FB_LOAD_ERROR = e.message; }
 window.dispatchEvent(new Event('fb-ready'));
 </script>
@@ -370,6 +410,7 @@ const CAT_ICON    = { '조명':'💡', '타일':'🧱' };
 
 /* 발주 단계 — 도면제공 → 견적 → 확정 → 납품일협의 → 납품·확인서 → 정산 */
 const O_STAGES = ['DRAWING','QUOTE','CONFIRM','SCHED','DELIVERED','SETTLED'];
+const O_LIVE = o => o.stage!=='CANCEL';
 const O_NM = { DRAWING:'도면 제공', QUOTE:'견적 제출', CONFIRM:'검토·확정', SCHED:'납품일 협의', DELIVERED:'납품·확인서', SETTLED:'정산', CANCEL:'취소' };
 const O_WAIT = { DRAWING:'공급사 수량산출·견적 대기', QUOTE:'검토·확정 대기', CONFIRM:'납품일 협의 대기', SCHED:'납품 대기', DELIVERED:'정산 대기', SETTLED:'정산 완료', CANCEL:'취소됨' };
 const O_BADGE = { DRAWING:'b-amber', QUOTE:'b-blue', CONFIRM:'b-amber', SCHED:'b-blue', DELIVERED:'b-amber', SETTLED:'b-green', CANCEL:'b-gray' };
@@ -378,6 +419,27 @@ const DEFAULT_O_SLA = { DRAWING:5, QUOTE:3, CONFIRM:3, SCHED:7, DELIVERED:30 };
 const oConfirmer = o => o.type==='직영점' ? 'GRS 공사담당' : '시공사 현장소장';
 const O_OWNER = (o) => ({ DRAWING:'공급사', QUOTE:oConfirmer(o), CONFIRM:'시공사·공급사', SCHED:'공급사', DELIVERED:'GRS 담당' }[o.stage] || '');
 const oSettleNm = o => o.type==='직영점' ? '월단위 정산' : '개별 정산 (대금지급)';
+/* 공급사가 대금을 청구하는 상대 */
+const oBillTo = o => o.type==='직영점' ? '롯데GRS 본사' : o.builder;
+const oBillNote = o => o.type==='직영점' ? '본사 일괄 청구 (월단위)' : '시공사 개별 청구';
+
+/* 표준 품목 마스터 (spec.js) — 견적 화면에서 필요할 때만 불러온다 */
+let specLoading = null;
+function loadSpec(){
+  if(window.SPEC_MASTER) return Promise.resolve(true);
+  if(specLoading) return specLoading;
+  specLoading = new Promise(res=>{
+    const s = document.createElement('script');
+    s.src = './spec.js?v=1';
+    s.onload = ()=>res(!!window.SPEC_MASTER);
+    s.onerror = ()=>{ console.warn('spec.js 로드 실패'); res(false); };
+    document.head.appendChild(s);
+  });
+  return specLoading;
+}
+const specList = cat => (window.SPEC_MASTER||[]).filter(x=>x.g===cat);
+const specFind = (cat, code) => (window.SPEC_MASTER||[]).find(x=>x.g===cat && x.c===code);
+const FREIGHT_AREAS = ['수도권','충청','전라','경상'];
 
 /* 접수 유형 — 일반 보수 / 오픈 직후 추가요청 */
 const REQ_KIND_NM = { fix:'보수공사', open:'오픈 직후 추가요청' };
@@ -459,8 +521,10 @@ const state = {
   /* 발주 시스템 */
   orders:[], orderId:null, oFilter:'ALL', oCat:'ALL', oq:'', settleMonth:null,
   unsubOrders:null, ordersReady:false, orderErr:null, prevOrderSig:{}, ordersInit:false,
+  /* 개선요청 게시판 */
+  posts:[], postId:null, bdFilter:'ALL', unsubPosts:null,
   cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE,
-        builders:[...DEFAULT_BUILDERS], osla:{...DEFAULT_O_SLA} },
+        builders:[...DEFAULT_BUILDERS], osla:{...DEFAULT_O_SLA}, builderCodes:{} },
   reqs:[], ready:false, dbError:null,
   chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:'',
   chatNoti:false, lastSeen:{}, prevRoomTs:{}, roomsInit:false,
@@ -478,7 +542,12 @@ const MAX_FILE_CHARS = 900000;
 /* ================= 저장소 계층 (Firestore / 데모 메모리) ================= */
 let fs=null;
 /* 첨부파일 경로 — 'O:발주번호'는 orders 컬렉션, 그 외는 requests 컬렉션 */
-const filesPath = key => String(key).startsWith('O:') ? ['orders', String(key).slice(2)] : ['requests', String(key)];
+const filesPath = key => {
+  const k = String(key);
+  if(k.startsWith('O:')) return ['orders', k.slice(2)];
+  if(k.startsWith('B:')) return ['posts',  k.slice(2)];
+  return ['requests', k];
+};
 function waitFB(ms=12000){
   return new Promise((res,rej)=>{
     const check = ()=>{ if(window.FB) res(); else rej(new Error(window.FB_LOAD_ERROR||'SDK 로드 실패 — 인터넷 연결을 확인하세요')); };
@@ -502,6 +571,7 @@ const store = {
           state.cfg.sla = Object.assign({...DEFAULT_SLA}, c.sla||{});
           if(Array.isArray(c.stores)&&c.stores.length) state.cfg.stores=c.stores.map(x=>String(x).trim()).filter(Boolean);
           if(Array.isArray(c.builders)&&c.builders.length) state.cfg.builders=c.builders.map(x=>String(x).trim()).filter(Boolean);
+          state.cfg.builderCodes = c.builderCodes || {};
           state.cfg.osla = Object.assign({...DEFAULT_O_SLA}, c.osla||{});
           if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor.map(x=>Array.isArray(x)?[String(x[0]),+x[1]]:[String(x.j),+x.r]);
           if(c.laborNote) state.cfg.laborNote=c.laborNote;
@@ -583,6 +653,21 @@ const store = {
     }
     return filesCache[reqId]||[];
   },
+  /* 첨부파일 삭제 — 잘못 올린 사진을 지운다 */
+  async deleteFile(reqId, file){
+    if(LIVE){
+      const [c,d] = filesPath(reqId);
+      const snap = await FB.getDocs(FB.collection(fs,c,d,'files'));
+      const hit = snap.docs.find(x=>{
+        const v = x.data();
+        return v.ts===file.ts && v.kind===file.kind && v.name===file.name;
+      });
+      if(hit) await FB.deleteDoc(FB.doc(fs,c,d,'files',hit.id));
+    }
+    const arr = filesCache[reqId]||[];
+    const i = arr.findIndex(f=>f.ts===file.ts && f.kind===file.kind && f.name===file.name);
+    if(i>=0) arr.splice(i,1);
+  },
   /* 실시간 구독 — 다른 사람이 올린 사진·견적서가 새로고침 없이 바로 보인다 */
   subscribeFiles(reqId, cb){
     if(!LIVE){ filesLoaded[reqId]=true; cb(); return ()=>{}; }
@@ -625,6 +710,26 @@ const store = {
       Object.assign(o, patch);
       if(histEntry) (o.history=o.history||[]).push(histEntry);
     }
+  },
+  /* ---- 개선요청 게시판 ---- */
+  async savePost(p){
+    if(LIVE) await FB.setDoc(FB.doc(fs,'posts',p.id), p);
+    else state.posts.unshift(p);
+  },
+  async updatePost(id, patch){
+    if(LIVE) await FB.updateDoc(FB.doc(fs,'posts',id), patch);
+    const p = (state.posts||[]).find(x=>x.id===id);
+    if(p) Object.assign(p, patch);
+  },
+  async addReply(id, r){
+    if(LIVE) await FB.updateDoc(FB.doc(fs,'posts',id), {replies:FB.arrayUnion(r)});
+    const p = (state.posts||[]).find(x=>x.id===id);
+    if(p) (p.replies=p.replies||[]).push(r);
+  },
+  async deletePost(id){
+    if(LIVE) await FB.deleteDoc(FB.doc(fs,'posts',id));
+    const i = (state.posts||[]).findIndex(x=>x.id===id);
+    if(i>=0) state.posts.splice(i,1);
   },
   /* ---- 채팅 ---- */
   subscribeRooms(cb){
@@ -679,6 +784,18 @@ function subscribeReqs(onReqs){
     state.ready = true; state.dbError=null;
     onReqs();
   }, err=>{ state.dbError = err.code||String(err); state.ready=true; onReqs(); });
+}
+
+/* 개선요청 게시판 구독 — 모든 사용자 공통 */
+function subscribePosts(cb){
+  if(!LIVE || !state.user) return;
+  if(state.unsubPosts){ try{state.unsubPosts()}catch(e){} state.unsubPosts=null; }
+  cb = cb || (()=>{ if(['board','post'].includes(state.view) && !modalOpen()) render(); else renderNav(); });
+  try{
+    state.unsubPosts = FB.onSnapshot(FB.query(FB.collection(fs,'posts'), FB.orderBy('ts','desc'), FB.limit(300)),
+      snap=>{ state.posts = snap.docs.map(d=>d.data()); cb(); },
+      err=>{ console.warn('posts', err); state.posts = state.posts||[]; cb(); });
+  }catch(e){ console.warn('posts', e); }
 }
 
 /* 발주건 실시간 구독 — 공급사·시공사는 자기 건만 받는다 */
@@ -890,6 +1007,24 @@ function seed(){
                      {kind:'osign',name:'납품확인_서명.png',data:osign(),ts:daysAgo(38)}]);
   const pc = { 'O-2607-L003':3, 'O-2607-L004':2, 'O-2606-T003':1 };
   state.orders.forEach(o=>{ if(o.receipt && pc[o.id]) o.receipt.photoCount = pc[o.id]; });
+  seedPosts();
+}
+/* 게시판 데모 데이터 */
+function seedPosts(){
+  state.posts = [
+    { id:'B-2608-A1B2', ts:daysAgo(2), author:'점포(롯데리아 강남역점)', role:'store', app:'bosu',
+      type:'🐞 오류 신고', title:'접수할 때 사진 올리면 제목이 지워집니다', status:'DONE', photoCount:0,
+      text:'신규 접수 화면에서 제목과 내용을 먼저 쓰고 사진을 추가하면 위에 쓴 내용이 전부 사라집니다.\n사진을 먼저 올리고 내용을 쓰면 괜찮습니다.',
+      replies:[{ts:daysAgo(1), author:'본사담당(김본사)', role:'hq',
+        text:'확인 후 수정 완료했습니다. 이제 작성 중인 내용이 자동 임시저장되어 앱을 껐다 켜도 이어서 쓸 수 있습니다. 불편 드려 죄송합니다.'}] },
+    { id:'B-2608-C3D4', ts:daysAgo(1), author:'토마토세븐(김기사)', role:'vendor', app:'bosu',
+      type:'💡 개선 제안', title:'실측 일정 등록할 때 지난 날짜도 선택되면 좋겠습니다', status:'DOING', photoCount:0,
+      text:'현장에서 이미 실측을 마치고 나중에 등록하는 경우가 있는데, 지난 날짜가 선택이 안 돼서 오늘 날짜로 넣고 있습니다.',
+      replies:[{ts:daysAgo(0.5), author:'본사담당(김본사)', role:'hq', text:'확인했습니다. 다음 업데이트에 반영하겠습니다.'}] },
+    { id:'B-2608-E5F6', ts:daysAgo(0.3), author:'에이프러스(영업팀)', role:'supplier', app:'order',
+      type:'❓ 사용 문의', title:'견적서에 운반비는 어디에 넣나요?', status:'OPEN', photoCount:0,
+      text:'조명 운임료가 지역별로 다른데 품목으로 넣어야 하는지 따로 넣는 칸이 있는지 궁금합니다.', replies:[] }
+  ];
 }
 
 /* ===== 발주 데모 데이터 ===== */
@@ -1094,7 +1229,8 @@ function saveChatPrefs(){
 }
 function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; state.prevOrderSig={}; state.ordersInit=false;
   if(state.unsubOrders){ try{state.unsubOrders()}catch(e){} state.unsubOrders=null; }
-  state.orders=[]; stopDetailFiles(); clearDraft(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
+  if(state.unsubPosts){ try{state.unsubPosts()}catch(e){} state.unsubPosts=null; }
+  state.orders=[]; state.posts=[]; stopDetailFiles(); clearDraft(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
 
 let pickedRole=null;
 function pickRole(r){
@@ -1127,9 +1263,12 @@ function doLogin(){
     else if(code === state.cfg.codes.supplier2) co = '우석타일';
     else { err('접속코드가 올바르지 않습니다'); return; }
   } else if(pickedRole==='builder'){
-    if(code !== state.cfg.codes.builder){ err('접속코드가 올바르지 않습니다'); return; }
     co = document.getElementById('lgBuilder').value;
     if(!co){ err('시공사를 선택해주세요'); return; }
+    const own = (state.cfg.builderCodes||{})[co];
+    /* 업체 전용코드가 있으면 그것만, 아직 없으면 공용코드 허용 */
+    if(own){ if(code !== own){ err('접속코드가 올바르지 않습니다'); return; } }
+    else if(code !== state.cfg.codes.builder){ err('접속코드가 올바르지 않습니다'); return; }
   } else if(code !== state.cfg.codes[pickedRole]){ err('접속코드가 올바르지 않습니다'); return; }
   let name='', storeNm='';
   if(pickedRole==='store'){
@@ -1142,7 +1281,7 @@ function doLogin(){
   state.user = {role:pickedRole, name, store:storeNm, co:co||''};
   saveSession();
   document.getElementById('login').classList.remove('open');
-  if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); subscribeOrders(); }
+  if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); }
   loadChatPrefs(); ensureRooms();
   state.app = myApps()[0]; state.view = state.app==='order'?'odash':'dash'; render();
 }
@@ -1174,8 +1313,8 @@ function setRole(r){
   state.user = { role:r, name:nm, store:r==='store'?state.cfg.stores[0]:'', co };
   if(!canApp(state.app)) state.app = myApps()[0];
   const allowed = state.app==='order'
-    ? ['odash','olist','odetail','chat','chatroom'].concat(r==='hq'?['onew','settle','set']:[])
-    : ['dash','list','detail','chat','chatroom'].concat(r==='store'?['new']:[]).concat(r==='hq'?['set']:[]);
+    ? ['odash','olist','odetail','chat','chatroom','board','post'].concat(r==='hq'?['onew','settle','set']:[]).concat(r==='supplier'?['settle']:[])
+    : ['dash','list','detail','chat','chatroom','board','post'].concat(r==='store'?['new']:[]).concat(r==='hq'?['set']:[]);
   if(!allowed.includes(state.view)) state.view = state.app==='order'?'odash':'dash';
   render();
 }
@@ -1199,7 +1338,7 @@ function ensureRooms(){
 function goList(filter){ state.filter=filter; state.q=''; go('list'); }
 function go(v,id){
   if(state.view==='chatroom' && v!=='chatroom' && state.unsubMsgs){ try{state.unsubMsgs()}catch(e){} state.unsubMsgs=null; }
-  const wantKey = v==='detail' ? id : v==='odetail' ? 'O:'+(id||state.orderId) : null;
+  const wantKey = v==='detail' ? id : v==='odetail' ? 'O:'+(id||state.orderId) : v==='post' ? 'B:'+state.postId : null;
   if(!(wantKey && wantKey===state.filesFor)) stopDetailFiles();
   state.view = v;
   if(v==='odetail') state.orderId = id || state.orderId;
@@ -1235,7 +1374,8 @@ function loadDetailFiles(id){
   state.filesFor = id;
   state.unsubFiles = store.subscribeFiles(id, ()=>{
     const stillHere = (state.view==='detail' && state.detailId===id) ||
-                      (state.view==='odetail' && ('O:'+state.orderId)===id);
+                      (state.view==='odetail' && ('O:'+state.orderId)===id) ||
+                      (state.view==='post' && ('B:'+state.postId)===id);
     if(stillHere && !modalOpen()) render();
   });
 }
@@ -1299,6 +1439,8 @@ function render(){
   else if(state.view==='odetail') m.innerHTML = vODetail();
   else if(state.view==='onew'){ if(!document.getElementById('oSite')) m.innerHTML = vONew(); }
   else if(state.view==='settle') m.innerHTML = vSettle();
+  else if(state.view==='board') m.innerHTML = vBoard();
+  else if(state.view==='post') m.innerHTML = vPost();
 
   const cmtEl2 = document.getElementById('cmtIn');
   if(cmtEl2 && cmtVal) cmtEl2.value = cmtVal;
@@ -1317,16 +1459,22 @@ function renderNav(){
   if(!state.user) return;
   const un = unreadRooms();
   const chatLabel = '💬 채팅' + (un?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${un}</span>`:'');
+  const newPosts = role()==='hq' ? (state.posts||[]).filter(p=>p.status==='OPEN').length : 0;
+  const bdLabel = '🛠 개선요청' + (newPosts?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${newPosts}</span>`:'');
   let tabs, alias;
   if(state.app==='order'){
     tabs = [ ['odash','대시보드'], ['olist','발주 목록'], ['chat',chatLabel] ];
-    if(role()==='hq'){ tabs.splice(2,0,['onew','+ 발주 등록']); tabs.push(['settle','정산']); tabs.push(['set','설정']); }
-    alias = { odetail:'olist', chatroom:'chat' };
+    if(role()==='hq'){ tabs.splice(2,0,['onew','+ 발주 등록']); tabs.push(['settle','정산']); }
+    else if(role()==='supplier') tabs.push(['settle','정산·청구']);
+    tabs.push(['board', bdLabel]);
+    if(role()==='hq') tabs.push(['set','설정']);
+    alias = { odetail:'olist', chatroom:'chat', post:'board' };
   } else {
     tabs = [ ['dash','대시보드'], ['list','접수 목록'], ['chat',chatLabel] ];
     if(role()==='store') tabs.push(['new','+ 신규 접수']);
+    tabs.push(['board', bdLabel]);
     if(role()==='hq') tabs.push(['set','설정']);
-    alias = { detail:'list', chatroom:'chat' };
+    alias = { detail:'list', chatroom:'chat', post:'board' };
   }
   document.getElementById('nav').innerHTML = tabs.map(([v,t])=>
     `<button class="${(state.view===v || alias[state.view]===v)?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
@@ -1578,6 +1726,25 @@ function openFile(reqId, i){
 }
 const FILE_ICON = n => /\.xlsx?$/i.test(n||'') ? '📊' : /\.pdf$/i.test(n||'') ? '📕' : /\.(png|jpe?g|webp|heic)$/i.test(n||'') ? '🖼' : '📎';
 /* 견적서·첨부파일 목록 (다운로드 / 열기) */
+/* 첨부파일을 지울 수 있는 사람 — 본사담당, 또는 올린 본인 */
+function canDelFile(reqId, f){
+  if(role()==='hq') return true;
+  const me = actorLabel();
+  if(f.by && f.by===me) return true;
+  const isOrder = String(reqId).startsWith('O:');
+  if(isOrder){
+    const o = O(String(reqId).slice(2));
+    if(!o) return false;
+    if(role()==='supplier' && o.supplier===myCo()) return ['quote'].includes(f.kind);
+    if(role()==='builder'  && o.builder===myCo())  return ['delivery'].includes(f.kind);
+    return false;
+  }
+  const r = R(reqId);
+  if(!r) return false;
+  if(role()==='store'  && r.store===state.user.store) return ['photo'].includes(f.kind);
+  if(role()==='vendor' && reqVendor(r)===myCo())      return ['survey','estimate','estimate-file','done'].includes(f.kind);
+  return false;
+}
 function fileListHtml(reqId, kinds, label){
   const all = filesCache[reqId]||[];
   const rows = [];
@@ -1585,14 +1752,50 @@ function fileListHtml(reqId, kinds, label){
     if(!kinds.includes(f.kind)) return;
     const kb = f.data ? Math.max(1, Math.round(f.data.length*0.75/1024)) : 0;
     rows.push(`<div class="filerow">
-      <span class="fname">${FILE_ICON(f.name)} ${esc(f.name||'첨부파일')}<span class="fmeta">${kb}KB · ${fmtDT(f.ts)}</span></span>
+      <span class="fname">${FILE_ICON(f.name)} ${esc(f.name||'첨부파일')}<span class="fmeta">${kb}KB · ${fmtDT(f.ts)}${f.by?' · '+esc(f.by):''}</span></span>
       <span class="facts">
         <button class="btn sec2 sm" onclick="openFile('${reqId}',${i})">열기</button>
         <button class="btn sm dl" onclick="dlFile('${reqId}',${i})">⬇ 다운로드</button>
+        ${canDelFile(reqId,f)?`<button class="btn sm delx" onclick="delFile('${reqId}',${i})">🗑</button>`:''}
       </span></div>`);
   });
   if(!rows.length) return '';
   return `<div class="filebox"><div class="filehd">${label}</div>${rows.join('')}</div>`;
+}
+/* 첨부파일 삭제 */
+async function delFile(reqId, i){
+  const f = fileAt(reqId, i);
+  if(!f){ toast('파일을 찾을 수 없습니다'); return; }
+  if(!canDelFile(reqId, f)){ toast('삭제 권한이 없습니다'); return; }
+  if(!confirm(`「${f.name||'첨부파일'}」을(를) 삭제할까요?\n삭제하면 되돌릴 수 없습니다.`)) return;
+  try{
+    await store.deleteFile(reqId, f);
+    /* 사진 장수 보정 */
+    const isOrder = String(reqId).startsWith('O:');
+    if(isOrder){
+      const o = O(String(reqId).slice(2));
+      if(o && f.kind==='delivery' && o.receipt){
+        const n = (filesCache[reqId]||[]).filter(x=>x.kind==='delivery').length;
+        try{ await store.updateOrder(o.id, {receipt:Object.assign({}, o.receipt, {photoCount:n})}, oEntry(`납품 사진 1장 삭제 (${esc(f.name||'')})`)); }catch(e){}
+      } else if(o && f.kind==='drawing'){
+        const n = (filesCache[reqId]||[]).filter(x=>x.kind==='drawing').length;
+        try{ await store.updateOrder(o.id, {drawingCount:n}, oEntry(`도면 1매 삭제`)); }catch(e){}
+      }
+    } else {
+      const r = R(reqId);
+      if(r && f.kind==='photo'){
+        const n = (filesCache[reqId]||[]).filter(x=>x.kind==='photo').length;
+        try{ await store.updateRequest(reqId, {photoCount:n}, {ts:now(),actor:actorLabel(),action:'접수 사진 1장 삭제'}); }catch(e){}
+      }
+    }
+    toast('삭제되었습니다');
+    if(!modalOpen()) render();
+  }catch(e){ toast('삭제 실패: '+(e.code||e.message)); }
+}
+/* 사진 크게보기에서 바로 삭제 */
+async function delFileFromView(reqId, i){
+  await delFile(reqId, i);
+  closeModal();
 }
 function vDetail(){
   const r = R(state.detailId); if(!r) return '<div class="empty">접수 건을 찾을 수 없습니다</div>';
@@ -1781,6 +1984,7 @@ function viewImg(i, key){
       <button class="btn sec2" style="flex:1" onclick="openFile('${id}',${i})">새 창에서 열기</button>
       <button class="btn dl" style="flex:1.3" onclick="dlFile('${id}',${i})">⬇ 다운로드</button>
     </div>
+    ${canDelFile(id,f)?`<button class="btn blk delx" onclick="delFileFromView('${id}',${i})">🗑 이 사진 삭제</button>`:''}
     <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
 }
 
@@ -1971,7 +2175,7 @@ async function submitNew(){
     /* 사진은 1장씩 따로 저장 — 한 장이 실패해도 접수 자체는 살리고, 실제 저장된 장수를 기록한다 */
     let saved = 0, failed = 0;
     for(let i=0;i<photos.length;i++){
-      try{ await store.addFile(id,{kind:'photo',name:`photo_${i+1}.jpg`,data:photos[i],ts:now()}); saved++; }
+      try{ await store.addFile(id,{kind:'photo',name:`photo_${i+1}.jpg`,data:photos[i],ts:now(),by:actorLabel()}); saved++; }
       catch(fe){ failed++; console.warn('photo save', fe); }
     }
     if(saved !== photos.length){
@@ -2330,7 +2534,7 @@ async function pickSurveyPhotos(id, inp){
   toast('사진 업로드 중…');
   let n=0;
   for(const f of files){
-    try{ const p = await compressImage(f); await store.addFile(id,{kind:'survey',name:'survey.jpg',data:p,ts:now()}); n++; }
+    try{ const p = await compressImage(f); await store.addFile(id,{kind:'survey',name:'survey.jpg',data:p,ts:now(),by:actorLabel()}); n++; }
     catch(e){ toast('사진 처리 실패: '+f.name); }
   }
   if(n) await store.updateRequest(id, {}, {ts:now(),actor:actorLabel(),action:`실측 사진 ${n}장 업로드`});
@@ -2919,6 +3123,7 @@ function vSet(){
       <input id="addBdIn" placeholder="새 시공사명 추가">
       <button class="btn sm" style="flex-shrink:0" onclick="addBuilder()">추가</button>
     </div>
+    <button class="btn sec2 blk" onclick="allBuilderCodes()">📋 접속코드 전체 보기 (엑셀 복사용)</button>
   </div>
   <div class="card">
     <div class="h2">📦 조명·타일 공급사</div>
@@ -2972,11 +3177,71 @@ async function addStore(){ const v=document.getElementById('addStoreIn').value.t
 async function delStore(i){ const arr=state.cfg.stores.slice(); arr.splice(i,1); try{ await store.saveConfig({stores:arr}); render(); }catch(e){ toast('저장 실패'); } }
 /* ── 인테리어 시공사 · 발주 SLA ── */
 function builderRowsHtml(){
-  return state.cfg.builders.map((b,i)=>`
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <span style="flex:1;font-size:14px">🏗 ${esc(b)}</span>
-      <button class="btn sec2 sm" onclick="delBuilder(${i})">삭제</button>
-    </div>`).join('') || '<div class="empty" style="padding:14px 0">등록된 시공사가 없습니다</div>';
+  const codes = state.cfg.builderCodes||{};
+  return state.cfg.builders.map((b,i)=>{
+    const c = codes[b] || '';
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="flex:1;font-size:14px;font-weight:700">🏗 ${esc(b)}</span>
+        <button class="btn sec2 sm" onclick="delBuilder(${i})">삭제</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-top:7px">
+        <input value="${esc(c)}" placeholder="공용코드 사용 중 — 전용코드 미발급"
+          style="flex:1;font-size:13px" onchange="setBuilderCode('${esc(b).replace(/'/g,"\\'")}',this.value)">
+        <button class="btn sec2 sm" onclick="genBuilderCode('${esc(b).replace(/'/g,"\\'")}')">발급</button>
+        ${c?`<button class="btn sec2 sm" onclick="copyBuilderCode('${esc(b).replace(/'/g,"\\'")}')">복사</button>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty" style="padding:14px 0">등록된 시공사가 없습니다</div>';
+}
+/* 시공사 전용 접속코드 — 자동 발급 / 직접 입력 둘 다 가능 */
+function makeBuilderCode(){
+  const CH='ACDEFGHJKLMNPQRTUVWXY34679';   // 헷갈리는 글자(0,O,1,I,S,5,B,8,2,Z) 제외
+  let s=''; for(let i=0;i<6;i++) s+=CH[Math.floor(Math.random()*CH.length)];
+  return 'BLD-'+s.slice(0,3)+'-'+s.slice(3);
+}
+async function genBuilderCode(b){
+  const codes = {...(state.cfg.builderCodes||{})};
+  const cur = codes[b];
+  if(cur && !confirm(`「${b}」의 접속코드를 새로 발급할까요?\n기존 코드(${cur})는 즉시 사용할 수 없게 됩니다.`)) return;
+  let c; const used = Object.values(codes);
+  do { c = makeBuilderCode(); } while(used.includes(c));
+  codes[b] = c;
+  try{ await store.saveConfig({builderCodes:codes}); toast(`${b} 코드 발급: ${c}`); render(); }
+  catch(e){ toast('저장 실패'); }
+}
+async function setBuilderCode(b, v){
+  const codes = {...(state.cfg.builderCodes||{})};
+  const val = String(v||'').trim();
+  if(!val){ delete codes[b]; }
+  else {
+    const dup = Object.entries(codes).find(([k,c])=>k!==b && c===val);
+    if(dup){ toast(`${dup[0]}와 코드가 중복됩니다`); render(); return; }
+    codes[b] = val;
+  }
+  try{ await store.saveConfig({builderCodes:codes}); toast(val?'코드가 변경되었습니다':'전용코드를 해제했습니다 (공용코드 사용)'); render(); }
+  catch(e){ toast('저장 실패'); }
+}
+function copyBuilderCode(b){
+  const c = (state.cfg.builderCodes||{})[b] || '';
+  const txt = `[GRS 보수ON] ${b} 접속 안내\n주소: ${location.origin+location.pathname}\n소속: 인테리어 시공사 → ${b}\n접속코드: ${c}`;
+  try{
+    navigator.clipboard.writeText(txt);
+    toast('안내 문구가 복사되었습니다');
+  }catch(e){
+    openModal(`<h2>${esc(b)} 접속 안내</h2><div class="note">아래 내용을 복사해 업체에 전달하세요.</div>
+      <textarea rows="5" onclick="this.select()">${esc(txt)}</textarea>
+      <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
+  }
+}
+/* 전체 코드 안내문 한 번에 만들기 */
+function allBuilderCodes(){
+  const codes = state.cfg.builderCodes||{};
+  const rows = state.cfg.builders.map(b=>`${b}\t${codes[b]||'(공용코드 사용)'}`).join('\n');
+  openModal(`<h2>시공사 접속코드 전체</h2>
+    <div class="note">엑셀에 붙여넣을 수 있습니다. 각 업체에는 담당 코드만 전달하세요.</div>
+    <textarea rows="12" onclick="this.select()">${esc('업체명\t접속코드\n'+rows)}</textarea>
+    <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
 }
 async function addBuilder(){
   const el = document.getElementById('addBdIn');
@@ -3087,6 +3352,152 @@ function renderNotis(){
 }
 
 /* ══════════════════════════════════════════════════════════
+   개선요청 게시판 — 누구나 오류·개선사항을 올린다
+   ══════════════════════════════════════════════════════════ */
+const BD_TYPES = ['🐞 오류 신고','💡 개선 제안','❓ 사용 문의','📌 기타'];
+const BD_ST = { OPEN:'접수', DOING:'확인중', DONE:'처리완료', HOLD:'보류' };
+const BD_BADGE = { OPEN:'b-amber', DOING:'b-blue', DONE:'b-green', HOLD:'b-gray' };
+
+function vBoard(){
+  const list = (state.posts||[]).slice().sort((a,b)=>b.ts-a.ts);
+  const mine = list.filter(p=>p.author===actorLabel()).length;
+  const openN = list.filter(p=>p.status!=='DONE').length;
+  const f = state.bdFilter||'ALL';
+  const shown = f==='ALL' ? list : f==='MINE' ? list.filter(p=>p.author===actorLabel()) : list.filter(p=>p.status===f);
+  return roleNote()+`
+  <div class="card">
+    <div class="h2">🛠 오류 신고 · 개선 제안</div>
+    <div class="note" style="margin:0 0 10px">쓰면서 불편했던 점, 안 되는 기능, 있었으면 하는 기능을 자유롭게 남겨주세요.
+      본사 담당자가 확인 후 답변드립니다. 전체 ${list.length}건 · 처리 대기 ${openN}건</div>
+    <button class="btn blk" style="margin-top:0" onclick="bdWrite()">✏ 새 글 쓰기</button>
+    <div class="chips" style="margin-top:12px">
+      ${[['ALL','전체'],['OPEN','접수'],['DOING','확인중'],['DONE','처리완료'],['MINE',`내 글 ${mine}`]]
+        .map(([k,t])=>`<button class="${f===k?'on':''}" onclick="state.bdFilter='${k}';render()">${t}</button>`).join('')}
+    </div>
+    ${shown.length ? shown.map(p=>`
+      <button class="bdrow" onclick="bdOpen('${p.id}')">
+        <div class="oline">
+          <span class="badge ${BD_BADGE[p.status]||'b-gray'}">${BD_ST[p.status]||p.status}</span>
+          <span class="badge b-gray">${esc(p.type||'')}</span>
+          ${(p.replies||[]).length?`<span class="badge b-blue">답변 ${(p.replies||[]).length}</span>`:''}
+        </div>
+        <h4>${esc(p.title)}</h4>
+        <div class="bm">${esc(p.author)} · ${fmtDT(p.ts)}${p.photoCount?` · 📷 ${p.photoCount}`:''}</div>
+      </button>`).join('') : '<div class="empty">해당하는 글이 없습니다</div>'}
+  </div>`;
+}
+let bdPhotos = [];
+function bdWrite(){
+  bdPhotos = [];
+  openModal(`<h2>오류 신고 · 개선 제안</h2>
+    <div class="sub">${esc(actorLabel())} 이름으로 등록됩니다</div>
+    <label>구분</label>
+    <select id="bdType">${BD_TYPES.map(t=>`<option>${t}</option>`).join('')}</select>
+    <label>제목</label>
+    <input id="bdTitle" placeholder="예) 사진 올리면 접수 내용이 지워집니다">
+    <label>내용</label>
+    <textarea id="bdText" rows="5" placeholder="어떤 화면에서, 무엇을 했을 때, 어떻게 되었는지 적어주시면 빠르게 확인할 수 있습니다."></textarea>
+    <label>화면 사진 (선택)</label>
+    <input type="file" id="bdF" accept="image/*" multiple style="display:none" onchange="bdPickPhotos(this)">
+    <button class="file-add" onclick="document.getElementById('bdF').click()">📷 화면 캡처 첨부</button>
+    <div class="photos" id="bdPrev"></div>
+    <button class="btn blk" onclick="bdSave()">등록</button>`);
+}
+async function bdPickPhotos(inp){
+  for(const f of [...inp.files]){
+    try{ bdPhotos.push(await compressImage(f, 900, 0.6)); }catch(e){ toast('사진 처리 실패'); }
+  }
+  inp.value='';
+  const el=document.getElementById('bdPrev');
+  if(el) el.innerHTML = bdPhotos.map((p,i)=>`<span style="position:relative;display:inline-block"><img src="${p}">
+    <button onclick="bdDelPhoto(${i})" style="position:absolute;top:-5px;right:-5px;width:22px;height:22px;border-radius:50%;background:var(--red);color:#fff;font-size:13px;font-weight:800;line-height:1">×</button></span>`).join('');
+}
+function bdDelPhoto(i){ bdPhotos.splice(i,1); bdPickPhotos({files:[], value:''}); }
+async function bdSave(){
+  const title = document.getElementById('bdTitle').value.trim();
+  const text = document.getElementById('bdText').value.trim();
+  if(!title){ toast('제목을 입력해주세요'); return; }
+  if(!text){ toast('내용을 입력해주세요'); return; }
+  const d = new Date();
+  const id = `B-${String(d.getFullYear()).slice(2)}${pad2(d.getMonth()+1)}-${rnd4()}`;
+  const post = { id, ts:now(), author:actorLabel(), role:role(), app:state.app,
+    type:document.getElementById('bdType').value, title, text, status:'OPEN',
+    replies:[], photoCount:bdPhotos.length };
+  try{
+    await store.savePost(post);
+    for(let i=0;i<bdPhotos.length;i++){
+      try{ await store.addFile('B:'+id, {kind:'shot', name:`화면_${i+1}.jpg`, data:bdPhotos[i], ts:now(), by:actorLabel()}); }catch(e){}
+    }
+    filesLoaded['B:'+id]=true;
+    bdPhotos=[];
+    closeModal(); toast('등록되었습니다. 확인 후 답변드리겠습니다');
+    go('board');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function bdOpen(id){
+  state.postId = id;
+  go('post');
+  loadDetailFiles('B:'+id);
+}
+function vPost(){
+  const p = (state.posts||[]).find(x=>x.id===state.postId);
+  if(!p) return '<div class="empty">글을 찾을 수 없습니다</div>';
+  const isHq = role()==='hq';
+  const mine = p.author===actorLabel();
+  return `<button class="back" onclick="go('board')">← 목록으로</button>
+  <div class="card">
+    <div class="oline">
+      <span style="font-size:12px;color:var(--sub);font-weight:700">${p.id}</span>
+      <span class="badge ${BD_BADGE[p.status]||'b-gray'}">${BD_ST[p.status]||p.status}</span>
+      <span class="badge b-gray">${esc(p.type||'')}</span>
+    </div>
+    <h3 style="font-size:18px;font-weight:800;margin-top:6px">${esc(p.title)}</h3>
+    <div style="color:var(--sub);font-size:13px">${esc(p.author)} · ${fmtDT(p.ts)}</div>
+    <div class="sec"><div class="bdbody">${esc(p.text)}</div>
+      ${photosHtml('B:'+p.id,'shot')}
+      ${fileListHtml('B:'+p.id, ['shot'], '첨부 화면')}
+    </div>
+    <div class="sec"><div class="st">💬 답변 <span class="badge b-gray">${(p.replies||[]).length}</span></div>
+      ${(p.replies||[]).length ? p.replies.map(r=>`<div class="reply"><div class="who">${esc(r.author)} · ${fmtDT(r.ts)}</div><div class="bdbody">${esc(r.text)}</div></div>`).join('')
+        : '<div class="note">아직 답변이 없습니다.</div>'}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="bdReply" placeholder="${isHq?'답변을 입력하세요':'추가 설명을 남길 수 있습니다'}">
+        <button class="btn sm" style="flex-shrink:0" onclick="bdAddReply('${p.id}')">등록</button>
+      </div>
+    </div>
+    ${isHq?`<div class="sec"><div class="st">🔧 처리 상태</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${Object.keys(BD_ST).map(k=>`<button class="btn ${p.status===k?'':'sec2'} sm" onclick="bdSetStatus('${p.id}','${k}')">${BD_ST[k]}</button>`).join('')}
+      </div></div>`:''}
+    ${(isHq||mine)?`<div style="margin-top:14px;text-align:right">
+      <button style="font-size:12.5px;color:var(--red-dark);font-weight:800" onclick="bdDelete('${p.id}')">🗑 글 삭제</button></div>`:''}
+  </div>`;
+}
+async function bdAddReply(id){
+  const el = document.getElementById('bdReply');
+  const t = el.value.trim(); if(!t) return;
+  const r = { ts:now(), author:actorLabel(), role:role(), text:t };
+  try{
+    await store.addReply(id, r);
+    el.value='';
+    if(role()==='hq'){
+      const p=(state.posts||[]).find(x=>x.id===id);
+      if(p && p.status==='OPEN') await store.updatePost(id, {status:'DOING'});
+    }
+    render(); toast('답변이 등록되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function bdSetStatus(id, st){
+  try{ await store.updatePost(id, {status:st}); toast(`「${BD_ST[st]}」로 변경했습니다`); render(); }
+  catch(e){ toast('저장 실패'); }
+}
+async function bdDelete(id){
+  if(!confirm('이 글을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  try{ await store.deletePost(id); toast('삭제되었습니다'); go('board'); }
+  catch(e){ toast('삭제 실패: '+(e.code||e.message)); }
+}
+
+/* ══════════════════════════════════════════════════════════
    조명·타일 발주 시스템
    도면제공 → 견적 → 확정 → 납품일협의 → 납품·확인서 → 정산
    ══════════════════════════════════════════════════════════ */
@@ -3096,14 +3507,14 @@ const oRoleNote = () => roleNote();
 function vODash(){
   const list = visibleOrders();
   const cnt = s => list.filter(o=>o.stage===s).length;
-  const over = list.filter(oIsOver);
+  const over = list.filter(o=>O_LIVE(o) && oIsOver(o));
   const thisYm = ymOf(now());
   /* 정산 대기 = 납품 완료됐지만 아직 정산 안 된 건 */
   const pending = list.filter(o=>o.stage==='DELIVERED');
   const pendingAmt = pending.reduce((s,o)=>s+(oAmount(o)||0),0);
   const doneAmt = list.filter(o=>o.stage==='SETTLED' && o.settle && ymOf(o.settle.at)===thisYm)
                       .reduce((s,o)=>s+(oAmount(o)||0),0);
-  const badRcpt = list.filter(o=>o.receipt && o.receipt.allOk===false);
+  const badRcpt = list.filter(o=>O_LIVE(o) && o.receipt && o.receipt.allOk===false);
 
   const tile = (v,label,val,cls) => `<button class="tile ${cls||''}" onclick="oGoList('${v}')">
     <div class="n">${val}</div><div class="t">${label} ›</div></button>`;
@@ -3117,7 +3528,8 @@ function vODash(){
       ${tile('CONFIRM','납품일 협의',cnt('CONFIRM'))}
       ${tile('SCHED','납품 대기',cnt('SCHED'))}
       ${tile('DELIVERED','정산 대기',cnt('DELIVERED'))}
-      ${tile('ALL','전체',list.length)}
+      ${tile('ALL','전체',list.filter(O_LIVE).length)}
+      ${list.some(o=>!O_LIVE(o))?tile('CANCEL','⛔ 중단',list.filter(o=>!O_LIVE(o)).length):''}
     </div>
   </div>
 
@@ -3145,7 +3557,7 @@ function vODash(){
 
   <div class="card">
     <div class="h2">🕒 최근 발주</div>
-    ${list.slice().sort((a,b)=>b.stageAt-a.stageAt).slice(0,6).map(oRow).join('') || '<div class="empty">발주 건이 없습니다</div>'}
+    ${list.filter(O_LIVE).slice().sort((a,b)=>b.stageAt-a.stageAt).slice(0,6).map(oRow).join('') || '<div class="empty">발주 건이 없습니다</div>'}
   </div>`;
 }
 function oGoList(f){ state.oFilter=f; state.oCat='ALL'; state.oq=''; go('olist'); }
@@ -3158,7 +3570,7 @@ function oRow(o){
   return `<button class="card req" onclick="goOrder('${o.id}')">
     <div class="row1">
       <span class="id">${o.id}</span>
-      <span class="badge ${O_BADGE[o.stage]}">${O_WAIT[o.stage]}</span>
+      <span class="badge ${O_BADGE[o.stage]||'b-gray'}">${O_WAIT[o.stage]||o.stage}</span>
       <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
       <span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
       ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
@@ -3170,7 +3582,8 @@ function oRow(o){
 }
 function vOList(){
   let list = visibleOrders();
-  if(state.oFilter!=='ALL') list = list.filter(o=>o.stage===state.oFilter);
+  if(state.oFilter==='ALL') list = list.filter(O_LIVE);          // 중단건은 「⛔ 중단」에서만
+  else list = list.filter(o=>o.stage===state.oFilter);
   if(state.oCat!=='ALL') list = list.filter(o=>o.cat===state.oCat);
   const q = (state.oq||'').trim().toLowerCase();
   if(q) list = list.filter(o=>[o.id,o.site,o.builder,o.supplier].join(' ').toLowerCase().includes(q));
@@ -3183,6 +3596,7 @@ function vOList(){
     <div class="chips" style="margin-top:10px">
       ${chip('ALL','전체',state.oFilter,'oSetFilter')}
       ${O_STAGES.map(s=>chip(s,O_NM[s],state.oFilter,'oSetFilter')).join('')}
+      ${chip('CANCEL','⛔ 중단',state.oFilter,'oSetFilter')}
     </div>
     <div class="chips">
       ${chip('ALL','조명+타일',state.oCat,'oSetCat')}
@@ -3206,16 +3620,22 @@ function oStepper(o){
     return `<div class="step ${done?'done':(i===idx?'cur':'')}"><div class="dot">${done?'✓':i+1}</div>${O_SHORT[s]}</div>`;
   }).join('')}</div>`;
 }
-function itemsTable(items, editable){
+function itemsTable(items, freight){
   const total = items.reduce((s,x)=>s+(x.amount||0),0);
+  const hasImg = items.some(x=>x.img);
+  const grand = total + (freight?freight.amount:0);
   return `<div class="tscroll"><table class="itab">
-    <thead><tr><th>품목</th><th>규격</th><th class="num">단위</th><th class="num">수량</th><th class="num">단가</th><th class="num">금액</th></tr></thead>
+    <thead><tr>${hasImg?'<th></th>':''}<th>품목</th><th>규격</th><th class="num">단위</th><th class="num">수량</th><th class="num">단가</th><th class="num">금액</th></tr></thead>
     <tbody>${items.map(x=>`<tr>
-      <td style="font-weight:700">${esc(x.name)}</td><td style="color:var(--sub)">${esc(x.spec||'')}</td>
+      ${hasImg?`<td>${x.img?`<img class="ic" src="${x.img}" alt="">`:''}</td>`:''}
+      <td style="font-weight:700">${x.code?`<span style="font-size:11px;color:var(--sub);display:block">${esc(x.code)}</span>`:''}${esc(x.name)}</td>
+      <td style="color:var(--sub)">${esc(x.spec||'')}</td>
       <td class="num">${esc(x.unit||'')}</td><td class="num">${Number(x.qty).toLocaleString('ko-KR')}</td>
       <td class="num">${Number(x.price).toLocaleString('ko-KR')}</td><td class="num">${Number(x.amount).toLocaleString('ko-KR')}</td>
-    </tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="5">합계 (${items.length}개 품목)</td><td class="num">${total.toLocaleString('ko-KR')}</td></tr></tfoot>
+    </tr>`).join('')}
+    ${freight?`<tr><td${hasImg?' colspan="2"':''} style="font-weight:700">운반비 <span style="font-size:11px;color:var(--sub);display:block">${esc(freight.area)} · ${esc(freight.note||'')}</span></td>
+      <td colspan="4" class="num"></td><td class="num">${Number(freight.amount).toLocaleString('ko-KR')}</td></tr>`:''}</tbody>
+    <tfoot><tr><td colspan="${(hasImg?6:5)}">합계 (${items.length}개 품목${freight?' + 운반비':''})</td><td class="num">${grand.toLocaleString('ko-KR')}</td></tr></tfoot>
   </table></div>`;
 }
 function oSlaTag(o, stage){
@@ -3257,7 +3677,7 @@ function vODetail(){
       ${o.quote.readyDate?`<div class="kv"><b>납품 가능일</b><strong>${fmtD(o.quote.readyDate)}</strong></div>`:''}
       ${o.quote.fileName?`<div class="kv"><b>첨부</b>📎 ${esc(o.quote.fileName)}</div>`:''}
       ${o.quote.note?`<div class="kv"><b>비고</b>${esc(o.quote.note)}</div>`:''}
-      ${itemsTable(o.quote.items||[])}`;
+      ${itemsTable(o.quote.items||[], o.quote.freight)}`;
     if(o.quote.analysis) s += analysisHtml(o.quote.analysis);
     s += fileListHtml('O:'+o.id, ['quote'], '📥 견적서 파일');
   } else {
@@ -3352,18 +3772,25 @@ function vODetail(){
     ${(o.history||[]).slice().sort((a,b)=>b.ts-a.ts).map(h=>`<div class="hitem"><div>${esc(h.actor)} — ${esc(h.action)}</div><div class="ts">${fmtDT(h.ts)}</div></div>`).join('')}
   </div></div>`;
 
-  const overWarn = oIsOver(o) ? `<div class="note warn" style="margin-bottom:10px">⚠ 「${O_NM[o.stage]}」 단계가 처리기한을 ${-oDdays(o)}일 초과했습니다. (${O_OWNER(o)} 조치 필요)</div>` : '';
+  const overWarn = (o.stage!=='CANCEL' && oIsOver(o)) ? `<div class="note warn" style="margin-bottom:10px">⚠ 「${O_NM[o.stage]}」 단계가 처리기한을 ${-oDdays(o)}일 초과했습니다. (${O_OWNER(o)} 조치 필요)</div>` : '';
+  const cancelBanner = o.stage==='CANCEL' ? `<div class="note warn" style="margin-bottom:10px">⛔ 중단된 발주입니다 — ${esc(o.cancelReason||'사유 미기재')}<div style="font-size:11.5px;margin-top:3px">${esc(o.cancelBy||'')} · ${o.cancelAt?fmtDT(o.cancelAt):''}</div></div>` : '';
+  const canEdit = rl==='hq' && o.stage!=='SETTLED';
+  const bottomBtns = `<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+    ${canEdit?`<button style="font-size:12.5px;color:var(--sub);font-weight:700;text-decoration:underline" onclick="oEditModal('${o.id}')">✏ 발주 정보 수정</button>`:''}
+    ${rl==='hq' && o.stage!=='SETTLED' && o.stage!=='CANCEL'?`<button style="font-size:12.5px;color:var(--red-dark);font-weight:800" onclick="oCancelModal('${o.id}')">⛔ 발주 중단 처리</button>`:''}
+    ${rl==='hq' && o.stage==='CANCEL'?`<button style="font-size:12.5px;color:var(--sub);font-weight:700;text-decoration:underline" onclick="oResume('${o.id}')">↩ 중단 취소 (되돌리기)</button>`:''}
+  </div>`;
 
   return `<button class="back" onclick="go('olist')">← 목록으로</button>
     <div class="card">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--sub);font-weight:700">${o.id}</span>
-        <span class="badge ${O_BADGE[o.stage]}">${O_WAIT[o.stage]}</span>
+        <span class="badge ${O_BADGE[o.stage]||'b-gray'}">${O_WAIT[o.stage]||o.stage}</span>
         <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
       </div>
       <h3 style="font-size:18px;font-weight:800;margin-top:6px">${CAT_ICON[o.cat]} ${esc(o.site)} · ${o.cat} 발주</h3>
       <div style="color:var(--sub);font-size:13px">${esc(o.supplier)} → ${esc(o.builder)}</div>
-      ${oStepper(o)} ${overWarn} ${s}
+      ${o.stage==='CANCEL'?'':oStepper(o)} ${cancelBanner} ${overWarn} ${s} ${bottomBtns}
     </div>`;
 }
 
@@ -3459,7 +3886,7 @@ async function oAddDrawing(id, inp){
   for(const f of [...inp.files]){
     try{
       const d = f.type.startsWith('image/') ? await compressImage(f,1600,0.72) : await readSmallFile(f);
-      await store.addFile('O:'+id, {kind:'drawing', name:f.name, data:d, ts:now()}); n++;
+      await store.addFile('O:'+id, {kind:'drawing', name:f.name, data:d, ts:now(), by:actorLabel()}); n++;
     }catch(e){ toast('도면 처리 실패: '+e.message); }
   }
   inp.value='';
@@ -3484,7 +3911,7 @@ async function oAddDeliveryPhotos(id, inp){
   for(const f of files){
     try{
       const base = ((filesCache['O:'+id]||[]).filter(x=>x.kind==='delivery').length)+1;
-      await store.addFile('O:'+id, {kind:'delivery', name:`납품사진_${base}.jpg`, data:await compressImage(f), ts:now()});
+      await store.addFile('O:'+id, {kind:'delivery', name:`납품사진_${base}.jpg`, data:await compressImage(f), ts:now(), by:actorLabel()});
       n++;
     }catch(e){ toast('사진 처리 실패: '+f.name+' — '+(e.message||'')); }
   }
@@ -3500,61 +3927,168 @@ async function oAddDeliveryPhotos(id, inp){
 }
 
 /* ── 발주 액션 모달 ── */
-let oQItems = [], oqAnalysis = null;
-function oQuoteModal(id){
+let oQItems = [], oqAnalysis = null, oqFreight = null, oqDraft = null;
+async function oQuoteModal(id, keep){
   const o = O(id); if(!o) return;
-  oQItems = o.quote && o.quote.items ? JSON.parse(JSON.stringify(o.quote.items)) : [];
-  oqAnalysis = (o.quote && o.quote.analysis) || null;
-  oqFileData = null; oqFileName = null;
+  /* keep=true 는 품목 선택기에서 돌아온 경우 — 작성 중이던 내용을 유지한다 */
+  if(!keep){
+    oQItems = o.quote && o.quote.items ? JSON.parse(JSON.stringify(o.quote.items)) : [];
+    oqAnalysis = (o.quote && o.quote.analysis) || null;
+    oqFreight = (o.quote && o.quote.freight) ? {...o.quote.freight} : null;
+    oqFileData = null; oqFileName = null;
+    oqDraft = null;
+  }
   openModal(`<h2>수량산출·견적서 제출</h2>
     <div class="sub">${o.id} · ${esc(o.site)} · ${o.cat} · ${esc(o.supplier)}</div>
-    <div class="note">보수공사와 <b>동일한 표준 견적서 양식</b>을 사용합니다. 양식으로 작성해 올리면 품목·금액이 자동 입력됩니다.</div>
+    <div class="note"><span class="spin dk"></span> 표준 품목표를 불러오는 중…</div>`);
+  const ok = await loadSpec();
+  if(!modalOpen()) return;
+  openModal(`<h2>수량산출·견적서 제출</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${o.cat} · ${esc(o.supplier)}</div>
+    ${ok?`<div class="note">표준 품목표(${window.SPEC_VERSION})에서 코드를 고르면 사진·규격·단가가 자동으로 채워집니다.</div>`
+        :`<div class="note warn">표준 품목표를 불러오지 못했습니다 — 직접 입력으로 작성해주세요. (spec.js 파일이 함께 업로드됐는지 확인)</div>`}
     <button class="btn sec2 blk" style="margin-top:8px" onclick="downloadQuoteForm('order',{site:'${esc(o.site).replace(/'/g,"\\'")}',co:'${esc(o.supplier)}'})">⬇ 표준 견적서 양식(.xlsx) 내려받기</button>
     <label>견적서 파일 (엑셀 업로드 시 자동 인식 · PDF/사진 가능)</label>
     <input type="file" id="oqF" accept="image/*,.pdf,.xlsx" style="display:none" onchange="oqPickFile(this)">
     <button class="file-add" onclick="document.getElementById('oqF').click()"><span id="oqFn">📎 파일 선택</span></button>
     <div id="oqAnalysis"></div>
-    <label>견적일</label><input id="oqDate" type="date" value="${tsToDateInput((o.quote&&o.quote.ts)||now())}">
-    <label>납품 가능일</label><input id="oqReady" type="date" value="${o.quote&&o.quote.readyDate?tsToDateInput(o.quote.readyDate):''}">
+    <label>견적일</label><input id="oqDate" type="date" value="${(oqDraft&&oqDraft.date)||tsToDateInput((o.quote&&o.quote.ts)||now())}">
+    <label>납품 가능일</label><input id="oqReady" type="date" value="${(oqDraft&&oqDraft.ready)||(o.quote&&o.quote.readyDate?tsToDateInput(o.quote.readyDate):'')}">
     <label>수량산출 내역</label>
     <div id="oqRows"></div>
-    <button class="btn sec2 blk" onclick="oqAdd()">＋ 품목 추가</button>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      ${ok?`<button class="btn" style="flex:1.6" onclick="oqPick('${id}')">＋ 표준 품목 선택</button>`:''}
+      <button class="btn sec2" style="flex:1" onclick="oqAdd()">＋ 직접 입력</button>
+    </div>
+    <label>운반비 (납품 지역)</label>
+    <select id="oqArea" onchange="oqAreaChange('${o.cat}')">
+      <option value="">운반비 없음 / 별도 협의</option>
+      ${FREIGHT_AREAS.map(a=>`<option${oqFreight&&oqFreight.area===a?' selected':''}>${a}</option>`).join('')}
+    </select>
+    <div id="oqFreightNote" class="note" style="display:none"></div>
     <div class="kv" style="margin-top:12px;font-size:16px"><b>견적금액</b><strong id="oqTotal">0원</strong></div>
     <label>비고</label>
-    <textarea id="oqNote" rows="2" placeholder="예) 로스율 5% 반영, 색온도 확인 필요">${esc((o.quote&&o.quote.note)||'')}</textarea>
+    <textarea id="oqNote" rows="2" placeholder="예) 로스율 5% 반영, 색온도 확인 필요">${esc((oqDraft&&oqDraft.note)||(o.quote&&o.quote.note)||'')}</textarea>
     <button class="btn blk" onclick="oQuoteSave('${id}')">견적서 제출</button>`);
-  setTimeout(()=>{ if(!oQItems.length) oqAdd(); else oqRender(); oqAnalysisRender(); }, 30);
+  setTimeout(()=>{ oqRender(); oqAnalysisRender(); oqAreaChange(o.cat); }, 30);
 }
 function oqAnalysisRender(){
   const el = document.getElementById('oqAnalysis');
   if(el) el.innerHTML = oqAnalysis ? analysisHtml(oqAnalysis) : '';
 }
+function oqAreaChange(cat){
+  const sel = document.getElementById('oqArea'); if(!sel) return;
+  const note = document.getElementById('oqFreightNote');
+  const cfg = (window.SPEC_FREIGHT||{})[cat];
+  if(!sel.value || !cfg){ oqFreight=null; if(note) note.style.display='none'; oqTotalUpd(); return; }
+  const amt = cfg.area[sel.value] || 0;
+  oqFreight = { area:sel.value, amount:amt, note:cfg.note };
+  if(note){ note.style.display='block'; note.innerHTML = `${esc(cfg.note)} — <b>${money(amt)}</b> (견적금액에 합산됩니다)`; }
+  oqTotalUpd();
+}
+
+/* ── 표준 품목 선택기 ── */
+let oqPickCat='조명', oqPickBrand='전체', oqPickQ='', oqPickFor=null;
+function oqPick(orderId){
+  const o = O(orderId); if(!o) return;
+  const g = id => { const el=document.getElementById(id); return el?el.value:''; };
+  oqDraft = { date:g('oqDate'), ready:g('oqReady'), note:g('oqNote') };
+  oqPickFor = orderId; oqPickCat = o.cat; oqPickBrand='전체'; oqPickQ='';
+  oqPickRender();
+}
+function oqPickRender(){
+  const list = specList(oqPickCat);
+  const brands = ['전체', ...Array.from(new Set(list.map(x=>x.b)))];
+  let rows = list;
+  if(oqPickBrand!=='전체') rows = rows.filter(x=>x.b===oqPickBrand);
+  const q = oqPickQ.trim().toLowerCase();
+  if(q) rows = rows.filter(x=>[x.c,x.n,x.sz,x.pl,x.b].join(' ').toLowerCase().includes(q));
+  openModal(`<h2>표준 품목 선택</h2>
+    <div class="sub">${oqPickCat} · ${rows.length}종 · 단가는 부가세 별도</div>
+    <input id="oqPq" placeholder="🔍 코드·품명·규격 검색" value="${esc(oqPickQ)}"
+      oninput="oqPickQ=this.value;oqPickRender();setTimeout(()=>refocusSearch('oqPq'),0)">
+    <div class="chips" style="margin-top:10px">
+      ${brands.map(b=>`<button class="${oqPickBrand===b?'on':''}" onclick="oqPickBrand='${esc(b).replace(/'/g,"\\'")}';oqPickRender()">${esc(b)}</button>`).join('')}
+    </div>
+    <div style="max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
+      ${rows.length? rows.map(x=>`
+        <button class="specrow" onclick="oqPickAdd('${esc(x.c).replace(/'/g,"\\'")}')">
+          <img src="${x.img}" alt="">
+          <span class="si">
+            <b>${esc(x.c)} <span style="color:var(--sub);font-weight:600">${esc(x.b)}</span></b>
+            <span>${esc(x.n||'')}</span>
+            <span class="sm">${esc(oqSpecLine(x))}</span>
+          </span>
+          <span class="sp">${x.p?money(x.p):'단가 미정'}<small>/${esc(x.u||'EA')}</small></span>
+        </button>`).join('') : '<div class="empty">검색 결과가 없습니다</div>'}
+    </div>
+    <button class="btn sec2 blk" onclick="oqBackToQuote()">닫기</button>`);
+}
+/* 조명은 색온도·외경·타공, 타일은 규격·재질을 한 줄로 */
+function oqSpecLine(x){
+  const ok = v => v && !/^[-–—]$/.test(String(v).trim());   // PDF의 '-' 표기는 빈 값으로 본다
+  const p = [];
+  if(x.g==='조명'){
+    if(ok(x.k)) p.push(x.k);
+    if(ok(x.w)) p.push(x.w);
+    if(ok(x.sz)) p.push('외경 '+x.sz);
+    if(ok(x.cut)) p.push('타공 '+x.cut);
+  } else {
+    if(ok(x.sz)) p.push(x.sz);
+    if(ok(x.mat)) p.push(x.mat);
+    if(ok(x.pl)) p.push(x.pl);
+  }
+  return p.join(' · ');
+}
+function oqPickAdd(code){
+  const x = specFind(oqPickCat, code);
+  if(!x) return;
+  const dup = oQItems.find(it=>it.code===code);
+  if(dup){ dup.qty = (+dup.qty||0)+1; }
+  else oQItems.push({
+    code:x.c, name:x.n||x.c, spec:oqSpecLine(x), unit:x.u||'EA', qty:1, price:x.p||0,
+    img:x.img, kelvin:x.k||'', size:x.sz||'', cut:x.cut||'', brand:x.b||''
+  });
+  toast(`${code} 추가됨`);
+  oqBackToQuote();
+}
+function oqBackToQuote(){
+  if(oqPickFor) oQuoteModal(oqPickFor, true);
+}
 function oqAdd(){ oQItems.push({name:'',spec:'',unit:'EA',qty:'',price:''}); oqRender(); }
-function oqDel(i){ oQItems.splice(i,1); if(!oQItems.length) oqAdd(); else oqRender(); }
+function oqDel(i){ oQItems.splice(i,1); oqRender(); }
 function oqSet(i,k,v){
   oQItems[i][k] = (k==='qty'||k==='price') ? (v===''?'':Number(v)) : v;
   oqTotalUpd();
 }
 function oqTotalUpd(){
-  const t = oQItems.reduce((s,x)=>s+((+x.qty||0)*(+x.price||0)),0);
+  const t = oQItems.reduce((s,x)=>s+((+x.qty||0)*(+x.price||0)),0) + (oqFreight?oqFreight.amount:0);
   const el = document.getElementById('oqTotal'); if(el) el.textContent = money(t);
 }
 function oqRender(){
   const box = document.getElementById('oqRows'); if(!box) return;
-  box.innerHTML = oQItems.map((x,i)=>`
-    <div style="border:1px solid var(--line);border-radius:10px;padding:10px;margin-top:8px">
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
-        <strong style="font-size:12px;color:var(--sub)">품목 ${i+1}</strong>
-        <button style="margin-left:auto;color:var(--red-dark);font-weight:800;font-size:12px" onclick="oqDel(${i})">삭제</button>
+  if(!oQItems.length){ box.innerHTML = '<div class="note">아래 버튼으로 품목을 추가해주세요.</div>'; oqTotalUpd(); return; }
+  box.innerHTML = oQItems.map((x,i)=>{
+    const std = !!x.code;
+    return `<div class="qrow">
+      <div class="qhd">
+        ${x.img?`<img src="${x.img}" alt="">`:'<span class="qnoimg">📦</span>'}
+        <span class="qt">
+          ${std?`<b>${esc(x.code)}</b> <span style="color:var(--sub);font-size:11.5px">${esc(x.brand||'')}</span><br>`:''}
+          ${std?`<span style="font-weight:700">${esc(x.name)}</span><div class="qs">${esc(x.spec||'')}</div>`
+              :`<b style="font-size:12px;color:var(--sub)">직접 입력 ${i+1}</b>`}
+        </span>
+        <button class="qdel" onclick="oqDel(${i})">삭제</button>
       </div>
-      <input placeholder="품목명 (예: LED 다운라이트)" value="${esc(x.name)}" oninput="oqSet(${i},'name',this.value)">
-      <input placeholder="규격 (예: 6인치 15W 주백색)" value="${esc(x.spec)}" oninput="oqSet(${i},'spec',this.value)" style="margin-top:6px">
-      <div style="display:flex;gap:6px;margin-top:6px">
-        <input placeholder="단위" value="${esc(x.unit)}" oninput="oqSet(${i},'unit',this.value)" style="width:70px">
+      ${std?'':`<input placeholder="품목명" value="${esc(x.name)}" oninput="oqSet(${i},'name',this.value)">
+        <input placeholder="규격" value="${esc(x.spec)}" oninput="oqSet(${i},'spec',this.value)" style="margin-top:6px">`}
+      <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+        <input placeholder="단위" value="${esc(x.unit)}" oninput="oqSet(${i},'unit',this.value)" style="width:64px"${std?' readonly':''}>
         <input type="number" inputmode="numeric" placeholder="수량" value="${x.qty}" oninput="oqSet(${i},'qty',this.value)" style="flex:1">
         <input type="number" inputmode="numeric" placeholder="단가" value="${x.price}" oninput="oqSet(${i},'price',this.value)" style="flex:1.3">
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   oqTotalUpd();
 }
 let oqFileData=null, oqFileName=null;
@@ -3563,15 +4097,27 @@ async function oqPickFile(inp){
   const label = document.getElementById('oqFn');
   try{
     if(/\.xlsx$/i.test(f.name)){
-      /* 표준 양식이면 품목·금액을 자동으로 채운다 (보수 견적서와 동일한 방식) */
       const rows = await parseXlsx(await f.arrayBuffer());
       const items = parseQuoteItems(rows);
       oqAnalysis = analyzeEstimate(rows, null);
       if(items.length){
-        oQItems = items.map(x=>({name:x.name, spec:x.spec, unit:x.unit, qty:x.qty, price:x.price}));
+        /* 엑셀의 품명·코드가 표준 품목과 맞으면 사진·스펙까지 붙여준다 */
+        await loadSpec();
+        const o = O(oqPickFor) || null;
+        const cat = o ? o.cat : '조명';
+        oQItems = items.map(x=>{
+          const hit = (window.SPEC_MASTER||[]).find(m=>m.g===cat &&
+            (m.c.toLowerCase()===String(x.name).trim().toLowerCase() ||
+             String(x.name).toUpperCase().includes(m.c)));
+          return hit
+            ? {code:hit.c, name:hit.n||hit.c, spec:oqSpecLine(hit), unit:hit.u||x.unit, qty:x.qty,
+               price:x.price||hit.p, img:hit.img, kelvin:hit.k||'', size:hit.sz||'', cut:hit.cut||'', brand:hit.b||''}
+            : {name:x.name, spec:x.spec, unit:x.unit, qty:x.qty, price:x.price};
+        });
         oqRender();
-        label.textContent = `📊 ${f.name} — ${items.length}개 품목 자동 인식됨`;
-        toast(`품목 ${items.length}건을 자동으로 불러왔습니다`);
+        const matched = oQItems.filter(x=>x.code).length;
+        label.textContent = `📊 ${f.name} — ${items.length}개 품목 인식${matched?` (표준품목 ${matched}건 자동연결)`:''}`;
+        toast(`품목 ${items.length}건을 불러왔습니다`);
       } else {
         label.textContent = `📊 ${f.name} — 표 인식 실패 (품목은 직접 입력해주세요)`;
         toast('표준 양식의 제목행(품명·규격·단위·수량·단가·금액)을 확인해주세요');
@@ -3589,29 +4135,124 @@ async function oqPickFile(inp){
 async function oQuoteSave(id){
   const o = O(id); if(!o) return;
   const items = oQItems.filter(x=>x.name && +x.qty>0 && +x.price>0)
-    .map(x=>({name:x.name, spec:x.spec, unit:x.unit||'EA', qty:+x.qty, price:+x.price, amount:(+x.qty)*(+x.price)}));
+    .map(x=>{
+      const it = {name:x.name, spec:x.spec, unit:x.unit||'EA', qty:+x.qty, price:+x.price, amount:(+x.qty)*(+x.price)};
+      if(x.code){ it.code=x.code; it.brand=x.brand||''; it.img=x.img||''; }
+      if(x.kelvin) it.kelvin=x.kelvin;
+      if(x.size) it.size=x.size;
+      if(x.cut) it.cut=x.cut;
+      return it;
+    });
   if(!items.length){ toast('품목을 1개 이상 입력해주세요 (수량·단가 필수)'); return; }
-  const amount = items.reduce((s,x)=>s+x.amount,0);
+  const itemsTotal = items.reduce((s,x)=>s+x.amount,0);
+  const freight = oqFreight ? {...oqFreight} : null;
+  const amount = itemsTotal + (freight?freight.amount:0);
   const first = !o.quote;
   const dv = document.getElementById('oqDate').value;
   const rv = document.getElementById('oqReady').value;
-  if(oqAnalysis) { try{ oqAnalysis = Object.assign({}, oqAnalysis); }catch(e){} }
-  o.quote = { ts: dv ? new Date(dv+'T12:00:00').getTime() : now(),
+  const quote = { ts: dv ? new Date(dv+'T12:00:00').getTime() : now(),
               readyDate: rv ? new Date(rv+'T12:00:00').getTime() : null,
-              items, amount, fileName:oqFileName||'',
+              items, itemsTotal, freight, amount, fileName:oqFileName||'',
               note:document.getElementById('oqNote').value.trim(),
               analysis: oqAnalysis || null };
-  const patch = { quote: o.quote };
+  const patch = { quote };
   if(o.stage==='DRAWING'){ patch.stage='QUOTE'; patch.stageAt=now(); }
   const fd = oqFileData, fn = oqFileName;
-  oqFileData=null; oqFileName=null; oqAnalysis=null;
+  oqFileData=null; oqFileName=null; oqAnalysis=null; oqFreight=null;
   try{
     await store.updateOrder(id, patch, oEntry(`${first?'견적서 제출':'견적 수정'} (${money(amount)} · ${items.length}개 품목)`));
     if(fd){
-      try{ await store.addFile('O:'+id, {kind:'quote', name:fn||'견적서', data:fd, ts:now()}); }
+      try{ await store.addFile('O:'+id, {kind:'quote', name:fn||'견적서', data:fd, ts:now(), by:actorLabel()}); }
       catch(fe){ toast('견적은 저장됐지만 파일 첨부에 실패했습니다: '+(fe.code||fe.message)); }
     }
     closeModal(); toast('견적서가 제출되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* ── 발주 중단 / 되돌리기 / 정보 수정 ── */
+function oCancelModal(id){
+  const o = O(id); if(!o) return;
+  openModal(`<h2>발주 중단 처리</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${o.cat}</div>
+    <div class="note warn">중단하면 목록에서 「중단」으로 분류되고 진행·정산 대상에서 빠집니다. 기록은 남으며 되돌릴 수 있습니다.</div>
+    <label>중단 사유</label>
+    <select id="ocnR" onchange="document.getElementById('ocnEtcW').style.display=this.value==='기타'?'block':'none'">
+      <option>오픈 일정 취소·연기</option><option>발주 물량 변경</option><option>공급사 변경</option>
+      <option>도면 변경으로 재발주</option><option>중복 발주</option><option>기타</option>
+    </select>
+    <div id="ocnEtcW" style="display:none"><label>상세 사유</label><input id="ocnEtc" placeholder="사유를 입력해주세요"></div>
+    <label>비고</label>
+    <textarea id="ocnNote" rows="2" placeholder="관계자에게 전달할 내용이 있으면 적어주세요"></textarea>
+    <button class="btn blk" style="background:var(--red-dark)" onclick="oCancelSave('${id}')">중단 처리</button>
+    <button class="btn sec2 blk" onclick="closeModal()">취소</button>`);
+}
+async function oCancelSave(id){
+  const o = O(id); if(!o) return;
+  let reason = document.getElementById('ocnR').value;
+  if(reason==='기타'){
+    const etc = document.getElementById('ocnEtc').value.trim();
+    if(!etc){ toast('상세 사유를 입력해주세요'); return; }
+    reason = etc;
+  }
+  const note = document.getElementById('ocnNote').value.trim();
+  try{
+    await store.updateOrder(id, {stage:'CANCEL', stageAt:now(), prevStage:o.stage,
+      cancelReason:reason, cancelNote:note, cancelBy:actorLabel(), cancelAt:now()},
+      oEntry(`발주 중단 처리 (${reason})`));
+    closeModal(); toast('발주가 중단 처리되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function oResume(id){
+  const o = O(id); if(!o) return;
+  const back = o.prevStage || 'DRAWING';
+  if(!confirm(`중단을 취소하고 「${O_NM[back]}」 단계로 되돌릴까요?`)) return;
+  try{
+    await store.updateOrder(id, {stage:back, stageAt:now(), cancelReason:null, cancelNote:null, cancelBy:null, cancelAt:null},
+      oEntry(`중단 취소 → ${O_NM[back]} 단계로 복귀`));
+    toast('중단이 취소되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function oEditModal(id){
+  const o = O(id); if(!o) return;
+  openModal(`<h2>발주 정보 수정</h2>
+    <div class="sub">${o.id} · 변경 내용은 처리 이력에 남습니다</div>
+    <label>현장(점포)명</label>
+    <div class="spwrap">
+      <input id="oeSite" value="${esc(o.site)}" autocomplete="off"
+        oninput="spFilter('oeSite')" onfocus="spFilter('oeSite')" onblur="spHide('oeSite')">
+      <div class="spdrop" id="oeSiteDrop"></div>
+    </div>
+    <label>운영 구분</label>
+    <select id="oeType">${['직영점','가맹점'].map(t=>`<option${t===o.type?' selected':''}>${t}</option>`).join('')}</select>
+    <div class="note">구분을 바꾸면 견적 확정 권한과 정산 방식이 함께 바뀝니다.</div>
+    <label>인테리어 시공사</label>
+    <select id="oeBuilder">${state.cfg.builders.map(b=>`<option${b===o.builder?' selected':''}>${esc(b)}</option>`).join('')}</select>
+    <label>오픈 예정일</label>
+    <input id="oeOpen" type="date" value="${o.openPlan?tsToDateInput(o.openPlan):''}">
+    <label>GRS 담당자</label>
+    <input id="oeMgr" value="${esc(o.manager||'')}">
+    <div class="note">발주 품목(${o.cat})과 공급사(${esc(o.supplier)})는 바꿀 수 없습니다. 다른 품목이면 새로 등록해주세요.</div>
+    <button class="btn blk" onclick="oEditSave('${id}')">수정 저장</button>`);
+}
+async function oEditSave(id){
+  const o = O(id); if(!o) return;
+  const site = document.getElementById('oeSite').value.trim();
+  if(!site){ toast('현장명을 입력해주세요'); return; }
+  const type = document.getElementById('oeType').value;
+  const builder = document.getElementById('oeBuilder').value;
+  const mgr = document.getElementById('oeMgr').value.trim();
+  const ov = document.getElementById('oeOpen').value;
+  const openPlan = ov ? new Date(ov+'T12:00:00').getTime() : null;
+  const chg = [];
+  if(site!==o.site) chg.push(`현장 ${o.site}→${site}`);
+  if(type!==o.type) chg.push(`구분 ${o.type}→${type}`);
+  if(builder!==o.builder) chg.push(`시공사 ${o.builder}→${builder}`);
+  if(mgr!==(o.manager||'')) chg.push(`담당 ${o.manager||'-'}→${mgr||'-'}`);
+  if(openPlan!==o.openPlan) chg.push(`오픈예정 ${o.openPlan?fmtD(o.openPlan):'-'}→${openPlan?fmtD(openPlan):'-'}`);
+  if(!chg.length){ closeModal(); toast('변경된 내용이 없습니다'); return; }
+  try{
+    await store.updateOrder(id, {site, type, builder, manager:mgr, openPlan}, oEntry('발주 정보 수정 — '+chg.join(', ')));
+    closeModal(); toast('수정되었습니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
@@ -3684,7 +4325,7 @@ function oReceiptModal(id){
   openModal(`<h2>물품납품확인서</h2>
     <div class="sub">${o.id} · ${esc(o.site)} · ${esc(o.supplier)} 납품분</div>
     <div class="note">아래 품목을 수령하셨음을 확인하고 서명해주세요. 서명 즉시 정산 대상이 됩니다.</div>
-    ${itemsTable((o.quote&&o.quote.items)||[])}
+    ${itemsTable((o.quote&&o.quote.items)||[], o.quote&&o.quote.freight)}
     <label>수령일시</label>
     <input id="rcAt" type="datetime-local" value="${tsToDtInput(now())}">
     <label>납품 사진 <span style="font-weight:500;color:var(--red-dark)">(권장 — 수령 물품·수량 확인용)</span></label>
@@ -3770,7 +4411,7 @@ async function oReceiptSave(id){
     /* 사진·서명을 먼저 올리고, 실제로 저장된 장수를 확인서에 기록한다 */
     let saved = 0;
     for(let i=0;i<photos.length;i++){
-      try{ await store.addFile('O:'+id, {kind:'delivery', name:`납품사진_${i+1}.jpg`, data:photos[i], ts:now()}); saved++; }
+      try{ await store.addFile('O:'+id, {kind:'delivery', name:`납품사진_${i+1}.jpg`, data:photos[i], ts:now(), by:actorLabel()}); saved++; }
       catch(e){ console.warn('delivery photo', e); }
     }
     try{ await store.addFile('O:'+id, {kind:'osign', name:'납품확인_서명.png', data:sig, ts:now()}); }
@@ -3821,7 +4462,117 @@ async function oSettleSave(id){
 }
 
 /* ── 월별 정산 관리 (본사) ── */
+/* ── 공급사 정산·청구 화면 ──
+   직영점분은 본사에 일괄 청구, 가맹점분은 시공사별로 개별 청구한다 */
+function vSupplySettle(){
+  const ym = state.settleMonth || ymOf(now());
+  const all = visibleOrders().filter(o=>o.receipt);            // 납품확인서가 나온 건만 청구 대상
+  const waiting = all.filter(o=>o.stage==='DELIVERED');
+  const done = all.filter(o=>o.stage==='SETTLED' && o.settle && o.settle.month===ym);
+  const sum = a => a.reduce((s,o)=>s+(oAmount(o)||0),0);
+
+  /* 청구처별로 묶기 — 본사 1개 + 시공사 N개 */
+  const groups = {};
+  waiting.forEach(o=>{
+    const k = oBillTo(o);
+    if(!groups[k]) groups[k] = {key:k, type:o.type, list:[]};
+    groups[k].list.push(o);
+  });
+  const gArr = Object.values(groups).sort((a,b)=>
+    (a.type==='직영점'?0:1)-(b.type==='직영점'?0:1) || sum(b.list)-sum(a.list));
+
+  const rowsOf = arr => arr.map(o=>`
+    <button style="width:100%;text-align:left;padding:9px 0;border-top:1px solid var(--line)" onclick="goOrder('${o.id}')">
+      <div class="oline"><span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
+        <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
+        ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
+        ${o.stage==='SETTLED'?'<span class="badge b-green">정산완료</span>':''}</div>
+      <div style="font-weight:700;font-size:13.5px;margin-top:3px">${esc(o.site)}</div>
+      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 납품 ${fmtD(o.receipt.receivedAt)} · <strong style="color:var(--ink)">${money(oAmount(o))}</strong></div>
+    </button>`).join('') || '<div class="empty">해당 건이 없습니다</div>';
+
+  return roleNote()+`
+  <div class="card">
+    <div class="h2">📄 청구 요약 <span class="badge b-gray">${esc(myCo())}</span></div>
+    <div class="note" style="margin:0 0 10px">납품확인서 서명이 완료된 건만 청구 대상입니다.
+      직영점분은 <b>롯데GRS 본사</b>에 월단위로, 가맹점분은 <b>시공사별로 개별</b> 청구합니다.</div>
+    <div class="kv"><b style="width:118px">청구 대기</b><strong>${money(sum(waiting))}</strong>
+      <span style="color:var(--sub);font-size:12.5px;margin-left:6px">${waiting.length}건</span></div>
+    <div class="kv"><b style="width:118px">${ymLabel(ym)} 수금완료</b><strong style="color:var(--green)">${money(sum(done))}</strong></div>
+    <label>정산 귀속월</label>
+    <input type="month" value="${ym}" onchange="state.settleMonth=this.value;render()">
+    <button class="btn sec2 blk" onclick="exportBillCSV()">⬇ 청구 내역 CSV 내려받기</button>
+  </div>
+
+  ${gArr.length ? gArr.map(g=>`
+    <div class="card">
+      <div class="h2">${g.type==='직영점'?'🏢':'🏗'} ${esc(g.key)}
+        <span class="badge ${g.type==='직영점'?'b-blue':'b-gray'}">${g.type}</span></div>
+      <div class="note" style="margin:0 0 4px">${oBillNote(g.list[0])} · ${g.list.length}건 · 합계 <strong>${money(sum(g.list))}</strong>
+        <span style="display:block;margin-top:2px">부가세 별도 금액입니다.</span></div>
+      ${rowsOf(g.list)}
+      <button class="btn sec2 blk" onclick="printBill('${esc(g.key).replace(/'/g,"\\'")}')">📄 거래명세서 출력 (PDF 저장)</button>
+    </div>`).join('')
+   : `<div class="card"><div class="empty">청구 대기 중인 건이 없습니다</div></div>`}
+
+  <div class="card">
+    <div class="h2">✅ ${ymLabel(ym)} 정산 완료 <span class="badge b-green">${done.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">합계 <strong>${money(sum(done))}</strong></div>
+    ${rowsOf(done)}
+  </div>`;
+}
+function exportBillCSV(){
+  const rows = visibleOrders().filter(o=>o.receipt).map(o=>[
+    o.id, oBillTo(o), o.type, o.cat, o.site, o.builder,
+    fmtD(o.receipt.receivedAt), o.receipt.allOk?'이상없음':'이상: '+(o.receipt.shortItems||''),
+    oAmount(o), O_NM[o.stage]||o.stage, o.settle?o.settle.month:'', o.settle?fmtD(o.settle.at):''
+  ]);
+  const head = ['발주번호','청구처','구분','품목','현장','시공사','납품일','검수','청구금액(VAT별도)','상태','정산월','정산일'];
+  const csv = '﻿'+[head,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`청구내역_${myCo()}.csv`; a.click();
+  toast('CSV 파일이 다운로드되었습니다');
+}
+/* 청구처별 거래명세서 */
+function printBill(billTo){
+  const list = visibleOrders().filter(o=>o.receipt && o.stage==='DELIVERED' && oBillTo(o)===billTo);
+  if(!list.length){ toast('청구할 건이 없습니다'); return; }
+  const box='border:1px solid #999;padding:6px 10px;';
+  const total = list.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const vat = Math.round(total*0.1);
+  document.getElementById('printArea').innerHTML = `
+  <div style="font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:700px;margin:0 auto">
+    <div style="text-align:center;border-bottom:3px solid #C0392B;padding-bottom:10px;margin-bottom:16px">
+      <div style="font-size:22pt;font-weight:800">거래명세서</div>
+      <div style="font-size:10pt;color:#555;margin-top:4px">GRS 보수ON · 조명/타일 발주 시스템</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:11pt;margin-bottom:14px">
+      <tr><td style="${box}background:#f2f2f2;width:100px;font-weight:700">공급자</td><td style="${box}">${esc(myCo())}</td>
+          <td style="${box}background:#f2f2f2;width:100px;font-weight:700">작성일</td><td style="${box}">${fmtD(now())}</td></tr>
+      <tr><td style="${box}background:#f2f2f2;font-weight:700">청구처</td><td style="${box}"><b>${esc(billTo)}</b></td>
+          <td style="${box}background:#f2f2f2;font-weight:700">청구 건수</td><td style="${box}">${list.length}건</td></tr>
+    </table>
+    <table style="width:100%;border-collapse:collapse;font-size:10pt">
+      <tr style="background:#f2f2f2;font-weight:700">
+        <td style="${box}">발주번호</td><td style="${box}">현장</td><td style="${box}">품목</td>
+        <td style="${box}">시공사</td><td style="${box}">납품일</td><td style="${box}text-align:right">금액</td></tr>
+      ${list.map(o=>`<tr>
+        <td style="${box}">${esc(o.id)}</td><td style="${box}">${esc(o.site)}</td><td style="${box}">${o.cat}</td>
+        <td style="${box}">${esc(o.builder)}</td><td style="${box}">${fmtD(o.receipt.receivedAt)}</td>
+        <td style="${box}text-align:right">${(oAmount(o)||0).toLocaleString('ko-KR')}</td></tr>`).join('')}
+      <tr style="font-weight:700"><td style="${box}" colspan="5">공급가액</td><td style="${box}text-align:right">${total.toLocaleString('ko-KR')}</td></tr>
+      <tr><td style="${box}" colspan="5">부가세 (10%)</td><td style="${box}text-align:right">${vat.toLocaleString('ko-KR')}</td></tr>
+      <tr style="font-weight:800;background:#f8f8f8"><td style="${box}" colspan="5">합계금액</td>
+        <td style="${box}text-align:right">${(total+vat).toLocaleString('ko-KR')}원</td></tr>
+    </table>
+    <div style="margin-top:20px;font-size:9pt;color:#777;text-align:right">본 명세서는 GRS 보수ON에서 ${fmtDT(now())}에 자동 생성되었습니다.</div>
+  </div>`;
+  window.print();
+}
+
 function vSettle(){
+  if(role()==='supplier') return vSupplySettle();
   const list = visibleOrders();
   const ym = state.settleMonth || ymOf(now());
   /* 정산 대기: 납품 완료 건 / 정산 완료: 해당 월 귀속 건 */
@@ -3844,6 +4595,7 @@ function vSettle(){
         <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
         ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}</div>
       <div style="font-weight:700;font-size:13.5px;margin-top:3px">${esc(o.site)} <span style="color:var(--sub);font-weight:500">· ${esc(o.supplier)}</span></div>
+      <div style="font-size:11.5px;color:var(--sub)">청구처: ${esc(oBillTo(o))} (${oBillNote(o)})</div>
       <div style="font-size:12.5px;color:var(--sub)">${o.id} · 수령 ${o.receipt?fmtD(o.receipt.receivedAt):'-'} · <strong style="color:var(--ink)">${money(oAmount(o))}</strong></div>
     </button>`).join('') : '<div class="empty">해당 건이 없습니다</div>';
 
@@ -4047,7 +4799,7 @@ function exportCSV(){
   loadDraft();   // 작성 중이던 신규 접수 내용 복원
   if(LIVE){
     const sess = loadSession();
-    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); subscribeOrders(); loadChatPrefs(); ensureRooms(); }
+    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); loadChatPrefs(); ensureRooms(); }
   } else {
     state.user = {role:'hq', name:'본사담당', store:'', co:''}; // 데모: 본사 화면으로 시작
     loadChatPrefs(); ensureRooms();
