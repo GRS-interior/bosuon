@@ -233,7 +233,24 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .roomrow .rmain{flex:1;min-width:0}
   .roomrow .rname{font-weight:800;font-size:15px}
   .roomrow .rlast{font-size:12.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .roomrow .rright{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
   .roomrow .rts{font-size:11px;color:var(--sub);flex-shrink:0}
+  /* 미확인 채팅 */
+  .roomrow.unread{border-left:4px solid var(--red);background:#FFF8F7}
+  .roomrow.unread .rname{color:var(--red-dark)}
+  .roomrow.unread .rlast{color:var(--ink);font-weight:700}
+  .ubadge{background:var(--red);color:#fff;border-radius:99px;font-size:11px;font-weight:800;padding:2px 8px;min-width:20px;text-align:center;flex-shrink:0}
+  .unsum{background:#FFF3CD;border:1px solid #FFD028;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px}
+  .unsum .ut{font-size:13.5px;font-weight:800;color:#7A2E00;margin-bottom:8px}
+  .unsum .urow{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 0;border-top:1px solid rgba(122,46,0,.15)}
+  .unsum .urow .un{font-weight:800;font-size:13px;flex-shrink:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .unsum .urow .ul{flex:1;min-width:0;font-size:12.5px;color:#7A2E00;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .unsum .umore{font-size:11.5px;color:#7A2E00;padding-top:6px;opacity:.8}
+  .chatbar{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#FFD028;color:#7A2E00;padding:8px 14px}
+  .chatbar:active{background:#F2C500}
+  .chatbar .cb-n{background:var(--red);color:#fff;border-radius:99px;font-size:11px;font-weight:800;padding:2px 8px;flex-shrink:0}
+  .chatbar .cb-t{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chatbar .cb-go{font-size:12px;font-weight:800;flex-shrink:0}
   #chatMsgs{height:calc(100vh - 330px);min-height:240px;overflow-y:auto;background:var(--gray-bg);border-radius:12px;padding:12px;margin-top:10px}
   .msg{max-width:80%;margin-bottom:8px;padding:8px 12px;border-radius:14px;font-size:14px;width:fit-content;word-break:break-word}
   .msg.me{margin-left:auto;background:var(--red);color:#fff;border-bottom-right-radius:4px}
@@ -325,6 +342,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   </div>
   <div class="appsw" id="appsw" style="display:none"></div>
   <nav id="nav"></nav>
+  <button class="chatbar" id="chatbar" style="display:none" onclick="goUnreadChat()"></button>
 </header>
 
 <main id="main"></main>
@@ -347,8 +365,8 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
 try{
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
   const { getAuth, signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
-  const { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
-  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion };
+  const { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion, increment } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
+  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion, increment };
 }catch(e){ window.FB_LOAD_ERROR = e.message; }
 window.dispatchEvent(new Event('fb-ready'));
 </script>
@@ -527,7 +545,7 @@ const state = {
         builders:[...DEFAULT_BUILDERS], osla:{...DEFAULT_O_SLA}, builderCodes:{} },
   reqs:[], ready:false, dbError:null,
   chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:'',
-  chatNoti:false, lastSeen:{}, prevRoomTs:{}, roomsInit:false,
+  chatNoti:false, lastSeen:{}, seenN:{}, prevRoomTs:{}, roomsInit:false,
   /* 진행상황 알림 */
   reqNoti:true, reqNotiMine:false, prevReqSig:{}, reqsInit:false,
   /* 첨부파일 실시간 구독 */
@@ -756,11 +774,13 @@ const store = {
   async sendMsg(room, msg){
     if(LIVE){
       await FB.addDoc(FB.collection(fs,'chats',room,'messages'), msg);
-      await FB.setDoc(FB.doc(fs,'chats',room), {name:room, lastMsg:msg.text, lastTs:msg.ts, lastBy:msg.author}, {merge:true});
+      await FB.setDoc(FB.doc(fs,'chats',room),
+        {name:room, lastMsg:msg.text, lastTs:msg.ts, lastBy:msg.author, msgN:FB.increment(1)}, {merge:true});
     } else {
       if(!demoChats.msgs[room]) demoChats.msgs[room]=[];
       demoChats.msgs[room].push(msg);
-      demoChats.meta[room] = {name:room, lastMsg:msg.text, lastTs:msg.ts, lastBy:msg.author};
+      const prevN = (demoChats.meta[room]||{}).msgN || 0;
+      demoChats.meta[room] = {name:room, lastMsg:msg.text, lastTs:msg.ts, lastBy:msg.author, msgN:prevN+1};
       if(demoChats.msgCb && demoChats.msgCb.room===room) demoChats.msgCb.cb(demoChats.msgs[room].slice());
       if(demoChats.roomCb) demoChats.roomCb(demoRoomMetas());
     }
@@ -1217,6 +1237,7 @@ function loadChatPrefs(){
     state.reqNoti  = localStorage.getItem('bosuon_reqnoti') !== '0';   // 기본 켜짐
     state.reqNotiMine = localStorage.getItem('bosuon_reqnotimine')==='1';
     state.lastSeen = JSON.parse(localStorage.getItem('bosuon_lastseen')||'{}');
+    state.seenN = JSON.parse(localStorage.getItem('bosuon_seenn')||'{}');
   }catch(e){}
 }
 function saveChatPrefs(){
@@ -1225,6 +1246,7 @@ function saveChatPrefs(){
     localStorage.setItem('bosuon_reqnoti', state.reqNoti?'1':'0');
     localStorage.setItem('bosuon_reqnotimine', state.reqNotiMine?'1':'0');
     localStorage.setItem('bosuon_lastseen', JSON.stringify(state.lastSeen));
+    localStorage.setItem('bosuon_seenn', JSON.stringify(state.seenN||{}));
   }catch(e){}
 }
 function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; state.prevOrderSig={}; state.ordersInit=false;
@@ -1331,6 +1353,8 @@ function ensureRooms(){
       if(m.lastTs) state.prevRoomTs[name] = m.lastTs;
     });
     state.roomsInit = true;
+    /* 그 방을 보고 있는 중이면 바로 읽음 처리 */
+    if(state.view==='chatroom' && state.chatRoom) markRead(state.chatRoom);
     if(state.view==='chat'||state.view==='chatroom'){ if(!modalOpen()) render(); }
     else renderNav();
   });
@@ -1448,16 +1472,50 @@ function render(){
   if(chatEl2 && chatVal) chatEl2.value = chatVal;
   if(state.view==='chatroom') renderChatMsgs();
 }
-function unreadRooms(){
+/* ===== 미확인 채팅 =====
+   방 문서의 누적 메시지 수(msgN)와 내가 마지막으로 본 지점(seenN)을 비교해 개수를 센다.
+   msgN이 없는 예전 방은 시각으로만 판단해 개수 대신 '새 글'로 표시한다(-1). */
+function roomMeta(name){ return (state.chatRooms||[]).find(r=>(r.name||r.id)===name); }
+function unreadOf(name){
+  const m = roomMeta(name);
+  if(!m || !m.lastTs) return 0;
   const me = actorLabel();
-  return state.chatRooms.filter(m=>{
-    const name = m.name||m.id;
-    return m.lastTs && m.lastTs > (state.lastSeen[name]||0) && m.lastBy && m.lastBy!==me;
-  }).length;
+  if(m.lastBy === me) return 0;                       // 내가 마지막으로 쓴 방
+  if(typeof m.msgN === 'number'){
+    /* msgN은 이 기능 배포 이후 쌓인 메시지 수. 한 번도 안 연 방은 seenN이 없으므로 0으로 본다 */
+    const seenN = (state.seenN||{})[name] || 0;
+    return Math.max(0, m.msgN - seenN);
+  }
+  return m.lastTs > (state.lastSeen[name]||0) ? -1 : 0;   // 배포 전 방 — 개수 미상
+}
+const hasUnread = name => unreadOf(name) !== 0;
+/* 내가 볼 수 있는 방들의 미확인 합계 */
+function unreadTotal(){
+  if(!state.user) return 0;
+  let n = 0;
+  myRoomNames().forEach(name=>{ const u = unreadOf(name); n += u < 0 ? 1 : u; });
+  return n;
+}
+function unreadRoomList(){
+  return myRoomNames().filter(hasUnread)
+    .map(name=>({name, n:unreadOf(name), meta:roomMeta(name)||{}}))
+    .sort((a,b)=>(b.meta.lastTs||0)-(a.meta.lastTs||0));
+}
+function unreadRooms(){ return unreadRoomList().length; }
+function unreadBadge(n){
+  if(n === 0) return '';
+  return n < 0 ? `<span class="ubadge">새 글</span>` : `<span class="ubadge">${n>99?'99+':n}</span>`;
+}
+/* 방을 열었을 때 읽음 처리 */
+function markRead(room){
+  const m = roomMeta(room);
+  state.lastSeen[room] = now();
+  if(m && typeof m.msgN === 'number'){ (state.seenN = state.seenN||{})[room] = m.msgN; }
+  saveChatPrefs();
 }
 function renderNav(){
   if(!state.user) return;
-  const un = unreadRooms();
+  const un = unreadTotal();
   const chatLabel = '💬 채팅' + (un?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${un}</span>`:'');
   const newPosts = role()==='hq' ? (state.posts||[]).filter(p=>p.status==='OPEN').length : 0;
   const bdLabel = '🛠 개선요청' + (newPosts?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${newPosts}</span>`:'');
@@ -1479,6 +1537,7 @@ function renderNav(){
   document.getElementById('nav').innerHTML = tabs.map(([v,t])=>
     `<button class="${(state.view===v || alias[state.view]===v)?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
 
+  renderChatBar();
   /* 시스템 전환 바 — 두 시스템을 모두 쓸 수 있는 역할에게만 */
   const sw = document.getElementById('appsw');
   const apps = myApps();
@@ -1486,6 +1545,26 @@ function renderNav(){
     sw.style.display='flex';
     sw.innerHTML = apps.map(a=>`<button class="${state.app===a?'on':''}" onclick="switchApp('${a}')">${APP_ICON[a]} ${APP_NM[a]}</button>`).join('');
   } else sw.style.display='none';
+}
+/* 어느 화면에 있든 미확인 채팅을 상단에 띄운다 (채팅 화면에서는 숨김) */
+function renderChatBar(){
+  const bar = document.getElementById('chatbar');
+  if(!bar) return;
+  const un = unreadRoomList();
+  const inChat = state.view==='chat' || state.view==='chatroom';
+  if(!state.user || !un.length || inChat){ bar.style.display='none'; return; }
+  const first = un[0];
+  const more = un.length>1 ? ` 외 ${un.length-1}개 방` : '';
+  bar.style.display='flex';
+  bar.innerHTML = `<span class="cb-n">${unreadTotal()}</span>
+    <span class="cb-t"><b>${esc(first.name)}</b> ${esc((first.meta.lastBy?first.meta.lastBy+': ':'')+(first.meta.lastMsg||''))}${more}</span>
+    <span class="cb-go">보기 ›</span>`;
+}
+function goUnreadChat(){
+  const un = unreadRoomList();
+  if(!un.length){ go('chat'); return; }
+  if(un.length===1) openRoom(un[0].name);
+  else go('chat');
 }
 function switchApp(a){
   if(!canApp(a) || state.app===a) return;
@@ -2424,6 +2503,16 @@ async function addCmt(id){
 }
 
 /* ===== 채팅 ===== */
+/* 내가 참여하는 방 이름 목록 (검색어 무시) */
+function myRoomNames(){
+  if(!state.user) return [];
+  if(role()==='store') return ['전체', state.user.store || state.user.name];
+  const known = new Set(['전체', ...state.cfg.stores]);
+  (state.chatRooms||[]).forEach(r=>known.add(r.name||r.id));
+  let names = ['전체', ...[...known].filter(n=>n!=='전체')];
+  if(role()==='vendor') names = names.filter(n=>n==='전체' || storeVendor(n)===myCo());
+  return names;
+}
 function myRooms(){
   const metaMap = {};
   state.chatRooms.forEach(r=>metaMap[r.name||r.id]=r);
@@ -2437,33 +2526,55 @@ function myRooms(){
   let rooms = names.map(n=>({name:n, ...(metaMap[n]||{})}));
   if(role()==='vendor') rooms = rooms.filter(r=>r.name==='전체' || storeVendor(r.name)===myCo());
   if(state.roomQ) rooms = rooms.filter(r=>r.name.toLowerCase().includes(state.roomQ.toLowerCase()));
+  /* ① 미확인 방 먼저 (그 안에서는 최근 도착 순)
+     ② 그다음 전체방(공지) 고정
+     ③ 나머지는 최근 순 */
   return rooms.sort((a,b)=>{
+    const ua = hasUnread(a.name)?0:1, ub = hasUnread(b.name)?0:1;
+    if(ua!==ub) return ua-ub;
+    if(ua===0) return (b.lastTs||0)-(a.lastTs||0);   // 미확인끼리는 최근 순
     if(a.name==='전체') return -1; if(b.name==='전체') return 1;
     return (b.lastTs||0)-(a.lastTs||0);
   });
 }
 function roomsHtml(){
   const rooms = myRooms();
-  return rooms.map(r=>`<button class="card roomrow" onclick="openRoom('${esc(r.name).replace(/'/g,"\\'")}')">
+  return rooms.map(r=>{
+    const u = unreadOf(r.name);
+    return `<button class="card roomrow${u?' unread':''}" onclick="openRoom('${esc(r.name).replace(/'/g,"\\'")}')">
       <span style="font-size:22px">${r.name==='전체'?'📢':'🏪'}</span>
       <span class="rmain"><span class="rname">${esc(r.name)}${r.name==='전체'?' (공지·전체방)':''}</span>
       <div class="rlast">${r.lastBy?esc(r.lastBy)+': ':''}${esc(r.lastMsg||'대화를 시작해보세요')}</div></span>
-      <span class="rts">${r.lastTs?fmtD(r.lastTs):''}</span>
-    </button>`).join('') || '<div class="empty">채팅방이 없습니다</div>';
+      <span class="rright">${unreadBadge(u)}<span class="rts">${r.lastTs?fmtD(r.lastTs):''}</span></span>
+    </button>`;
+  }).join('') || '<div class="empty">채팅방이 없습니다</div>';
 }
 function vChat(){
   const search = role()==='store' ? '' :
     `<div class="search"><input id="roomSq" placeholder="🔍 점포 채팅방 검색" value="${esc(state.roomQ)}" oninput="state.roomQ=this.value;const el=document.getElementById('roomList');if(el)el.innerHTML=roomsHtml()"></div>`;
+  const un = unreadRoomList();
+  const summary = un.length ? `<div class="unsum">
+      <div class="ut">🔔 읽지 않은 채팅 <b>${unreadTotal()}건</b> · ${un.length}개 방</div>
+      ${un.slice(0,4).map(u=>`<button class="urow" onclick="openRoom('${esc(u.name).replace(/'/g,"\\'")}')">
+        <span class="un">${esc(u.name)}</span>
+        <span class="ul">${esc((u.meta.lastBy?u.meta.lastBy+': ':'')+(u.meta.lastMsg||''))}</span>
+        ${unreadBadge(u.n)}</button>`).join('')}
+      ${un.length>4?`<div class="umore">외 ${un.length-4}개 방</div>`:''}
+    </div>` : '';
   return roleNote()+`
+    ${summary}
     <div class="role-note" style="background:var(--gray-bg);color:var(--sub)">💬 전화 대신 이곳에서 소통하세요. 점포방에는 점포·토마토세븐·본사가 함께 참여합니다.</div>
     ${search}
     <div id="roomList">${roomsHtml()}</div>`;
 }
 function openRoom(room){
   state.chatRoom = room; state.chatMsgs = [];
-  state.lastSeen[room] = now(); saveChatPrefs();
+  markRead(room);
   go('chatroom');
-  state.unsubMsgs = store.subscribeMsgs(room, msgs=>{ state.chatMsgs = msgs; renderChatMsgs(); state.lastSeen[room]=now(); saveChatPrefs(); });
+  state.unsubMsgs = store.subscribeMsgs(room, msgs=>{
+    state.chatMsgs = msgs; renderChatMsgs();
+    markRead(room); renderNav();
+  });
 }
 function vChatRoom(){
   return `<button class="back" onclick="go('chat')">← 채팅 목록</button>

@@ -1,7 +1,7 @@
-/* GRS 보수ON — 서비스 워커 (v4)
+/* GRS 보수ON — 서비스 워커 (v5)
    - 오프라인 대비 셸 캐시
    - 알림 클릭 시 앱 창을 열고 해당 접수건/채팅방으로 이동 */
-const C = 'bosuon-v4';
+const C = 'bosuon-v5';
 
 self.addEventListener('install', e => {
   self.skipWaiting();
