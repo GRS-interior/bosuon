@@ -630,7 +630,7 @@ const ymLabel = ym => ym ? `${ym.split('-')[0]}년 ${+ym.split('-')[1]}월` : ''
 
 const state = {
   user:null,            // {role, name, store, co}
-  app:'bosu',           // 'bosu'(보수공사) | 'order'(조명·타일 발주)
+  app:'bosu',           // 'bosu'(보수공사) | 'light'(조명 발주) | 'tile'(타일 발주)
   view:'dash', detailId:null, filter:'ALL', q:'',
   /* 발주 시스템 */
   orders:[], orderId:null, oFilter:'ALL', oCat:'ALL', oq:'', settleMonth:null,
@@ -923,7 +923,10 @@ function subscribePosts(cb){
 /* 발주건 실시간 구독 — 공급사·시공사는 자기 건만 받는다 */
 function subscribeOrders(onOrders){
   if(!LIVE || !state.user) return;
-  if(!canApp('order')) return;
+  /* 발주 탭이 하나라도 보이는 역할만 구독한다.
+     ※ 2026-08-26 탭 분리 전에는 canApp('order') 였는데, 앱 이름이 light/tile 로 갈리면서
+        항상 false 가 되어 발주가 아예 로딩되지 않았다. isOrderApp 기준으로 판정한다. */
+  if(!myApps().some(isOrderApp)) return;
   if(state.unsubOrders){ try{state.unsubOrders()}catch(e){} state.unsubOrders=null; }
   onOrders = onOrders || (()=>render());
   const col = FB.collection(fs,'orders');
@@ -935,7 +938,7 @@ function subscribeOrders(onOrders){
     const list = snap.docs.map(d=>normOrder(d.data())).sort((a,b)=>b.createdAt-a.createdAt);
     try{ detectOrderNotis(list); }catch(e){ console.warn('onoti', e); }
     state.orders = list;
-    state.ordersReady = true;
+    state.ordersReady = true; state.orderErr = null;
     onOrders();
   }, err=>{ state.orderErr = err.code||String(err); state.ordersReady=true; onOrders(); });
 }
@@ -1143,7 +1146,7 @@ function seedPosts(){
       type:'💡 개선 제안', title:'실측 일정 등록할 때 지난 날짜도 선택되면 좋겠습니다', status:'DOING', photoCount:0,
       text:'현장에서 이미 실측을 마치고 나중에 등록하는 경우가 있는데, 지난 날짜가 선택이 안 돼서 오늘 날짜로 넣고 있습니다.',
       replies:[{ts:daysAgo(0.5), author:'본사담당(김본사)', role:'hq', text:'확인했습니다. 다음 업데이트에 반영하겠습니다.'}] },
-    { id:'B-2608-E5F6', ts:daysAgo(0.3), author:'에이프러스(영업팀)', role:'supplier', app:'order',
+    { id:'B-2608-E5F6', ts:daysAgo(0.3), author:'에이프러스(영업팀)', role:'supplier', app:'light',
       type:'❓ 사용 문의', title:'견적서에 운반비는 어디에 넣나요?', status:'OPEN', photoCount:0,
       text:'조명 운임료가 지역별로 다른데 품목으로 넣어야 하는지 따로 넣는 칸이 있는지 궁금합니다.', replies:[] }
   ];
@@ -1533,8 +1536,8 @@ function render(){
 
   const sys = document.getElementById('sysbar');
   if(!LIVE) { sys.className='sysbar'; sys.textContent='데모 모드 — 데이터가 저장되지 않습니다. 운영하려면 파일 상단에 Firebase 설정을 넣어주세요.'; sys.style.display='block'; }
-  else if(state.dbError){
-    const ec = String(state.dbError);
+  else if(state.dbError || (isOrderApp(state.app) && state.orderErr)){
+    const ec = String(state.dbError || state.orderErr);
     let msg = '⚠ 서버 연결 오류: '+ec;
     if(ec.includes('admin-restricted')||ec.includes('operation-not-allowed')) msg='⚠ 익명 로그인이 꺼져 있습니다 — Firebase 콘솔 > Authentication > 로그인 방법에서 「익명」을 사용 설정하세요';
     else if(ec.includes('permission-denied')) msg='⚠ 접근 권한 오류 — Firestore 보안 규칙이 게시되었는지 확인하세요';
@@ -1556,6 +1559,10 @@ function render(){
 
   const m = document.getElementById('main');
   if(!state.ready){ m.innerHTML = '<div class="empty">서버 연결 중…</div>'; return; }
+  /* 발주 탭인데 아직 발주 목록이 안 왔으면 상태를 알려준다 (조용히 빈 화면이 되지 않도록) */
+  if(LIVE && isOrderApp(state.app) && !state.ordersReady && state.view!=='onew' && state.view!=='board' && state.view!=='post'){
+    m.innerHTML = '<div class="empty">발주 목록을 불러오는 중…</div>'; return;
+  }
   if(state.view==='dash') m.innerHTML = vDash();
   else if(state.view==='list') m.innerHTML = vList();
   else if(state.view==='detail') m.innerHTML = vDetail();
@@ -1704,12 +1711,12 @@ function roleNote(){
   };
   /* 조명·타일 발주 모드 */
   const ot = {
-    hq:'본사담당 모드 — 발주 등록, 도면 제공, 직영점 견적 확정, 정산 관리',
-    builder:`${co} 모드 — 가맹점 견적 확정, 납품일 협의, 물품 수령·납품확인서 서명`,
+    hq:'본사담당 모드 — 발주 등록, 도면 제공, 직영 방식 본사 승인, 정산 관리',
+    builder:`${co} 모드 — 시공사 승인, 납품일 협의, 물품 수령·납품확인서 서명 (가맹 방식은 발주·정산도)`,
     supplier:`${co} 모드 — 도면 확인, 수량산출·견적서 제출 (${CAT_OF[co]||'조명·타일'})`,
     store:'점포 모드', vendor:`${myCo()} 모드`
   };
-  const txt = (state.app==='order' ? ot[role()] : t[role()]) || t[role()] || ROLE_NM[role()] || '';
+  const txt = (isOrderApp(state.app) ? ot[role()] : t[role()]) || t[role()] || ROLE_NM[role()] || '';
   return `<div class="role-note">👤 ${txt}</div>` + notiPrompt();
 }
 /* 알림 권한을 아직 안 물어본 사용자에게 한 번 안내 (닫으면 다시 안 뜸) */
@@ -4161,6 +4168,9 @@ async function submitOrder(){
     if(saved !== oNewDrawings.length) await store.updateOrder(id, {drawingCount:saved});
     filesLoaded['O:'+id]=true;
     oNewDrawings = [];
+    /* 실시간 구독이 아직 반영 전이어도 바로 보이도록 로컬에 먼저 넣는다 */
+    if(!state.orders.some(x=>x.id===id)){ state.orders = [{...o, drawingCount:saved}, ...state.orders]; }
+    state.ordersReady = true;
     toast(`${o.supplier}에 견적이 요청되었습니다`);
     goOrder(id);
   }catch(e){
