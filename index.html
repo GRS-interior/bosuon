@@ -426,20 +426,70 @@ const CAT_OF      = { '에이프러스':'조명', '우석타일':'타일' };
 const SUPPLIERS   = ['에이프러스','우석타일'];
 const CAT_ICON    = { '조명':'💡', '타일':'🧱' };
 
-/* 발주 단계 — 도면제공 → 견적 → 확정 → 납품일협의 → 납품·확인서 → 정산 */
-const O_STAGES = ['DRAWING','QUOTE','CONFIRM','SCHED','DELIVERED','SETTLED'];
+/* ═══ 발주 단계 ═══
+   직영 방식 : 도면 → 견적 → 본사승인 → 시공사승인 → 납품일협의 → 납품·확인서 → 정산
+   가맹 방식 : 도면 → 견적 →           시공사승인 → 납품일협의 → 납품·확인서 → 정산
+   (조명은 공급계약 시행 전까지 직영점도 가맹 방식으로 운영) */
+const O_ALL = ['DRAWING','QUOTE','HQAPV','APPROVED','SCHED','DELIVERED','SETTLED'];
+const O_DIR = ['DRAWING','QUOTE','HQAPV','APPROVED','SCHED','DELIVERED','SETTLED'];
+const O_FR  = ['DRAWING','QUOTE','APPROVED','SCHED','DELIVERED','SETTLED'];
+const O_STAGES = O_ALL;                       // 필터 칩 등 전체 목록용
 const O_LIVE = o => o.stage!=='CANCEL';
-const O_NM = { DRAWING:'도면 제공', QUOTE:'견적 제출', CONFIRM:'검토·확정', SCHED:'납품일 협의', DELIVERED:'납품·확인서', SETTLED:'정산', CANCEL:'취소' };
-const O_WAIT = { DRAWING:'공급사 수량산출·견적 대기', QUOTE:'검토·확정 대기', CONFIRM:'납품일 협의 대기', SCHED:'납품 대기', DELIVERED:'정산 대기', SETTLED:'정산 완료', CANCEL:'취소됨' };
-const O_BADGE = { DRAWING:'b-amber', QUOTE:'b-blue', CONFIRM:'b-amber', SCHED:'b-blue', DELIVERED:'b-amber', SETTLED:'b-green', CANCEL:'b-gray' };
-const DEFAULT_O_SLA = { DRAWING:5, QUOTE:3, CONFIRM:3, SCHED:7, DELIVERED:30 };
-/* 직영점은 GRS 공사담당자가, 가맹점은 시공사 현장소장이 확정한다 */
-const oConfirmer = o => o.type==='직영점' ? 'GRS 공사담당' : '시공사 현장소장';
-const O_OWNER = (o) => ({ DRAWING:'공급사', QUOTE:oConfirmer(o), CONFIRM:'시공사·공급사', SCHED:'공급사', DELIVERED:'GRS 담당' }[o.stage] || '');
-const oSettleNm = o => o.type==='직영점' ? '월단위 정산' : '개별 정산 (대금지급)';
+const O_NM = { DRAWING:'도면 제공', QUOTE:'견적 제출', HQAPV:'본사 승인', APPROVED:'시공사 승인',
+               SCHED:'납품일 협의', DELIVERED:'납품·확인서', SETTLED:'정산', CANCEL:'취소', CONFIRM:'시공사 승인' };
+const O_SHORT = { DRAWING:'도면', QUOTE:'견적', HQAPV:'본사승인', APPROVED:'시공사승인',
+                  SCHED:'납품일', DELIVERED:'납품', SETTLED:'정산' };
+const O_BADGE = { DRAWING:'b-amber', QUOTE:'b-blue', HQAPV:'b-blue', APPROVED:'b-amber',
+                  SCHED:'b-blue', DELIVERED:'b-amber', SETTLED:'b-green', CANCEL:'b-gray' };
+const DEFAULT_O_SLA = { DRAWING:5, QUOTE:3, HQAPV:3, APPROVED:3, SCHED:7, DELIVERED:30 };
+
+/* ── 조명 공급계약 시행일 ──
+   이 날짜 전에 등록된 조명 발주는 직영점이어도 가맹 방식으로 운영한다.
+   계약이 밀리면 본사 설정에서 날짜만 바꾸면 된다. */
+const DEFAULT_LIGHT_CONTRACT = '2027-01-01';
+function lightContractTs(){
+  const v = (state.cfg && state.cfg.lightContract) || DEFAULT_LIGHT_CONTRACT;
+  const t = new Date(v+'T00:00:00').getTime();
+  return isNaN(t) ? new Date(DEFAULT_LIGHT_CONTRACT+'T00:00:00').getTime() : t;
+}
+/* 이 발주가 따르는 프로세스 — 'DIR'(직영 방식) | 'FR'(가맹 방식) */
+function oProc(o){
+  if(!o) return 'FR';
+  if(o.type === '가맹점') return 'FR';
+  if(o.cat === '조명' && (o.createdAt || now()) < lightContractTs()) return 'FR';
+  return 'DIR';
+}
+const oIsDir = o => oProc(o)==='DIR';
+/* 조명인데 계약 시행 전이라 가맹 방식으로 도는 직영 건 */
+const oLightPre = o => o && o.type==='직영점' && o.cat==='조명' && oProc(o)==='FR';
+const oProcNm = o => oIsDir(o) ? '직영 방식' : '가맹 방식';
+const oStages = o => oIsDir(o) ? O_DIR : O_FR;
+/* 발주 주체 */
+const oOrderer  = o => oIsDir(o) ? '롯데GRS 본사' : '시공사';
+/* 각 단계에서 기다리는 대상 */
+function oWait(o){
+  const s = o.stage;
+  if(s==='CANCEL') return '취소됨';
+  if(s==='DRAWING') return '공급사 수량산출·견적 대기';
+  if(s==='QUOTE')   return oIsDir(o) ? '본사 승인 대기' : '시공사 승인 대기';
+  if(s==='HQAPV')   return '시공사 승인 대기';
+  if(s==='APPROVED')return '납품일 협의 대기';
+  if(s==='SCHED')   return '납품 대기';
+  if(s==='DELIVERED') return '정산 대기';
+  if(s==='SETTLED') return '정산 완료';
+  return O_NM[s] || s;
+}
+const O_OWNER = (o) => ({ DRAWING:'공급사', QUOTE:(oIsDir(o)?'GRS 공사담당':'시공사 현장소장'),
+  HQAPV:'시공사 현장소장', APPROVED:'시공사·공급사', SCHED:'공급사',
+  DELIVERED:(oIsDir(o)?'GRS 담당':'시공사') }[o.stage] || '');
+/* 승인 주체 */
+const oConfirmer = o => oIsDir(o) ? 'GRS 공사담당' : '시공사 현장소장';
+const oSettleNm = o => oIsDir(o) ? '월단위 정산 (GRS)' : '개별 정산 (시공사 대금지급)';
 /* 공급사가 대금을 청구하는 상대 */
-const oBillTo = o => o.type==='직영점' ? '롯데GRS 본사' : o.builder;
-const oBillNote = o => o.type==='직영점' ? '본사 일괄 청구 (월단위)' : '시공사 개별 청구';
+const oBillTo = o => oIsDir(o) ? '롯데GRS 본사' : o.builder;
+const oBillNote = o => oIsDir(o) ? '본사 일괄 청구 (월단위)' : '시공사 개별 청구';
+/* 예전 데이터 호환 — CONFIRM 단계를 APPROVED 로 읽는다 */
+const normOrder = o => (o && o.stage==='CONFIRM') ? {...o, stage:'APPROVED'} : o;
 
 /* 표준 품목 마스터 (spec.js) — 견적 화면에서 필요할 때만 불러온다 */
 let specLoading = null;
@@ -448,7 +498,7 @@ function loadSpec(){
   if(specLoading) return specLoading;
   specLoading = new Promise(res=>{
     const s = document.createElement('script');
-    s.src = './spec.js?v=1';
+    s.src = './spec.js?v=2';
     s.onload = ()=>res(!!window.SPEC_MASTER);
     s.onerror = ()=>{ console.warn('spec.js 로드 실패'); res(false); };
     document.head.appendChild(s);
@@ -457,6 +507,33 @@ function loadSpec(){
 }
 const specList = cat => (window.SPEC_MASTER||[]).filter(x=>x.g===cat);
 const specFind = (cat, code) => (window.SPEC_MASTER||[]).find(x=>x.g===cat && x.c===code);
+
+/* ── 조명 공급계약 시행 이전 단가 (도도조명 재고 물량) ──
+   spec.js 의 window.SPEC_PREV 를 쓰되, 파일이 없어도 동작하도록 기본값을 둔다.
+   기준일은 발주 등록일. 시행일이 지나면 마스터 단가로 자동 복귀하고 표기도 사라진다. */
+const SPEC_PREV_FALLBACK = { maker:'도도조명', items:{ 'RIA-LT-10':100000, 'RIA-LT-11':167000 } };
+const specPrev = () => window.SPEC_PREV || SPEC_PREV_FALLBACK;
+/* 발주 기준일 — 프로세스 판정과 같은 기준(등록 시각)을 쓴다 */
+const oRefTs = o => (o && o.createdAt) || now();
+/* 이 발주에 전환 단가(도도조명)가 적용되는가 */
+const oPrevPrice = o => !!o && o.cat==='조명' && oRefTs(o) < lightContractTs();
+/* 품목 1건을 기준일 시점의 단가·표기로 바꿔준다 */
+function specAt(x, ts){
+  if(!x) return x;
+  const P = specPrev();
+  if(!P || !P.items || (ts||now()) >= lightContractTs()) return x;
+  const p = P.items[x.c];
+  if(p==null) return x;
+  return {...x, p, mk:P.maker||''};
+}
+const specListAt = (cat, ts) => specList(cat).map(x=>specAt(x, ts));
+const specFindAt = (cat, code, ts) => specAt(specFind(cat, code), ts);
+/* 전환 단가 안내 문구 */
+function prevPriceNote(){
+  const P = specPrev();
+  const codes = Object.keys(P.items||{});
+  return `${esc(P.maker)} 재고 물량 단가 적용 — ${codes.map(c=>`<b>${esc(c)} ${money(P.items[c])}</b>`).join(' · ')}`;
+}
 const FREIGHT_AREAS = ['수도권','충청','전라','경상'];
 
 /* 접수 유형 — 일반 보수 / 오픈 직후 추가요청 */
@@ -489,12 +566,22 @@ const STAGE_WAIT = { ESTIMATE:'시공업체 견적 대기', REVIEW:'본사 검�
 const STAGE_OWNER = { ESTIMATE:'시공업체', REVIEW:'본사담당', SURVEY:'시공업체', SCHEDULE:'시공업체', CONSTRUCT:'시공업체' };
 const ROLE_NM = { hq:'본사담당', store:'점포', vendor:'시공업체', builder:'인테리어 시공사', supplier:'공급사' };
 const ROLE_ICON = { hq:'🏢', store:'🏪', vendor:'🔧', builder:'🏗', supplier:'📦' };
-/* 역할별 사용 가능한 시스템 */
-const ROLE_APPS = { hq:['bosu','order'], store:['bosu'], vendor:['bosu'], builder:['order'], supplier:['order'] };
-const APP_NM = { bosu:'보수공사', order:'조명·타일 발주' };
-const APP_ICON = { bosu:'🛠', order:'💡' };
-function myApps(){ return ROLE_APPS[role()] || ['bosu']; }
+/* 역할별 사용 가능한 시스템 — 발주는 조명/타일 탭으로 분리 */
+const APP_NM   = { bosu:'보수공사', light:'조명 발주', tile:'타일 발주' };
+const APP_ICON = { bosu:'🛠', light:'💡', tile:'🧱' };
+const appCat   = a => a==='light' ? '조명' : a==='tile' ? '타일' : null;
+const isOrderApp = a => a==='light' || a==='tile';
+function myApps(){
+  const rl = role();
+  if(rl==='hq') return ['bosu','light','tile'];
+  if(rl==='store' || rl==='vendor') return ['bosu'];
+  if(rl==='builder') return ['light','tile'];
+  if(rl==='supplier') return CAT_OF[myCo()]==='타일' ? ['tile'] : ['light'];   // 공급사는 자기 품목만
+  return ['bosu'];
+}
 function canApp(a){ return myApps().includes(a); }
+/* 채팅은 보수공사 관계자(점포·보수업체·본사)만 사용한다 */
+const canChat = () => ['hq','store','vendor'].includes(role());
 const reqVendor = r => r.vendorCo || storeVendor(r.store);
 const myCo = () => (state.user && state.user.co) || '토마토세븐';
 function visibleReqs(){ return role()==='vendor' ? state.reqs.filter(r=>reqVendor(r)===myCo()) : state.reqs; }
@@ -502,9 +589,12 @@ function visibleReqs(){ return role()==='vendor' ? state.reqs.filter(r=>reqVendo
 /* ===== 발주 — 역할별 열람 범위 ===== */
 function visibleOrders(){
   const rl = role();
-  if(rl==='supplier') return state.orders.filter(o=>o.supplier===myCo());
-  if(rl==='builder')  return state.orders.filter(o=>o.builder===myCo());
-  return state.orders;                       // 본사담당은 전체
+  let list = state.orders;
+  const cat = appCat(state.app);
+  if(cat) list = list.filter(o=>o.cat===cat);          // 지금 보고 있는 탭의 품목만
+  if(rl==='supplier') return list.filter(o=>o.supplier===myCo());
+  if(rl==='builder')  return list.filter(o=>o.builder===myCo());
+  return list;                                          // 본사담당은 전체
 }
 const O = id => state.orders.find(o=>o.id===id);
 const oDeadline = o => (o.stage==='SETTLED'||o.stage==='CANCEL') ? null : o.stageAt + (state.cfg.osla[o.stage]||3)*DAY;
@@ -521,14 +611,20 @@ function oDdayBadge(o){
 function oCanAct(o, stage){
   const rl = role();
   if(o.stage!==stage) return false;
-  if(stage==='DRAWING') return rl==='supplier' && o.supplier===myCo();
-  if(stage==='QUOTE')   return o.type==='직영점' ? rl==='hq' : (rl==='builder' && o.builder===myCo());
-  if(stage==='CONFIRM') return (rl==='builder' && o.builder===myCo()) || (rl==='supplier' && o.supplier===myCo());
-  if(stage==='SCHED')   return rl==='builder' && o.builder===myCo();
-  if(stage==='DELIVERED') return rl==='hq';
+  const mine = { sup: rl==='supplier' && o.supplier===myCo(),
+                 bld: rl==='builder'  && o.builder===myCo() };
+  if(stage==='DRAWING')   return mine.sup;                       // 견적 제출
+  if(stage==='QUOTE')     return oIsDir(o) ? rl==='hq' : mine.bld;   // 1차 승인
+  if(stage==='HQAPV')     return mine.bld;                       // 시공사 승인 (직영 2차)
+  if(stage==='APPROVED')  return mine.bld || mine.sup;           // 납품일 협의
+  if(stage==='SCHED')     return mine.bld;                       // 물품 수령·확인서
+  if(stage==='DELIVERED') return oIsDir(o) ? rl==='hq' : mine.bld;  // 정산
   return false;
 }
-const oAmount = o => o.quote ? (o.confirm && o.confirm.finalAmount!=null ? o.confirm.finalAmount : o.quote.amount) : null;
+const oAmount = o => !o.quote ? null
+  : (o.bldConfirm && o.bldConfirm.finalAmount!=null) ? o.bldConfirm.finalAmount
+  : (o.confirm && o.confirm.finalAmount!=null) ? o.confirm.finalAmount
+  : o.quote.amount;
 const ymOf = ts => { const d=new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; };
 const ymLabel = ym => ym ? `${ym.split('-')[0]}년 ${+ym.split('-')[1]}월` : '';
 
@@ -542,7 +638,7 @@ const state = {
   /* 개선요청 게시판 */
   posts:[], postId:null, bdFilter:'ALL', unsubPosts:null,
   cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE,
-        builders:[...DEFAULT_BUILDERS], osla:{...DEFAULT_O_SLA}, builderCodes:{} },
+        builders:[...DEFAULT_BUILDERS], osla:{...DEFAULT_O_SLA}, builderCodes:{}, lightContract:DEFAULT_LIGHT_CONTRACT },
   reqs:[], ready:false, dbError:null,
   chatRooms:[], chatRoom:null, chatMsgs:[], unsubMsgs:null, roomsSubbed:false, roomQ:'',
   chatNoti:false, lastSeen:{}, seenN:{}, prevRoomTs:{}, roomsInit:false,
@@ -591,6 +687,7 @@ const store = {
           if(Array.isArray(c.builders)&&c.builders.length) state.cfg.builders=c.builders.map(x=>String(x).trim()).filter(Boolean);
           state.cfg.builderCodes = c.builderCodes || {};
           state.cfg.osla = Object.assign({...DEFAULT_O_SLA}, c.osla||{});
+          if(c.lightContract) state.cfg.lightContract = c.lightContract;
           if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor.map(x=>Array.isArray(x)?[String(x[0]),+x[1]]:[String(x.j),+x.r]);
           if(c.laborNote) state.cfg.laborNote=c.laborNote;
         }
@@ -729,6 +826,11 @@ const store = {
       if(histEntry) (o.history=o.history||[]).push(histEntry);
     }
   },
+  async addOrderComment(id, cm){
+    if(LIVE) await FB.updateDoc(FB.doc(fs,'orders',id), {comments:FB.arrayUnion(cm)});
+    const o = O(id);
+    if(o) (o.comments = o.comments||[]).push(cm);
+  },
   /* ---- 개선요청 게시판 ---- */
   async savePost(p){
     if(LIVE) await FB.setDoc(FB.doc(fs,'posts',p.id), p);
@@ -830,7 +932,7 @@ function subscribeOrders(onOrders){
   else if(role()==='builder')  q = FB.query(col, FB.where('builder','==',myCo()), FB.limit(500));
   else                         q = FB.query(col, FB.orderBy('createdAt','desc'), FB.limit(500));
   state.unsubOrders = FB.onSnapshot(q, snap=>{
-    const list = snap.docs.map(d=>d.data()).sort((a,b)=>b.createdAt-a.createdAt);
+    const list = snap.docs.map(d=>normOrder(d.data())).sort((a,b)=>b.createdAt-a.createdAt);
     try{ detectOrderNotis(list); }catch(e){ console.warn('onoti', e); }
     state.orders = list;
     state.ordersReady = true;
@@ -1080,6 +1182,7 @@ function seedOrders(){
     { id:'O-2608-L001', type:'직영점', cat:'조명', supplier:'에이프러스', builder:'인터피아',
       site:'롯데리아 수원역점', openPlan:daysAgo(-18), manager:'김본사',
       createdAt:daysAgo(2), stage:'DRAWING', stageAt:daysAgo(2), drawingCount:3,
+      comments:[{ts:daysAgo(1),author:'인터피아(이소장)',role:'builder',text:'천장 마감 높이가 도면과 다를 수 있어 실측 후 수량 확인 부탁드립니다.'}],
       history:[oh(daysAgo(2),'본사담당(김본사)','발주 등록 · 도면 3매 제공')] },
 
     { id:'O-2608-T001', type:'직영점', cat:'타일', supplier:'우석타일', builder:'인터피아',
@@ -1091,35 +1194,37 @@ function seedOrders(){
 
     { id:'O-2607-L002', type:'가맹점', cat:'조명', supplier:'에이프러스', builder:'예일에이엔티',
       site:'롯데리아 청주가경점', openPlan:daysAgo(-9), manager:'박현장',
-      createdAt:daysAgo(16), stage:'CONFIRM', stageAt:daysAgo(4), drawingCount:2,
+      createdAt:daysAgo(16), stage:'APPROVED', stageAt:daysAgo(4), drawingCount:2,
       quote:{ts:daysAgo(9), items:L2, amount:sum(L2), fileName:'청주가경점_조명_견적서.xlsx'},
-      confirm:{by:'예일에이엔티(박현장)', at:daysAgo(4), decision:'확정', finalAmount:sum(L2), opinion:'수량 적정. 트랙조명 색온도 3000K로 확정.'},
+      bldConfirm:{by:'예일에이엔티(박현장)', at:daysAgo(4), decision:'승인', finalAmount:sum(L2), opinion:'수량 적정. 트랙조명 색온도 3000K로 확정.'},
       history:[oh(daysAgo(16),'본사담당(김본사)','발주 등록 · 도면 2매 제공'),
                oh(daysAgo(9),'에이프러스(영업팀)',`견적서 제출 (${sum(L2).toLocaleString('ko-KR')}원)`),
-               oh(daysAgo(4),'예일에이엔티(박현장)','견적 확정 (현장소장 검토)')] },
+               oh(daysAgo(4),'예일에이엔티(박현장)','시공사 승인 (현장소장 검토)')] },
 
     { id:'O-2607-T002', type:'직영점', cat:'타일', supplier:'우석타일', builder:'하빈아이엔티',
       site:'엔제리너스 광교점', openPlan:daysAgo(3), manager:'김본사',
       createdAt:daysAgo(24), stage:'SCHED', stageAt:daysAgo(6), drawingCount:4,
       quote:{ts:daysAgo(18), items:T2, amount:sum(T2), fileName:'광교점_타일_수량산출서.xlsx'},
-      confirm:{by:'본사담당(김본사)', at:daysAgo(15), decision:'확정', finalAmount:sum(T2), opinion:'금액 적정. 승인합니다.'},
+      confirm:{by:'본사담당(김본사)', at:daysAgo(15), decision:'승인', finalAmount:sum(T2), opinion:'금액 적정. 승인합니다.'},
+      bldConfirm:{by:'하빈아이엔티(이소장)', at:daysAgo(14), decision:'승인', finalAmount:sum(T2), opinion:'물량 확인했습니다.'},
       sched:{planDate:daysAgo(-2), agreedAt:daysAgo(6), agreedBy:'하빈아이엔티(이소장)', place:'광교점 현장 1층 하역장', note:'오전 9시 도착 요청. 지게차 필요.'},
       history:[oh(daysAgo(24),'본사담당(김본사)','발주 등록 · 도면 4매 제공'),
                oh(daysAgo(18),'우석타일(견적팀)','견적서 제출'),
-               oh(daysAgo(15),'본사담당(김본사)','견적 확정'),
+               oh(daysAgo(15),'본사담당(김본사)','본사 승인'), oh(daysAgo(14),'하빈아이엔티(이소장)','시공사 승인'),
                oh(daysAgo(6),'하빈아이엔티(이소장)','납품일 협의 완료')] },
 
     { id:'O-2607-L003', type:'직영점', cat:'조명', supplier:'에이프러스', builder:'대경아이디',
       site:'크리스피크림 판교점', openPlan:daysAgo(6), manager:'김본사',
       createdAt:daysAgo(31), stage:'DELIVERED', stageAt:daysAgo(9), drawingCount:3,
       quote:{ts:daysAgo(26), items:L1, amount:sum(L1), fileName:'판교점_조명_수량산출서.xlsx'},
-      confirm:{by:'본사담당(김본사)', at:daysAgo(23), decision:'확정', finalAmount:sum(L1), opinion:'승인.'},
+      confirm:{by:'본사담당(김본사)', at:daysAgo(23), decision:'승인', finalAmount:sum(L1), opinion:'승인.'},
+      bldConfirm:{by:'대경아이디(최소장)', at:daysAgo(22), decision:'승인', finalAmount:sum(L1), opinion:'물량 확인 완료.'},
       sched:{planDate:daysAgo(10), agreedAt:daysAgo(16), agreedBy:'대경아이디(최소장)', place:'판교점 현장', note:''},
       receipt:{receivedAt:daysAgo(9), receiver:'대경아이디(최소장)', signBy:'대경아이디(최소장)', signAt:daysAgo(9),
                allOk:true, note:'전 품목 이상 없이 수령. 파손 없음.'},
       history:[oh(daysAgo(31),'본사담당(김본사)','발주 등록 · 도면 3매 제공'),
                oh(daysAgo(26),'에이프러스(영업팀)','견적서 제출'),
-               oh(daysAgo(23),'본사담당(김본사)','견적 확정'),
+               oh(daysAgo(23),'본사담당(김본사)','본사 승인'), oh(daysAgo(22),'대경아이디(최소장)','시공사 승인'),
                oh(daysAgo(16),'대경아이디(최소장)','납품일 협의 완료'),
                oh(daysAgo(9),'대경아이디(최소장)','물품 수령 · 납품확인서 서명')] },
 
@@ -1127,13 +1232,13 @@ function seedOrders(){
       site:'롯데리아 천안불당점', openPlan:daysAgo(28), manager:'정현장',
       createdAt:daysAgo(52), stage:'SETTLED', stageAt:daysAgo(14), drawingCount:2,
       quote:{ts:daysAgo(46), items:T2, amount:sum(T2), fileName:'천안불당점_타일_견적서.xlsx'},
-      confirm:{by:'초원(정현장)', at:daysAgo(44), decision:'확정', finalAmount:sum(T2), opinion:'확정합니다.'},
+      bldConfirm:{by:'초원(정현장)', at:daysAgo(44), decision:'승인', finalAmount:sum(T2), opinion:'확정합니다.'},
       sched:{planDate:daysAgo(38), agreedAt:daysAgo(41), agreedBy:'초원(정현장)', place:'천안불당점 현장', note:''},
       receipt:{receivedAt:daysAgo(38), receiver:'초원(정현장)', signBy:'초원(정현장)', signAt:daysAgo(38), allOk:true, note:'이상 없음'},
       settle:{at:daysAgo(14), by:'본사담당(김본사)', method:'개별 정산 (대금지급)', month:ymOf(daysAgo(30)), amount:sum(T2), note:'가맹점 개별 대금지급 완료'},
       history:[oh(daysAgo(52),'본사담당(김본사)','발주 등록'),
                oh(daysAgo(46),'우석타일(견적팀)','견적서 제출'),
-               oh(daysAgo(44),'초원(정현장)','견적 확정'),
+               oh(daysAgo(44),'초원(정현장)','시공사 승인'),
                oh(daysAgo(41),'초원(정현장)','납품일 협의 완료'),
                oh(daysAgo(38),'초원(정현장)','물품 수령 · 납품확인서 서명'),
                oh(daysAgo(14),'본사담당(김본사)','정산 완료')] },
@@ -1142,13 +1247,14 @@ function seedOrders(){
       site:'엔제리너스 대구동성로점', openPlan:daysAgo(1), manager:'김본사',
       createdAt:daysAgo(27), stage:'DELIVERED', stageAt:daysAgo(5), drawingCount:2,
       quote:{ts:daysAgo(22), items:L2, amount:sum(L2), fileName:'대구동성로점_조명_견적서.xlsx'},
-      confirm:{by:'본사담당(김본사)', at:daysAgo(20), decision:'확정', finalAmount:sum(L2), opinion:'승인.'},
+      confirm:{by:'본사담당(김본사)', at:daysAgo(20), decision:'승인', finalAmount:sum(L2), opinion:'승인.'},
+      bldConfirm:{by:'가우(한소장)', at:daysAgo(19), decision:'승인', finalAmount:sum(L2), opinion:'확인했습니다.'},
       sched:{planDate:daysAgo(6), agreedAt:daysAgo(12), agreedBy:'가우(한소장)', place:'대구동성로점 현장', note:''},
       receipt:{receivedAt:daysAgo(5), receiver:'가우(한소장)', signBy:'가우(한소장)', signAt:daysAgo(5),
                allOk:false, note:'트랙조명 1SET 외관 스크래치 — 교체 요청', shortItems:'트랙 조명 1SET 불량'},
       history:[oh(daysAgo(27),'본사담당(김본사)','발주 등록'),
                oh(daysAgo(22),'에이프러스(영업팀)','견적서 제출'),
-               oh(daysAgo(20),'본사담당(김본사)','견적 확정'),
+               oh(daysAgo(20),'본사담당(김본사)','본사 승인'), oh(daysAgo(19),'가우(한소장)','시공사 승인'),
                oh(daysAgo(12),'가우(한소장)','납품일 협의 완료'),
                oh(daysAgo(5),'가우(한소장)','물품 수령 · 일부 불량 기재')] },
   ];
@@ -1305,7 +1411,7 @@ function doLogin(){
   document.getElementById('login').classList.remove('open');
   if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); }
   loadChatPrefs(); ensureRooms();
-  state.app = myApps()[0]; state.view = state.app==='order'?'odash':'dash'; render();
+  state.app = myApps()[0]; state.view = isOrderApp(state.app)?'odash':'dash'; render();
 }
 function showLogin(){
   fillStoreList();
@@ -1334,14 +1440,14 @@ function setRole(r){
   const nm = { hq:'김본사', store:state.cfg.stores[0], vendor:'김기사', builder:'이소장', supplier:'영업팀' }[r] || ROLE_NM[r];
   state.user = { role:r, name:nm, store:r==='store'?state.cfg.stores[0]:'', co };
   if(!canApp(state.app)) state.app = myApps()[0];
-  const allowed = state.app==='order'
-    ? ['odash','olist','odetail','chat','chatroom','board','post'].concat(r==='hq'?['onew','settle','set']:[]).concat(r==='supplier'?['settle']:[])
-    : ['dash','list','detail','chat','chatroom','board','post'].concat(r==='store'?['new']:[]).concat(r==='hq'?['set']:[]);
-  if(!allowed.includes(state.view)) state.view = state.app==='order'?'odash':'dash';
+  const allowed = isOrderApp(state.app)
+    ? ['odash','olist','odetail','board','post','settle'].concat(r==='hq'?['onew','set']:[]).concat(r==='builder'?['onew']:[])
+    : ['dash','list','detail','board','post'].concat(canChat()?['chat','chatroom']:[]).concat(r==='store'?['new']:[]).concat(r==='hq'?['set']:[]);
+  if(!allowed.includes(state.view)) state.view = isOrderApp(state.app)?'odash':'dash';
   render();
 }
 function ensureRooms(){
-  if(state.roomsSubbed || !state.user) return;
+  if(state.roomsSubbed || !state.user || !canChat()) return;
   state.roomsSubbed = true;
   store.subscribeRooms(list=>{
     state.chatRooms = list;
@@ -1420,6 +1526,8 @@ function render(){
   if(modalOpen()) return; // 모달 작업 중엔 실시간 갱신으로 화면 덮지 않음
   const cmtEl = document.getElementById('cmtIn');
   const cmtVal = cmtEl ? cmtEl.value : '';
+  const oCmtEl = document.getElementById('oCmtIn');
+  const oCmtVal = oCmtEl ? oCmtEl.value : '';
   const chatEl = document.getElementById('chatIn');
   const chatVal = chatEl ? chatEl.value : '';
 
@@ -1461,13 +1569,15 @@ function render(){
   else if(state.view==='odash') m.innerHTML = vODash();
   else if(state.view==='olist') m.innerHTML = vOList();
   else if(state.view==='odetail') m.innerHTML = vODetail();
-  else if(state.view==='onew'){ if(!document.getElementById('oSite')) m.innerHTML = vONew(); }
+  else if(state.view==='onew'){ if(!document.getElementById('oSite')){ m.innerHTML = vONew(); setTimeout(oTypeHint,0); } }
   else if(state.view==='settle') m.innerHTML = vSettle();
   else if(state.view==='board') m.innerHTML = vBoard();
   else if(state.view==='post') m.innerHTML = vPost();
 
   const cmtEl2 = document.getElementById('cmtIn');
   if(cmtEl2 && cmtVal) cmtEl2.value = cmtVal;
+  const oCmtEl2 = document.getElementById('oCmtIn');
+  if(oCmtEl2 && oCmtVal) oCmtEl2.value = oCmtVal;
   const chatEl2 = document.getElementById('chatIn');
   if(chatEl2 && chatVal) chatEl2.value = chatVal;
   if(state.view==='chatroom') renderChatMsgs();
@@ -1491,7 +1601,7 @@ function unreadOf(name){
 const hasUnread = name => unreadOf(name) !== 0;
 /* 내가 볼 수 있는 방들의 미확인 합계 */
 function unreadTotal(){
-  if(!state.user) return 0;
+  if(!state.user || !canChat()) return 0;
   let n = 0;
   myRoomNames().forEach(name=>{ const u = unreadOf(name); n += u < 0 ? 1 : u; });
   return n;
@@ -1515,20 +1625,21 @@ function markRead(room){
 }
 function renderNav(){
   if(!state.user) return;
-  const un = unreadTotal();
+  const un = canChat() ? unreadTotal() : 0;
   const chatLabel = '💬 채팅' + (un?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${un}</span>`:'');
   const newPosts = role()==='hq' ? (state.posts||[]).filter(p=>p.status==='OPEN').length : 0;
   const bdLabel = '🛠 개선요청' + (newPosts?` <span style="background:#FFD028;color:#7A2E00;border-radius:9px;font-size:10px;font-weight:800;padding:1px 6px;vertical-align:2px">${newPosts}</span>`:'');
   let tabs, alias;
-  if(state.app==='order'){
-    tabs = [ ['odash','대시보드'], ['olist','발주 목록'], ['chat',chatLabel] ];
-    if(role()==='hq'){ tabs.splice(2,0,['onew','+ 발주 등록']); tabs.push(['settle','정산']); }
-    else if(role()==='supplier') tabs.push(['settle','정산·청구']);
+  if(isOrderApp(state.app)){
+    tabs = [ ['odash','대시보드'], ['olist','발주 목록'] ];
+    if(role()==='hq' || role()==='builder') tabs.push(['onew','+ 발주 등록']);
+    if(role()==='hq' || role()==='builder' || role()==='supplier') tabs.push(['settle', role()==='supplier'?'정산·청구':'정산']);
     tabs.push(['board', bdLabel]);
     if(role()==='hq') tabs.push(['set','설정']);
-    alias = { odetail:'olist', chatroom:'chat', post:'board' };
+    alias = { odetail:'olist', post:'board' };
   } else {
-    tabs = [ ['dash','대시보드'], ['list','접수 목록'], ['chat',chatLabel] ];
+    tabs = [ ['dash','대시보드'], ['list','접수 목록'] ];
+    if(canChat()) tabs.push(['chat',chatLabel]);
     if(role()==='store') tabs.push(['new','+ 신규 접수']);
     tabs.push(['board', bdLabel]);
     if(role()==='hq') tabs.push(['set','설정']);
@@ -1550,9 +1661,10 @@ function renderNav(){
 function renderChatBar(){
   const bar = document.getElementById('chatbar');
   if(!bar) return;
+  if(!state.user || !canChat() || isOrderApp(state.app)){ bar.style.display='none'; return; }
   const un = unreadRoomList();
   const inChat = state.view==='chat' || state.view==='chatroom';
-  if(!state.user || !un.length || inChat){ bar.style.display='none'; return; }
+  if(!un.length || inChat){ bar.style.display='none'; return; }
   const first = un[0];
   const more = un.length>1 ? ` 외 ${un.length-1}개 방` : '';
   bar.style.display='flex';
@@ -1570,7 +1682,7 @@ function switchApp(a){
   if(!canApp(a) || state.app===a) return;
   state.app = a;
   stopDetailFiles();
-  state.view = a==='order' ? 'odash' : 'dash';
+  state.view = isOrderApp(a) ? 'odash' : 'dash';
   state.detailId=null; state.orderId=null;
   render(); window.scrollTo(0,0);
 }
@@ -2505,7 +2617,7 @@ async function addCmt(id){
 /* ===== 채팅 ===== */
 /* 내가 참여하는 방 이름 목록 (검색어 무시) */
 function myRoomNames(){
-  if(!state.user) return [];
+  if(!state.user || !canChat()) return [];
   if(role()==='store') return ['전체', state.user.store || state.user.name];
   const known = new Set(['전체', ...state.cfg.stores]);
   (state.chatRooms||[]).forEach(r=>known.add(r.name||r.id));
@@ -3241,8 +3353,20 @@ function vSet(){
     <div class="note" style="margin:0 0 10px">품목별 공급사는 각 1개사로 고정되어 있습니다.</div>
     <div class="kv"><b>💡 조명</b><strong>에이프러스</strong></div>
     <div class="kv"><b>🧱 타일</b><strong>우석타일</strong></div>
+    <div class="h2" style="margin-top:16px;font-size:15px">📅 조명 공급계약 시행일</div>
+    <div class="note" style="margin:0 0 10px">이 날짜 <b>이전에 등록된 조명 발주</b>는 직영점이어도
+      가맹점과 같은 방식(시공사 발주·승인·개별정산)으로 진행합니다.
+      계약이 미뤄지면 날짜만 바꾸면 되고, 이미 등록된 건의 방식은 바뀌지 않습니다.</div>
+    <input type="date" value="${esc(state.cfg.lightContract||DEFAULT_LIGHT_CONTRACT)}" onchange="updLightContract(this.value)">
+    <div class="note">현재 기준 — 조명 직영 신규 발주는
+      <b>${now() < lightContractTs() ? '가맹 방식' : '직영 방식'}</b>으로 등록됩니다.</div>
+    <div class="note${now() < lightContractTs() ? ' warn' : ''}">🔦 <b>${esc(specPrev().maker)} 전환 단가</b> —
+      이 날짜 전에 등록된 조명 발주는 직영·가맹 구분 없이
+      ${prevPriceNote()} 로 견적되고, 규격에 「${esc(specPrev().maker)}」이 표기됩니다.
+      시행일이 지나면 에이프러스 단가로 자동 복귀하고 표기도 사라집니다.
+      ${now() < lightContractTs() ? '<b>현재 적용 중입니다.</b>' : '현재는 적용되지 않습니다.'}</div>
     <div class="h2" style="margin-top:16px;font-size:15px">⏱ 발주 단계별 처리기한</div>
-    ${O_STAGES.slice(0,5).map(s=>`
+    ${['DRAWING','QUOTE','HQAPV','APPROVED','SCHED'].map(s=>`
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <span style="flex:1;font-weight:700;font-size:14px">${O_NM[s]}</span>
         <input type="number" min="1" value="${state.cfg.osla[s]}" style="width:70px;text-align:center" onchange="updOSla('${s}',this.value)">
@@ -3366,6 +3490,11 @@ async function delBuilder(i){
   if(!confirm(`「${arr[i]}」을(를) 목록에서 삭제할까요?`)) return;
   arr.splice(i,1);
   try{ await store.saveConfig({builders:arr}); render(); }catch(e){ toast('저장 실패'); }
+}
+async function updLightContract(v){
+  if(!v) return;
+  try{ await store.saveConfig({lightContract:v}); toast('조명 계약 시행일이 저장되었습니다'); render(); }
+  catch(e){ toast('저장 실패'); }
 }
 async function updOSla(s,v){ const osla={...state.cfg.osla}; osla[s]=Math.max(1,Number(v)||1); try{ await store.saveConfig({osla}); toast('저장되었습니다'); render(); }catch(e){ toast('저장 실패'); } }
 let storeUploadList = [];
@@ -3635,8 +3764,9 @@ function vODash(){
     <div class="h2">📦 발주 진행 현황</div>
     <div class="tiles">
       ${tile('DRAWING','견적 대기',cnt('DRAWING'))}
-      ${tile('QUOTE','확정 대기',cnt('QUOTE'))}
-      ${tile('CONFIRM','납품일 협의',cnt('CONFIRM'))}
+      ${tile('QUOTE','승인 대기',cnt('QUOTE'))}
+      ${role()==='hq'?tile('HQAPV','시공사 승인 대기',cnt('HQAPV')):tile('HQAPV','내 승인 대기',cnt('HQAPV'))}
+      ${tile('APPROVED','납품일 협의',cnt('APPROVED'))}
       ${tile('SCHED','납품 대기',cnt('SCHED'))}
       ${tile('DELIVERED','정산 대기',cnt('DELIVERED'))}
       ${tile('ALL','전체',list.filter(O_LIVE).length)}
@@ -3676,14 +3806,15 @@ function oGoList(f){ state.oFilter=f; state.oCat='ALL'; state.oq=''; go('olist')
 /* ── 발주 목록 ── */
 function oRow(o){
   const amt = oAmount(o);
-  const idx = O_STAGES.indexOf(o.stage);
-  const bar = O_STAGES.slice(0,5).map((s,i)=>`<i class="${i<idx?'done':(i===idx&&o.stage!=='SETTLED'?'cur':(o.stage==='SETTLED'?'done':''))}"></i>`).join('');
+  const st = oStages(o);
+  const idx = st.indexOf(o.stage);
+  const bar = st.slice(0,st.length-1).map((x,i)=>`<i class="${i<idx?'done':(i===idx&&o.stage!=='SETTLED'?'cur':(o.stage==='SETTLED'?'done':''))}"></i>`).join('');
   return `<button class="card req" onclick="goOrder('${o.id}')">
     <div class="row1">
       <span class="id">${o.id}</span>
-      <span class="badge ${O_BADGE[o.stage]||'b-gray'}">${O_WAIT[o.stage]||o.stage}</span>
+      <span class="badge ${O_BADGE[o.stage]||'b-gray'}">${oWait(o)}</span>
       <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
-      <span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
+      <span class="badge ${oIsDir(o)?'b-blue':'b-gray'}">${oProcNm(o)}</span>
       ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
     </div>
     <h3>${esc(o.site)}</h3>
@@ -3722,12 +3853,12 @@ function oSetFilter(v){ state.oFilter=v; render(); }
 function oSetCat(v){ state.oCat=v; render(); }
 
 /* ── 발주 상세 ── */
-/* 6단계라 스테퍼에서는 짧은 이름을 쓴다 */
-const O_SHORT = { DRAWING:'도면', QUOTE:'견적', CONFIRM:'확정', SCHED:'납품일', DELIVERED:'납품', SETTLED:'정산' };
+/* 스테퍼는 그 발주가 따르는 프로세스의 단계만 보여준다 */
 function oStepper(o){
-  const idx = O_STAGES.indexOf(o.stage);
-  return `<div class="stepper">${O_STAGES.map((s,i)=>{
-    const done = i<idx || o.stage==='SETTLED';
+  const st = oStages(o);
+  const idx = st.indexOf(o.stage);
+  return `<div class="stepper">${st.map((s,i)=>{
+    const done = (idx>=0 && i<idx) || o.stage==='SETTLED';
     return `<div class="step ${done?'done':(i===idx?'cur':'')}"><div class="dot">${done?'✓':i+1}</div>${O_SHORT[s]}</div>`;
   }).join('')}</div>`;
 }
@@ -3772,8 +3903,14 @@ function vODetail(){
     <div class="kv"><b>GRS 담당</b>${esc(o.manager||'-')}</div>
     <div class="kv"><b>오픈 예정</b>${o.openPlan?fmtD(o.openPlan):'-'}</div>
     <div class="kv"><b>도면</b>${o.drawingCount?`${o.drawingCount}매 제공됨`:'미제공'}</div>
-    <div class="kv"><b>확정 권한</b>${oConfirmer(o)} <span style="font-size:11.5px;color:var(--sub);margin-left:4px">(${o.type} 프로세스)</span></div>
-    <div class="kv"><b>정산 방식</b>${oSettleNm(o)}</div>`;
+    <div class="kv"><b>진행 방식</b><span class="badge ${oIsDir(o)?'b-blue':'b-gray'}">${oProcNm(o)}</span></div>
+    <div class="kv"><b>발주 주체</b>${oOrderer(o)}</div>
+    <div class="kv"><b>승인 절차</b>${oIsDir(o)?'본사 승인 → 시공사 승인 (2단계)':'시공사 승인 (1단계)'}</div>
+    <div class="kv"><b>정산 방식</b>${oSettleNm(o)}</div>
+    ${oLightPre(o)?`<div class="note warn">💡 조명 공급계약 시행(${state.cfg.lightContract||DEFAULT_LIGHT_CONTRACT}) 이전 발주입니다.
+      직영점이지만 <b>가맹점과 같은 방식</b>(시공사 발주·승인·개별정산)으로 진행합니다.</div>`:''}
+    ${oPrevPrice(o)?`<div class="note warn">🔦 계약 시행 전 발주라 <b>${esc(specPrev().maker)} 재고 물량 단가</b>가 적용됩니다 —
+      ${prevPriceNote()}. 견적 규격에 「${esc(specPrev().maker)}」이 표기됩니다.</div>`:''}`;
   s += fileListHtml('O:'+o.id, ['drawing'], '📥 제공 도면');
   if(rl==='hq' && o.stage==='DRAWING')
     s += `<input type="file" id="oDwF" accept="image/*,.pdf" multiple style="display:none" onchange="oAddDrawing('${o.id}',this)">
@@ -3801,35 +3938,57 @@ function vODetail(){
   s += `</div>`;
 
   /* 3. 검토·확정 */
-  s += `<div class="sec"><div class="st">✅ 3. 검토·확정 ${oSlaTag(o,'CONFIRM')}
-    <span class="badge b-gray">${oConfirmer(o)}</span></div>`;
-  if(o.confirm){
-    s += `<div class="kv"><b>결과</b><span class="badge ${o.confirm.decision==='확정'?'b-green':'b-red'}">${o.confirm.decision}</span></div>
-      <div class="kv"><b>확정금액</b><strong>${money(o.confirm.finalAmount)}</strong></div>
-      <div class="kv"><b>검토자</b>${esc(o.confirm.by)} · ${fmtDT(o.confirm.at)}</div>
-      ${o.confirm.opinion?`<div class="kv"><b>의견</b>${esc(o.confirm.opinion)}</div>`:''}`;
-  } else s += `<div class="note">${o.quote?`${oConfirmer(o)} 검토 대기중입니다.`:'견적 제출 후 검토합니다.'}</div>`;
-  if(oCanAct(o,'QUOTE'))
-    s += `<button class="btn blk" onclick="oConfirmModal('${o.id}')">✍ 견적 검토·확정</button>`;
+  /* 3. 승인 — 직영은 본사승인 후 시공사승인, 가맹은 시공사승인만 */
+  if(oIsDir(o)){
+    s += `<div class="sec"><div class="st">🏢 3. 본사 승인 ${oSlaTag(o,'QUOTE')}
+      <span class="badge b-gray">GRS 공사담당</span></div>`;
+    if(o.confirm){
+      s += `<div class="kv"><b>결과</b><span class="badge b-green">${o.confirm.decision}</span></div>
+        <div class="kv"><b>승인금액</b><strong>${money(o.confirm.finalAmount)}</strong></div>
+        <div class="kv"><b>승인자</b>${esc(o.confirm.by)} · ${fmtDT(o.confirm.at)}</div>
+        ${o.confirm.opinion?`<div class="kv"><b>의견</b>${esc(o.confirm.opinion)}</div>`:''}`;
+    } else s += `<div class="note">${o.quote?'본사 검토 대기중입니다.':'견적 제출 후 검토합니다.'}</div>`;
+    if(oCanAct(o,'QUOTE')) s += `<button class="btn blk" onclick="oConfirmModal('${o.id}')">✍ 본사 승인 처리</button>`;
+    s += `</div>`;
+  }
+
+  /* 시공사 승인 — 합의된 물량을 시공사가 최종 확인 */
+  s += `<div class="sec"><div class="st">🏗 ${oIsDir(o)?'4':'3'}. 시공사 승인 ${oSlaTag(o, oIsDir(o)?'HQAPV':'QUOTE')}
+    <span class="badge b-gray">${esc(o.builder)} 현장소장</span></div>`;
+  if(o.bldConfirm){
+    s += `<div class="kv"><b>결과</b><span class="badge b-green">${o.bldConfirm.decision}</span></div>
+      <div class="kv"><b>확정금액</b><strong>${money(o.bldConfirm.finalAmount)}</strong></div>
+      <div class="kv"><b>승인자</b>${esc(o.bldConfirm.by)} · ${fmtDT(o.bldConfirm.at)}</div>
+      ${o.bldConfirm.opinion?`<div class="kv"><b>의견</b>${esc(o.bldConfirm.opinion)}</div>`:''}
+      <div class="note">✅ 시공사가 물량·금액에 동의한 기록입니다.</div>`;
+  } else {
+    const waitMsg = !o.quote ? '견적 제출 후 진행합니다.'
+      : (oIsDir(o) && !o.confirm) ? '본사 승인 후 시공사가 확인합니다.'
+      : `${esc(o.builder)} 확인 대기중입니다.`;
+    s += `<div class="note">${waitMsg}</div>`;
+  }
+  if(oCanAct(o, oIsDir(o)?'HQAPV':'QUOTE'))
+    s += `<div class="note">아래 물량과 금액에 이의가 없으면 승인해주세요. 승인 후에는 이 내용으로 납품이 진행됩니다.</div>
+      <button class="btn blk grn" onclick="oBldConfirmModal('${o.id}')">✅ 시공사 승인 처리</button>`;
   s += `</div>`;
 
   /* 4. 납품일 협의 */
-  s += `<div class="sec"><div class="st">🚚 4. 납품일 협의 ${oSlaTag(o,'CONFIRM')}
+  s += `<div class="sec"><div class="st">🚚 ${oIsDir(o)?'5':'4'}. 납품일 협의 ${oSlaTag(o,'APPROVED')}
     <span class="badge b-gray">시공사 ↔ 공급사</span></div>`;
   if(o.sched){
     s += `<div class="kv"><b>납품 예정일</b><strong>${fmtD(o.sched.planDate)}</strong></div>
       <div class="kv"><b>납품 장소</b>${esc(o.sched.place||'-')}</div>
       <div class="kv"><b>협의</b>${esc(o.sched.agreedBy)} · ${fmtDT(o.sched.agreedAt)}</div>
       ${o.sched.note?`<div class="kv"><b>요청사항</b>${esc(o.sched.note)}</div>`:''}`;
-  } else s += `<div class="note">${o.confirm?'시공사와 공급사가 납품일을 협의해 등록해주세요.':'견적 확정 후 협의합니다.'}</div>`;
-  if(oCanAct(o,'CONFIRM'))
+  } else s += `<div class="note">${o.bldConfirm?'시공사와 공급사가 납품일을 협의해 등록해주세요.':'승인 완료 후 협의합니다.'}</div>`;
+  if(oCanAct(o,'APPROVED'))
     s += `<button class="btn blk" onclick="oSchedModal('${o.id}')">📅 납품일 협의 등록</button>`;
   if(o.stage==='SCHED' && ((rl==='builder'&&o.builder===myCo())||(rl==='supplier'&&o.supplier===myCo())))
     s += `<button class="btn sec2 blk" onclick="oSchedModal('${o.id}')">✏ 납품일 변경</button>`;
   s += `</div>`;
 
   /* 5. 납품 · 물품납품확인서 */
-  s += `<div class="sec"><div class="st">📦 5. 물품 납품·확인서 ${oSlaTag(o,'SCHED')}</div>`;
+  s += `<div class="sec"><div class="st">📦 ${oIsDir(o)?'6':'5'}. 물품 납품·확인서 ${oSlaTag(o,'SCHED')}</div>`;
   if(o.receipt){
     s += `<div class="kv"><b>수령일</b>${fmtDT(o.receipt.receivedAt)}</div>
       <div class="kv"><b>수령자</b>${esc(o.receipt.receiver)}</div>
@@ -3857,7 +4016,7 @@ function vODetail(){
   s += `</div>`;
 
   /* 6. 정산 */
-  s += `<div class="sec"><div class="st">💰 6. 정산 <span class="badge b-gray">${oSettleNm(o)}</span></div>`;
+  s += `<div class="sec"><div class="st">💰 ${oIsDir(o)?'7':'6'}. 정산 <span class="badge b-gray">${oSettleNm(o)}</span></div>`;
   if(o.settle){
     s += `<div class="kv"><b>정산금액</b><strong>${money(o.settle.amount)}</strong></div>
       <div class="kv"><b>정산방식</b>${esc(o.settle.method)}</div>
@@ -3868,6 +4027,15 @@ function vODetail(){
   if(oCanAct(o,'DELIVERED'))
     s += `<button class="btn blk" onclick="oSettleModal('${o.id}')">💳 정산 처리</button>`;
   s += `</div>`;
+
+  /* 의견·댓글 — 관계자 소통용 */
+  s += `<div class="sec"><div class="st">💬 의견·댓글 <span class="badge b-gray">${(o.comments||[]).length}</span></div>
+    ${(o.comments||[]).slice().sort((a,b)=>a.ts-b.ts).map(cm=>`<div class="cmt"><div class="who">${esc(cm.author)}<span>${fmtDT(cm.ts)}</span></div>${esc(cm.text)}</div>`).join('')
+      || '<div class="note">아직 의견이 없습니다. 물량·납품 관련 사항을 남겨보세요.</div>'}
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="oCmtIn" placeholder="의견을 입력하세요 (관계자 전체 공개)">
+      <button class="btn sm" style="flex-shrink:0" onclick="addOCmt('${o.id}')">등록</button>
+    </div></div>`;
 
   /* 전체 첨부파일 */
   {
@@ -3896,7 +4064,7 @@ function vODetail(){
     <div class="card">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-size:12px;color:var(--sub);font-weight:700">${o.id}</span>
-        <span class="badge ${O_BADGE[o.stage]||'b-gray'}">${O_WAIT[o.stage]||o.stage}</span>
+        <span class="badge ${O_BADGE[o.stage]||'b-gray'}">${oWait(o)}</span>
         <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
       </div>
       <h3 style="font-size:18px;font-weight:800;margin-top:6px">${CAT_ICON[o.cat]} ${esc(o.site)} · ${o.cat} 발주</h3>
@@ -3908,9 +4076,10 @@ function vODetail(){
 /* ── 발주 등록 (본사) ── */
 function vONew(){
   const bs = state.cfg.builders;
+  const cat = appCat(state.app) || '조명';
   return oRoleNote()+`<div class="card">
-    <div class="h2">📦 조명·타일 발주 등록</div>
-    <div class="note" style="margin:0 0 12px">GRS가 도면을 제공하면 공급사가 수량을 산출해 견적서를 제출합니다.</div>
+    <div class="h2">${CAT_ICON[cat]} ${cat} 발주 등록</div>
+    <div class="note" style="margin:0 0 12px">도면을 올리면 <b>${esc(SUPPLIER_OF[cat])}</b>가 수량을 산출해 견적서를 제출합니다.</div>
     <label>현장(점포)명</label>
     <div class="spwrap">
       <input id="oSite" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
@@ -3920,15 +4089,13 @@ function vONew(){
     <label>운영 구분</label>
     <select id="oType" onchange="oTypeHint()"><option>직영점</option><option>가맹점</option></select>
     <div class="note" id="oTypeNote">직영점 — 견적 확정은 <b>GRS 공사담당자</b>, 정산은 <b>월단위</b>입니다.</div>
-    <label>발주 품목</label>
-    <select id="oCat" onchange="oCatHint()"><option>조명</option><option>타일</option></select>
-    <div class="note" id="oCatNote">공급사: <b>에이프러스</b></div>
+    <input type="hidden" id="oCat" value="${cat}">
     <label>인테리어 시공사</label>
-    <select id="oBuilder">${bs.map(b=>`<option>${esc(b)}</option>`).join('')}</select>
+    <select id="oBuilder">${bs.map(b=>`<option${role()==='builder'&&b===myCo()?' selected':''}>${esc(b)}</option>`).join('')}</select>
     <label>오픈 예정일</label>
     <input id="oOpen" type="date" value="${tsToDateInput(now()+14*DAY)}">
     <label>GRS 담당자</label>
-    <input id="oMgr" value="${esc(state.user.name||'')}" placeholder="예) 김본사">
+    <input id="oMgr" value="${esc(role()==='hq'?(state.user.name||''):'')}" placeholder="예) 김본사">
     <label>도면 첨부 (사진·PDF)</label>
     <input type="file" id="oNewF" accept="image/*,.pdf" multiple style="display:none" onchange="oPickDrawings(this)">
     <button class="file-add" onclick="document.getElementById('oNewF').click()">📐 도면 추가 (여러 장 가능)</button>
@@ -3938,13 +4105,23 @@ function vONew(){
 }
 function oTypeHint(){
   const t = document.getElementById('oType').value;
-  document.getElementById('oTypeNote').innerHTML = t==='직영점'
-    ? '직영점 — 견적 확정은 <b>GRS 공사담당자</b>, 정산은 <b>월단위</b>입니다.'
-    : '가맹점 — 견적 확정은 <b>시공사 현장소장</b>, 정산은 <b>개별 대금지급</b>입니다.';
-}
-function oCatHint(){
-  const c = document.getElementById('oCat').value;
-  document.getElementById('oCatNote').innerHTML = `공급사: <b>${SUPPLIER_OF[c]}</b>`;
+  const cat = appCat(state.app) || '조명';
+  const pre = cat==='조명' && now() < lightContractTs();
+  const el = document.getElementById('oTypeNote'); if(!el) return;
+  const priceLine = pre
+    ? `<br>🔦 계약 시행 전이라 <b>${esc(specPrev().maker)} 재고 물량 단가</b>가 적용됩니다 (${prevPriceNote()}).`
+    : '';
+  if(t==='가맹점'){
+    el.className = pre ? 'note warn' : 'note';
+    el.innerHTML = '가맹 방식 — <b>시공사 발주 → 공급사 견적 → 시공사 승인 → 납품 → 시공사 개별정산</b>' + priceLine;
+  } else if(pre){
+    el.className='note warn';
+    el.innerHTML = `💡 조명 공급계약 시행(${state.cfg.lightContract||DEFAULT_LIGHT_CONTRACT}) 전이라
+      직영점도 <b>가맹점과 같은 방식</b>으로 진행됩니다 (시공사 승인·개별정산).` + priceLine;
+  } else {
+    el.className='note';
+    el.innerHTML = '직영 방식 — <b>GRS 발주 → 공급사 견적 → 본사 승인 → 시공사 승인 → 납품 → GRS 정산</b>';
+  }
 }
 let oNewDrawings = [];
 async function oPickDrawings(inp){
@@ -3962,14 +4139,14 @@ async function submitOrder(){
   const site = document.getElementById('oSite').value.trim();
   if(!site){ toast('현장명을 입력해주세요'); return; }
   const type = document.getElementById('oType').value;
-  const cat  = document.getElementById('oCat').value;
+  const cat  = document.getElementById('oCat').value || appCat(state.app) || '조명';
   const d = new Date();
   const id = `O-${String(d.getFullYear()).slice(2)}${pad2(d.getMonth()+1)}-${cat==='조명'?'L':'T'}${rnd4().slice(0,3)}`;
   const o = {
     id, type, cat, supplier:SUPPLIER_OF[cat], builder:document.getElementById('oBuilder').value,
     site, openPlan:new Date(document.getElementById('oOpen').value+'T12:00:00').getTime(),
     manager:document.getElementById('oMgr').value.trim()||state.user.name,
-    createdAt:now(), stage:'DRAWING', stageAt:now(), drawingCount:oNewDrawings.length,
+    createdAt:now(), stage:'DRAWING', stageAt:now(), drawingCount:oNewDrawings.length, comments:[],
     history:[{ts:now(), actor:actorLabel(), action:`발주 등록 · 도면 ${oNewDrawings.length}매 제공`}]
   };
   const btn = document.getElementById('oSubmit');
@@ -4009,6 +4186,15 @@ async function oAddDrawing(id, inp){
   render();
 }
 const oEntry = action => ({ts:now(), actor:actorLabel(), action});
+async function addOCmt(id){
+  const el = document.getElementById('oCmtIn');
+  const t = el.value.trim(); if(!t) return;
+  try{
+    await store.addOrderComment(id, {ts:now(), author:actorLabel(), role:role(), text:t});
+    el.value='';
+    if(!modalOpen()) render();
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 /* 서명 후에도 담당 시공사·본사는 납품 사진을 추가할 수 있다 (정산 전 증빙 보완) */
 function oCanAct2Receipt(o){
   if(o.stage!=='DELIVERED') return false;
@@ -4058,6 +4244,8 @@ async function oQuoteModal(id, keep){
     <div class="sub">${o.id} · ${esc(o.site)} · ${o.cat} · ${esc(o.supplier)}</div>
     ${ok?`<div class="note">표준 품목표(${window.SPEC_VERSION})에서 코드를 고르면 사진·규격·단가가 자동으로 채워집니다.</div>`
         :`<div class="note warn">표준 품목표를 불러오지 못했습니다 — 직접 입력으로 작성해주세요. (spec.js 파일이 함께 업로드됐는지 확인)</div>`}
+    ${oPrevPrice(o)?`<div class="note warn">💡 조명 공급계약 시행(${esc(state.cfg.lightContract||DEFAULT_LIGHT_CONTRACT)}) 이전 발주 —
+      ${prevPriceNote()}. 규격에 「${esc(specPrev().maker)}」이 함께 표기됩니다.</div>`:''}
     <button class="btn sec2 blk" style="margin-top:8px" onclick="downloadQuoteForm('order',{site:'${esc(o.site).replace(/'/g,"\\'")}',co:'${esc(o.supplier)}'})">⬇ 표준 견적서 양식(.xlsx) 내려받기</button>
     <label>견적서 파일 (엑셀 업로드 시 자동 인식 · PDF/사진 가능)</label>
     <input type="file" id="oqF" accept="image/*,.pdf,.xlsx" style="display:none" onchange="oqPickFile(this)">
@@ -4108,7 +4296,8 @@ function oqPick(orderId){
   oqPickRender();
 }
 function oqPickRender(){
-  const list = specList(oqPickCat);
+  const ordr = O(oqPickFor);
+  const list = specListAt(oqPickCat, oRefTs(ordr));
   const brands = ['전체', ...Array.from(new Set(list.map(x=>x.b)))];
   let rows = list;
   if(oqPickBrand!=='전체') rows = rows.filter(x=>x.b===oqPickBrand);
@@ -4116,6 +4305,7 @@ function oqPickRender(){
   if(q) rows = rows.filter(x=>[x.c,x.n,x.sz,x.pl,x.b].join(' ').toLowerCase().includes(q));
   openModal(`<h2>표준 품목 선택</h2>
     <div class="sub">${oqPickCat} · ${rows.length}종 · 단가는 부가세 별도</div>
+    ${oPrevPrice(ordr)?`<div class="note warn">💡 ${prevPriceNote()}</div>`:''}
     <input id="oqPq" placeholder="🔍 코드·품명·규격 검색" value="${esc(oqPickQ)}"
       oninput="oqPickQ=this.value;oqPickRender();setTimeout(()=>refocusSearch('oqPq'),0)">
     <div class="chips" style="margin-top:10px">
@@ -4139,6 +4329,7 @@ function oqPickRender(){
 function oqSpecLine(x){
   const ok = v => v && !/^[-–—]$/.test(String(v).trim());   // PDF의 '-' 표기는 빈 값으로 본다
   const p = [];
+  if(x.mk) p.push(x.mk);          // 계약 시행 전 — 규격에 공급업체(도도조명) 표기
   if(x.g==='조명'){
     if(ok(x.k)) p.push(x.k);
     if(ok(x.w)) p.push(x.w);
@@ -4152,13 +4343,13 @@ function oqSpecLine(x){
   return p.join(' · ');
 }
 function oqPickAdd(code){
-  const x = specFind(oqPickCat, code);
+  const x = specFindAt(oqPickCat, code, oRefTs(O(oqPickFor)));
   if(!x) return;
   const dup = oQItems.find(it=>it.code===code);
   if(dup){ dup.qty = (+dup.qty||0)+1; }
   else oQItems.push({
     code:x.c, name:x.n||x.c, spec:oqSpecLine(x), unit:x.u||'EA', qty:1, price:x.p||0,
-    img:x.img, kelvin:x.k||'', size:x.sz||'', cut:x.cut||'', brand:x.b||''
+    img:x.img, kelvin:x.k||'', size:x.sz||'', cut:x.cut||'', brand:x.b||'', maker:x.mk||''
   });
   toast(`${code} 추가됨`);
   oqBackToQuote();
@@ -4216,13 +4407,16 @@ async function oqPickFile(inp){
         await loadSpec();
         const o = O(oqPickFor) || null;
         const cat = o ? o.cat : '조명';
+        const refTs = oRefTs(o);
         oQItems = items.map(x=>{
-          const hit = (window.SPEC_MASTER||[]).find(m=>m.g===cat &&
+          const raw = (window.SPEC_MASTER||[]).find(m=>m.g===cat &&
             (m.c.toLowerCase()===String(x.name).trim().toLowerCase() ||
              String(x.name).toUpperCase().includes(m.c)));
+          const hit = specAt(raw, refTs);
           return hit
             ? {code:hit.c, name:hit.n||hit.c, spec:oqSpecLine(hit), unit:hit.u||x.unit, qty:x.qty,
-               price:x.price||hit.p, img:hit.img, kelvin:hit.k||'', size:hit.sz||'', cut:hit.cut||'', brand:hit.b||''}
+               price:x.price||hit.p, img:hit.img, kelvin:hit.k||'', size:hit.sz||'', cut:hit.cut||'',
+               brand:hit.b||'', maker:hit.mk||''}
             : {name:x.name, spec:x.spec, unit:x.unit, qty:x.qty, price:x.price};
         });
         oqRender();
@@ -4249,6 +4443,7 @@ async function oQuoteSave(id){
     .map(x=>{
       const it = {name:x.name, spec:x.spec, unit:x.unit||'EA', qty:+x.qty, price:+x.price, amount:(+x.qty)*(+x.price)};
       if(x.code){ it.code=x.code; it.brand=x.brand||''; it.img=x.img||''; }
+      if(x.maker) it.maker=x.maker;
       if(x.kelvin) it.kelvin=x.kelvin;
       if(x.size) it.size=x.size;
       if(x.cut) it.cut=x.cut;
@@ -4369,11 +4564,12 @@ async function oEditSave(id){
 
 function oConfirmModal(id){
   const o = O(id); if(!o) return;
-  openModal(`<h2>견적 검토·확정</h2>
-    <div class="sub">${o.id} · ${esc(o.site)} · ${oConfirmer(o)} 권한</div>
+  openModal(`<h2>본사 승인</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · GRS 공사담당 권한</div>
+    <div class="note">승인하면 <b>${esc(o.builder)}</b>가 물량·금액을 최종 확인하는 단계로 넘어갑니다.</div>
     <div class="kv"><b>제출금액</b><strong>${money(o.quote.amount)}</strong></div>
     <label>검토 결과</label>
-    <select id="ocDec"><option value="확정">확정 — 납품일 협의 진행</option><option value="보완요청">보완요청 — 재견적</option></select>
+    <select id="ocDec"><option value="승인">승인 — 시공사 확인 단계로</option><option value="보완요청">보완요청 — 재견적</option></select>
     <label>확정 금액 (조정 시 수정)</label>
     <input id="ocAmt" type="number" inputmode="numeric" value="${o.quote.amount}">
     <label>검토 의견</label>
@@ -4388,14 +4584,52 @@ async function oConfirmSave(id){
   try{
     if(dec==='보완요청'){
       if(!op){ toast('보완요청 사유를 입력해주세요'); return; }
-      await store.updateOrder(id, {confirm:null, stage:'DRAWING', stageAt:now()},
-        oEntry(`견적 보완요청 → 재견적 대기 (${op})`));
+      await store.updateOrder(id, {confirm:null, bldConfirm:null, stage:'DRAWING', stageAt:now()},
+        oEntry(`본사 보완요청 → 재견적 대기 (${op})`));
       closeModal(); toast('보완요청이 전달되었습니다'); return;
     }
     await store.updateOrder(id,
-      {confirm:{by:actorLabel(), at:now(), decision:'확정', finalAmount:amt, opinion:op}, stage:'CONFIRM', stageAt:now()},
-      oEntry(`견적 확정 (${money(amt)})`));
-    closeModal(); toast('견적이 확정되었습니다');
+      {confirm:{by:actorLabel(), at:now(), decision:'승인', finalAmount:amt, opinion:op}, stage:'HQAPV', stageAt:now()},
+      oEntry(`본사 승인 (${money(amt)}) → 시공사 승인 대기`));
+    closeModal(); toast('본사 승인 완료 — 시공사 확인 단계로 넘어갑니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* ── 시공사 승인 — 합의된 물량을 시공사가 최종 확인 ── */
+function oBldConfirmModal(id){
+  const o = O(id); if(!o) return;
+  const base = (o.confirm && o.confirm.finalAmount!=null) ? o.confirm.finalAmount : (o.quote?o.quote.amount:0);
+  openModal(`<h2>시공사 승인</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${esc(o.builder)} 현장소장</div>
+    <div class="note">아래 물량과 금액에 동의하시면 승인해주세요.
+      <b>승인 후에는 이 내용으로 납품이 진행</b>되며, 승인 기록이 남습니다.</div>
+    ${itemsTable((o.quote&&o.quote.items)||[], o.quote&&o.quote.freight)}
+    <label>승인 결과</label>
+    <select id="obDec"><option value="승인">승인 — 납품일 협의 진행</option><option value="이의제기">이의제기 — 물량·금액 재검토 요청</option></select>
+    <label>확정 금액 (조정 시 수정)</label>
+    <input id="obAmt" type="number" inputmode="numeric" value="${base}">
+    <label>의견</label>
+    <textarea id="obOp" rows="3" placeholder="예) 물량 확인했습니다 / 다운라이트 수량이 도면과 다릅니다"></textarea>
+    <button class="btn blk grn" onclick="oBldConfirmSave('${id}')">승인 처리</button>`);
+}
+async function oBldConfirmSave(id){
+  const o = O(id); if(!o) return;
+  const dec = document.getElementById('obDec').value;
+  const amt = Number(document.getElementById('obAmt').value) ||
+              ((o.confirm&&o.confirm.finalAmount)||(o.quote?o.quote.amount:0));
+  const op = document.getElementById('obOp').value.trim();
+  try{
+    if(dec==='이의제기'){
+      if(!op){ toast('이의 내용을 입력해주세요'); return; }
+      /* 견적 단계로 되돌려 공급사가 다시 산출하게 한다 */
+      await store.updateOrder(id, {confirm:null, bldConfirm:null, stage:'DRAWING', stageAt:now()},
+        oEntry(`시공사 이의제기 → 재견적 대기 (${op})`));
+      closeModal(); toast('이의가 전달되었습니다 — 공급사가 재견적합니다'); return;
+    }
+    await store.updateOrder(id,
+      {bldConfirm:{by:actorLabel(), at:now(), decision:'승인', finalAmount:amt, opinion:op}, stage:'APPROVED', stageAt:now()},
+      oEntry(`시공사 승인 (${money(amt)}) — 물량·금액 동의`));
+    closeModal(); toast('승인되었습니다 — 납품일 협의 단계로 넘어갑니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
@@ -4420,7 +4654,7 @@ async function oSchedSave(id){
   const sched = { planDate:new Date(dv+'T12:00:00').getTime(), agreedAt:now(), agreedBy:actorLabel(),
                   place:document.getElementById('osPlace').value.trim(), note:document.getElementById('osNote').value.trim() };
   const patch = { sched };
-  if(o.stage==='CONFIRM'){ patch.stage='SCHED'; patch.stageAt=now(); }
+  if(o.stage==='APPROVED'){ patch.stage='SCHED'; patch.stageAt=now(); }
   try{
     await store.updateOrder(id, patch, oEntry(`${first?'납품일 협의 완료':'납품일 변경'} (${fmtD(sched.planDate)})`));
     closeModal(); toast('납품일이 등록되었습니다');
@@ -4682,13 +4916,58 @@ function printBill(billTo){
   window.print();
 }
 
+/* ── 시공사 정산 — 가맹 방식 건은 시공사가 공급사에 직접 대금을 지급한다 ── */
+function vBuilderSettle(){
+  const ym = state.settleMonth || ymOf(now());
+  const all = visibleOrders().filter(o=>o.receipt && !oIsDir(o));
+  const waiting = all.filter(o=>o.stage==='DELIVERED');
+  const done = all.filter(o=>o.stage==='SETTLED' && o.settle && o.settle.month===ym);
+  const dirs = visibleOrders().filter(o=>o.receipt && oIsDir(o));   // 본사 정산분 (참고용)
+  const sum = a => a.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const rowsOf = arr => arr.map(o=>`
+    <button style="width:100%;text-align:left;padding:9px 0;border-top:1px solid var(--line)" onclick="goOrder('${o.id}')">
+      <div class="oline"><span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
+        <span class="badge ${oIsDir(o)?'b-blue':'b-gray'}">${oProcNm(o)}</span>
+        ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
+        ${o.stage==='SETTLED'?'<span class="badge b-green">지급완료</span>':''}</div>
+      <div style="font-weight:700;font-size:13.5px;margin-top:3px">${esc(o.site)} <span style="color:var(--sub);font-weight:500">· ${esc(o.supplier)}</span></div>
+      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 수령 ${fmtD(o.receipt.receivedAt)} · <strong style="color:var(--ink)">${money(oAmount(o))}</strong></div>
+    </button>`).join('') || '<div class="empty">해당 건이 없습니다</div>';
+  return roleNote()+`
+  <div class="card">
+    <div class="h2">💰 정산 <span class="badge b-gray">${esc(myCo())}</span></div>
+    <div class="note" style="margin:0 0 10px">가맹 방식 건은 <b>시공사가 공급사에 직접 대금을 지급</b>합니다.
+      납품확인서 서명이 끝난 건이 지급 대상입니다. (부가세 별도)</div>
+    <div class="kv"><b style="width:118px">지급 대기</b><strong>${money(sum(waiting))}</strong>
+      <span style="color:var(--sub);font-size:12.5px;margin-left:6px">${waiting.length}건</span></div>
+    <div class="kv"><b style="width:118px">${ymLabel(ym)} 지급완료</b><strong style="color:var(--green)">${money(sum(done))}</strong></div>
+    <label>정산 귀속월</label>
+    <input type="month" value="${ym}" onchange="state.settleMonth=this.value;render()">
+  </div>
+  <div class="card">
+    <div class="h2">💳 지급 대기 <span class="badge b-amber">${waiting.length}건</span></div>
+    ${rowsOf(waiting)}
+  </div>
+  <div class="card">
+    <div class="h2">✅ ${ymLabel(ym)} 지급 완료 <span class="badge b-green">${done.length}건</span></div>
+    ${rowsOf(done)}
+  </div>
+  ${dirs.length?`<div class="card">
+    <div class="h2">🏢 본사 정산분 <span class="badge b-blue">${dirs.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">직영 방식 건입니다. 대금은 <b>롯데GRS 본사가 공급사에 직접</b> 지급하므로 시공사 지급 대상이 아닙니다.</div>
+    ${rowsOf(dirs)}
+  </div>`:''}`;
+}
+
 function vSettle(){
   if(role()==='supplier') return vSupplySettle();
+  if(role()==='builder')  return vBuilderSettle();
   const list = visibleOrders();
   const ym = state.settleMonth || ymOf(now());
   /* 정산 대기: 납품 완료 건 / 정산 완료: 해당 월 귀속 건 */
-  const waiting = list.filter(o=>o.stage==='DELIVERED');
-  const done = list.filter(o=>o.stage==='SETTLED' && o.settle && o.settle.month===ym);
+  const waiting = list.filter(o=>o.stage==='DELIVERED' && oIsDir(o));
+  const done = list.filter(o=>o.stage==='SETTLED' && oIsDir(o) && o.settle && o.settle.month===ym);
+  const frWait = list.filter(o=>o.stage==='DELIVERED' && !oIsDir(o));
   const bySupplier = {};
   waiting.concat(done).forEach(o=>{
     const k = o.supplier;
@@ -4696,8 +4975,7 @@ function vSettle(){
     if(o.stage==='DELIVERED'){ bySupplier[k].wait++; bySupplier[k].waitAmt += oAmount(o)||0; }
     else { bySupplier[k].done++; bySupplier[k].doneAmt += oAmount(o)||0; }
   });
-  const dirWait = waiting.filter(o=>o.type==='직영점');
-  const frWait  = waiting.filter(o=>o.type==='가맹점');
+  const dirWait = waiting;
   const sumOf = a => a.reduce((s,o)=>s+(oAmount(o)||0),0);
 
   const rowsOf = (arr) => arr.length ? arr.map(o=>`
@@ -4731,14 +5009,15 @@ function vSettle(){
   </div>
 
   <div class="card">
-    <div class="h2">🏢 직영점 — 월단위 정산 대기 <span class="badge b-amber">${dirWait.length}건</span></div>
+    <div class="h2">🏢 본사 월단위 정산 대기 <span class="badge b-amber">${dirWait.length}건</span></div>
     <div class="note" style="margin:0 0 4px">납품확인서 서명이 완료된 건입니다. 월단위로 묶어 정산합니다. 합계 <strong>${money(sumOf(dirWait))}</strong></div>
     ${rowsOf(dirWait)}
   </div>
 
   <div class="card">
-    <div class="h2">🏬 가맹점 — 개별 정산 대기 <span class="badge b-amber">${frWait.length}건</span></div>
-    <div class="note" style="margin:0 0 4px">건별 대금지급 대상입니다. 합계 <strong>${money(sumOf(frWait))}</strong></div>
+    <div class="h2">🏗 시공사 개별 정산분 <span class="badge b-gray">${frWait.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">가맹 방식 건입니다. <b>시공사가 공급사에 직접 지급</b>하므로 본사 정산 대상이 아닙니다. (참고용)
+      합계 <strong>${money(sumOf(frWait))}</strong></div>
     ${rowsOf(frWait)}
   </div>
 
@@ -4916,7 +5195,7 @@ function exportCSV(){
     loadChatPrefs(); ensureRooms();
   }
   if(state.user && !canApp(state.app)) state.app = myApps()[0];
-  if(state.app==='order' && state.view==='dash') state.view='odash';
+  if(isOrderApp(state.app) && state.view==='dash') state.view='odash';
   render();
   // 1분마다 D-day/기한초과 재계산
   setInterval(()=>{ if(state.user && !modalOpen()) render(); }, 60000);
