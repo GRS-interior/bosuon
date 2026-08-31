@@ -124,6 +124,26 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .btn.dl{background:var(--ink)}
   .btn.delx{background:var(--red-bg);color:var(--red-dark)}
   /* 시스템 전환 (보수공사 ↔ 조명·타일 발주) */
+  /* 로그인 1단계 — 업무 갈래 */
+  .gates{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+  .gate{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;
+        border:1.6px solid var(--line);border-radius:13px;padding:15px 16px;background:#fff;width:100%}
+  .gate:active{background:var(--gray-bg)}
+  .gate .gi{font-size:26px;line-height:1}
+  .gate .gt{font-size:17px;font-weight:900;color:var(--ink);letter-spacing:-.4px;margin-top:3px}
+  .gate .gd{font-size:12.5px;font-weight:600;color:var(--sub);line-height:1.5}
+  .gate .gw{font-size:11.5px;font-weight:700;color:var(--red-dark);background:var(--red-bg);
+            border-radius:20px;padding:3px 10px;margin-top:6px}
+  .gback{font-size:12.5px;font-weight:800;color:var(--sub);padding:2px 0 8px;background:none}
+  .gnow{font-size:15px;font-weight:900;color:var(--ink);margin-bottom:12px;letter-spacing:-.4px}
+  /* 체크 항목 (관리자 상주 확인 등) */
+  .chk{display:flex;align-items:flex-start;gap:9px;cursor:pointer;font-size:13.5px;font-weight:600;
+       line-height:1.5;color:var(--ink);background:var(--gray-bg);border:1px solid var(--line);
+       border-radius:9px;padding:11px 12px;margin-top:2px}
+  .chk .chkbox{width:20px;height:20px;flex:none;border-radius:6px;border:2px solid #B9C2D0;background:#fff;
+       display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .chk .chkbox.on{background:var(--green,#0E8A4A);border-color:var(--green,#0E8A4A)}
+  .chk .chkbox.on::after{content:'✓';color:#fff;font-size:13px;font-weight:900;line-height:1}
   .appsw{display:flex;gap:6px;padding:8px 14px 0;background:var(--red)}
   .appsw button{flex:1;padding:9px 6px;border-radius:10px 10px 0 0;font-weight:800;font-size:13.5px;background:rgba(255,255,255,.16);color:rgba(255,255,255,.85)}
   .appsw button.on{background:#fff;color:var(--red-dark)}
@@ -285,13 +305,32 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   <div class="login-card">
     <div class="lg">GRS 보수ON</div>
     <div class="ds">보수공사 접수·트래킹 · 조명/타일 발주</div>
-    <label>소속 선택</label>
-    <div class="rolebtns">
-      <button class="rolebtn" data-r="store" onclick="pickRole('store')"><span class="em">🏪</span>점포</button>
-      <button class="rolebtn" data-r="vendor" onclick="pickRole('vendor')"><span class="em">🔧</span>보수 시공업체</button>
-      <button class="rolebtn" data-r="hq" onclick="pickRole('hq')"><span class="em">🏢</span>본사담당</button>
-      <button class="rolebtn" data-r="builder" onclick="pickRole('builder')"><span class="em">🏗</span>인테리어 시공사</button>
-      <button class="rolebtn" data-r="supplier" onclick="pickRole('supplier')"><span class="em">📦</span>조명·타일 공급사</button>
+
+    <!-- 1단계 — 어떤 업무로 들어갈지 -->
+    <div id="gateWrap">
+      <label>어떤 업무로 들어가시나요?</label>
+      <div class="gates">
+        <button class="gate" onclick="pickGate('bosu')">
+          <span class="gi">🛠</span>
+          <span class="gt">점포 보수공사</span>
+          <span class="gd">고장·누수·파손 접수와 진행 확인<br>오픈 직후 추가요청</span>
+          <span class="gw">점포 · 보수 시공업체 · 본사담당</span>
+        </button>
+        <button class="gate" onclick="pickGate('order')">
+          <span class="gi">💡</span>
+          <span class="gt">조명 · 타일 발주</span>
+          <span class="gd">인테리어 공사 자재 발주<br>견적 · 승인 · 납품 · 정산</span>
+          <span class="gw">인테리어 시공사 · 공급사 · 본사담당</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 2단계 — 그 업무 안에서의 소속 -->
+    <div id="roleWrap" style="display:none">
+      <button class="gback" onclick="backGate()">‹ 업무 다시 고르기</button>
+      <div class="gnow" id="gateNow"></div>
+      <label>소속 선택</label>
+      <div class="rolebtns" id="roleBtns"></div>
     </div>
     <div id="loginStoreWrap" style="display:none">
       <label>점포명</label>
@@ -311,11 +350,13 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
       <label>이름 (담당자)</label>
       <input id="lgName" placeholder="예) 홍길동">
     </div>
-    <label>접속코드</label>
-    <input id="lgCode" type="password" placeholder="소속별 접속코드 입력" autocomplete="off">
-    <button class="btn blk" id="lgBtn" onclick="doLogin()">입장하기</button>
-    <div class="login-err" id="lgErr"></div>
-    <div class="note" style="margin-top:14px">접속코드는 본사 보수담당자에게 문의하세요.</div>
+    <div id="loginCodeWrap" style="display:none">
+      <label>접속코드</label>
+      <input id="lgCode" type="password" placeholder="소속별 접속코드 입력" autocomplete="off">
+      <button class="btn blk" id="lgBtn" onclick="doLogin()">입장하기</button>
+      <div class="login-err" id="lgErr"></div>
+      <div class="note" style="margin-top:14px">접속코드는 본사 보수담당자에게 문의하세요.</div>
+    </div>
 
     <a class="btn sec2 blk" style="text-decoration:none" href="./manual.pdf" target="_blank" rel="noopener">📖 사용 매뉴얼 내려받기 (PDF)</a>
 
@@ -430,18 +471,19 @@ const CAT_ICON    = { '조명':'💡', '타일':'🧱' };
    직영 방식 : 도면 → 견적 → 본사승인 → 시공사승인 → 납품일협의 → 납품·확인서 → 정산
    가맹 방식 : 도면 → 견적 →           시공사승인 → 납품일협의 → 납품·확인서 → 정산
    (조명은 공급계약 시행 전까지 직영점도 가맹 방식으로 운영) */
-const O_ALL = ['DRAWING','QUOTE','HQAPV','APPROVED','SCHED','DELIVERED','SETTLED'];
-const O_DIR = ['DRAWING','QUOTE','HQAPV','APPROVED','SCHED','DELIVERED','SETTLED'];
-const O_FR  = ['DRAWING','QUOTE','APPROVED','SCHED','DELIVERED','SETTLED'];
+const O_ALL = ['DRAWING','QUOTE','HQAPV','APPROVED','SCHED','DELIVERED','SREQ','SETTLED'];
+const O_DIR = ['DRAWING','QUOTE','HQAPV','APPROVED','SCHED','DELIVERED','SREQ','SETTLED'];
+const O_FR  = ['DRAWING','QUOTE','APPROVED','SCHED','DELIVERED','SREQ','SETTLED'];
 const O_STAGES = O_ALL;                       // 필터 칩 등 전체 목록용
 const O_LIVE = o => o.stage!=='CANCEL';
 const O_NM = { DRAWING:'도면 제공', QUOTE:'견적 제출', HQAPV:'본사 승인', APPROVED:'시공사 승인',
-               SCHED:'납품일 협의', DELIVERED:'납품·확인서', SETTLED:'정산', CANCEL:'취소', CONFIRM:'시공사 승인' };
+               SCHED:'납품일 협의', DELIVERED:'납품·확인서', SREQ:'정산 요청', SETTLED:'정산 완료',
+               CANCEL:'취소', CONFIRM:'시공사 승인' };
 const O_SHORT = { DRAWING:'도면', QUOTE:'견적', HQAPV:'본사승인', APPROVED:'시공사승인',
-                  SCHED:'납품일', DELIVERED:'납품', SETTLED:'정산' };
+                  SCHED:'납품일', DELIVERED:'납품', SREQ:'정산요청', SETTLED:'정산' };
 const O_BADGE = { DRAWING:'b-amber', QUOTE:'b-blue', HQAPV:'b-blue', APPROVED:'b-amber',
-                  SCHED:'b-blue', DELIVERED:'b-amber', SETTLED:'b-green', CANCEL:'b-gray' };
-const DEFAULT_O_SLA = { DRAWING:5, QUOTE:3, HQAPV:3, APPROVED:3, SCHED:7, DELIVERED:30 };
+                  SCHED:'b-blue', DELIVERED:'b-amber', SREQ:'b-blue', SETTLED:'b-green', CANCEL:'b-gray' };
+const DEFAULT_O_SLA = { DRAWING:5, QUOTE:3, HQAPV:3, APPROVED:3, SCHED:7, DELIVERED:30, SREQ:7 };
 
 /* ── 조명 공급계약 시행일 ──
    이 날짜 전에 등록된 조명 발주는 직영점이어도 가맹 방식으로 운영한다.
@@ -475,13 +517,14 @@ function oWait(o){
   if(s==='HQAPV')   return '시공사 승인 대기';
   if(s==='APPROVED')return '납품일 협의 대기';
   if(s==='SCHED')   return '납품 대기';
-  if(s==='DELIVERED') return '정산 대기';
+  if(s==='DELIVERED') return '공급사 정산요청 대기';
+  if(s==='SREQ')    return oIsDir(o) ? '본사 정산처리 대기' : '시공사 정산처리 대기';
   if(s==='SETTLED') return '정산 완료';
   return O_NM[s] || s;
 }
 const O_OWNER = (o) => ({ DRAWING:'공급사', QUOTE:(oIsDir(o)?'GRS 공사담당':'시공사 현장소장'),
   HQAPV:'시공사 현장소장', APPROVED:'시공사·공급사', SCHED:'공급사',
-  DELIVERED:(oIsDir(o)?'GRS 담당':'시공사') }[o.stage] || '');
+  DELIVERED:o.supplier||'공급사', SREQ:(oIsDir(o)?'GRS 담당':'시공사') }[o.stage] || '');
 /* 승인 주체 */
 const oConfirmer = o => oIsDir(o) ? 'GRS 공사담당' : '시공사 현장소장';
 const oSettleNm = o => oIsDir(o) ? '월단위 정산 (GRS)' : '개별 정산 (시공사 대금지급)';
@@ -535,6 +578,89 @@ function prevPriceNote(){
   return `${esc(P.maker)} 재고 물량 단가 적용 — ${codes.map(c=>`<b>${esc(c)} ${money(P.items[c])}</b>`).join(' · ')}`;
 }
 const FREIGHT_AREAS = ['수도권','충청','전라','경상'];
+
+/* ═══════ 점포 오픈일 · 하자기간 (stores.js) ═══════
+   GRS 하자기간 기준 — 일반공사 1년 / 방수·가스설비 5년.
+   점포 선택 목록(cfg.stores)은 그대로 두고, 오픈일 조회에만 마스터를 쓴다. */
+const WARRANTY = { gen:{ nm:'일반공사', yr:1 }, wp:{ nm:'방수·가스설비', yr:5 } };
+const WTYPES = [['gen','일반공사 (하자 1년)'],['wp','방수·가스설비 (하자 5년)']];
+let storeOpenLoading = null, _soIdx = null;
+function loadStoreOpen(){
+  if(window.STORE_OPEN) return Promise.resolve(true);
+  if(storeOpenLoading) return storeOpenLoading;
+  storeOpenLoading = new Promise(res=>{
+    const el = document.createElement('script');
+    el.src = './stores.js?v=1';
+    el.onload  = ()=>res(!!window.STORE_OPEN);
+    el.onerror = ()=>{ console.warn('stores.js 로드 실패'); res(false); };
+    document.head.appendChild(el);
+  });
+  return storeOpenLoading;
+}
+/* 브랜드 표기 흔들림을 흡수한다 — 「(가맹)리아」 ↔ 「롯데리아」 */
+const BRAND_ALIAS = { '리아':['롯데리아','리아'], '엔젤':['엔제리너스','엔젤'],
+  'KKD':['크리스피크림도넛','크리스피크림','KKD'], '스탠브루':['스탠브루'], '플레이팅':['플레이팅'] };
+const normStore = v => String(v||'').replace(/[\s()·・\-_,.]/g,'').replace(/점$/,'').toLowerCase();
+function storeOpenIndex(){
+  if(_soIdx) return _soIdx;
+  _soIdx = [];
+  const M = window.STORE_OPEN || {};
+  Object.keys(M).forEach(bk=>{
+    const type = bk.indexOf('직영')>=0 ? '직영점' : '가맹점';
+    const brand = bk.replace(/^\((직영|가맹)\)/,'');
+    M[bk].forEach(([nm, ymd])=>{
+      _soIdx.push({ brand, type, name:nm, key:normStore(nm),
+        ts:new Date(ymd.slice(0,4)+'-'+ymd.slice(4,6)+'-'+ymd.slice(6,8)+'T12:00:00').getTime() });
+    });
+  });
+  _soIdx.sort((a,b)=>b.key.length-a.key.length);   // 긴 이름 우선 매칭
+  return _soIdx;
+}
+/* 입력 문자열에서 브랜드를 읽어낸다 (없으면 null) */
+function brandInText(raw){
+  const t = String(raw||'');
+  let found = null, len = 0;
+  Object.keys(BRAND_ALIAS).forEach(b=>{
+    BRAND_ALIAS[b].forEach(a=>{ if(a.length>len && t.indexOf(a)>=0){ found=b; len=a.length; } });
+  });
+  if(!found && window.STORE_OPEN){
+    Object.keys(window.STORE_OPEN).forEach(bk=>{
+      const b = bk.replace(/^\((직영|가맹)\)/,'');
+      if(b.length>len && b.length>=2 && t.indexOf(b)>=0){ found=b; len=b.length; }
+    });
+  }
+  return found;
+}
+/* 입력한 점포명으로 마스터에서 오픈일을 찾는다.
+   브랜드가 다르면 엉뚱한 점포의 오픈일을 쓰지 않도록 '유사 점포'로만 알려준다. */
+function findStoreOpen(input){
+  if(!window.STORE_OPEN) return null;
+  const q = normStore(input);
+  if(q.length < 2) return null;
+  const hits = storeOpenIndex().filter(x=>x.key.length>=2 && (q===x.key || q.indexOf(x.key)>=0));
+  if(!hits.length) return null;
+  const best = hits[0].key;
+  let same = hits.filter(x=>x.key===best);
+  const wantBrand = brandInText(input);
+  if(wantBrand){
+    const byBrand = same.filter(x=>x.brand===wantBrand);
+    if(!byBrand.length) return { ...same[0], brandMismatch:wantBrand, near:same };
+    same = byBrand;
+  }
+  if(same.length > 1) return { ...same[0], ambiguous:same };
+  return same[0];
+}
+/* 오픈일 + 공사 구분 → 하자기간 판정 */
+function warrantyOf(openTs, wtype){
+  if(!openTs) return null;
+  const w = WARRANTY[wtype] || WARRANTY.gen;
+  const d = new Date(openTs); d.setFullYear(d.getFullYear() + w.yr);
+  const end = d.getTime();
+  return { nm:w.nm, yr:w.yr, end, left:Math.ceil((end-now())/DAY),
+           elapsed:Math.floor((now()-openTs)/DAY), inW:end >= now() };
+}
+const wTypeOf = r => (r && r.wType) || 'gen';
+
 
 /* 접수 유형 — 일반 보수 / 오픈 직후 추가요청 */
 const REQ_KIND_NM = { fix:'보수공사', open:'오픈 직후 추가요청' };
@@ -618,13 +744,24 @@ function oCanAct(o, stage){
   if(stage==='HQAPV')     return mine.bld;                       // 시공사 승인 (직영 2차)
   if(stage==='APPROVED')  return mine.bld || mine.sup;           // 납품일 협의
   if(stage==='SCHED')     return mine.bld;                       // 물품 수령·확인서
-  if(stage==='DELIVERED') return oIsDir(o) ? rl==='hq' : mine.bld;  // 정산
+  if(stage==='DELIVERED') return mine.sup;                        // 공급사 정산 요청
+  if(stage==='SREQ')      return oIsDir(o) ? rl==='hq' : mine.bld; // 정산 처리(마감)
   return false;
 }
 const oAmount = o => !o.quote ? null
   : (o.bldConfirm && o.bldConfirm.finalAmount!=null) ? o.bldConfirm.finalAmount
   : (o.confirm && o.confirm.finalAmount!=null) ? o.confirm.finalAmount
   : o.quote.amount;
+/* ── 반품 ──
+   납품 완료 후 시공사가 반품을 등록하고 공급사가 수거 확인하면 정산 금액에서 차감된다 */
+const oReturns    = o => (o && o.returns) || [];
+const oRetOk      = o => oReturns(o).filter(r=>r.status==='확인');
+const oRetPending = o => oReturns(o).filter(r=>r.status==='요청');
+const oReturnAmt  = o => oRetOk(o).reduce((s,r)=>s+(r.amount||0),0);
+/* 반품 차감 후 실제 정산 대상 금액 */
+const oNetAmount  = o => Math.max(0, (oAmount(o)||0) - oReturnAmt(o));
+const canRetAdd   = o => role()==='builder' && o.builder===myCo() && !!o.receipt && ['DELIVERED','SREQ'].includes(o.stage);
+const canRetOk    = o => role()==='supplier' && o.supplier===myCo();
 const ymOf = ts => { const d=new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; };
 const ymLabel = ym => ym ? `${ym.split('-')[0]}년 ${+ym.split('-')[1]}월` : '';
 
@@ -1364,8 +1501,37 @@ function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}c
   state.orders=[]; state.posts=[]; stopDetailFiles(); clearDraft(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
 
 let pickedRole=null;
+/* ── 로그인 1단계 : 업무 갈래 ── */
+const GATE_NM   = { bosu:'🛠 점포 보수공사', order:'💡 조명 · 타일 발주' };
+const GATE_ROLES = {
+  bosu : [['store','🏪','점포'], ['vendor','🔧','보수 시공업체'], ['hq','🏢','본사담당']],
+  order: [['builder','🏗','인테리어 시공사'], ['supplier','📦','조명·타일 공급사'], ['hq','🏢','본사담당']],
+};
+let pickedGate = null;
+function pickGate(g){
+  pickedGate = g; pickedRole = null;
+  try{ localStorage.setItem('bosuon_gate', g); }catch(e){}
+  document.getElementById('gateWrap').style.display = 'none';
+  document.getElementById('roleWrap').style.display = 'block';
+  document.getElementById('gateNow').textContent = GATE_NM[g];
+  document.getElementById('roleBtns').innerHTML = GATE_ROLES[g]
+    .map(([r,em,nm])=>`<button class="rolebtn" data-r="${r}" onclick="pickRole('${r}')"><span class="em">${em}</span>${nm}</button>`).join('');
+  ['loginStoreWrap','loginBuilderWrap','loginNameWrap','loginCodeWrap'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.style.display='none';
+  });
+  const e = document.getElementById('lgErr'); if(e) e.style.display='none';
+}
+function backGate(){
+  pickedGate = null; pickedRole = null;
+  document.getElementById('gateWrap').style.display = 'block';
+  document.getElementById('roleWrap').style.display = 'none';
+  ['loginStoreWrap','loginBuilderWrap','loginNameWrap','loginCodeWrap'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.style.display='none';
+  });
+}
 function pickRole(r){
   pickedRole=r;
+  const cw = document.getElementById('loginCodeWrap'); if(cw) cw.style.display='block';
   document.querySelectorAll('.rolebtn').forEach(b=>b.classList.toggle('on',b.dataset.r===r));
   document.getElementById('loginStoreWrap').style.display = r==='store'?'block':'none';
   document.getElementById('loginNameWrap').style.display = (r==='store')?'none':'block';
@@ -1414,10 +1580,15 @@ function doLogin(){
   document.getElementById('login').classList.remove('open');
   if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); }
   loadChatPrefs(); ensureRooms();
-  state.app = myApps()[0]; state.view = isOrderApp(state.app)?'odash':'dash'; render();
+  /* 로그인 1단계에서 고른 업무로 바로 들어간다 (본사담당은 탭 전환으로 오갈 수 있음) */
+  const apps = myApps();
+  const want = pickedGate==='order' ? apps.find(isOrderApp) : apps.find(a=>a==='bosu');
+  state.app = want || apps[0];
+  state.view = isOrderApp(state.app)?'odash':'dash'; render();
 }
 function showLogin(){
   fillStoreList();
+  backGate();
   document.getElementById('login').classList.add('open');
   document.getElementById('main').innerHTML='';
   document.getElementById('nav').innerHTML='';
@@ -1568,7 +1739,7 @@ function render(){
   else if(state.view==='detail') m.innerHTML = vDetail();
   /* 접수 폼은 이미 그려져 있으면 다시 그리지 않는다 —
      실시간 갱신·1분 타이머가 돌아도 입력 중인 내용이 날아가지 않도록 */
-  else if(state.view==='new'){ if(!document.getElementById('nTitle')) m.innerHTML = vNew(); }
+  else if(state.view==='new'){ if(!document.getElementById('nTitle')){ m.innerHTML = vNew(); setTimeout(warrantyHint,0); } }
   else if(state.view==='set') m.innerHTML = vSet();
   else if(state.view==='chat') m.innerHTML = vChat();
   else if(state.view==='chatroom') m.innerHTML = vChatRoom();
@@ -1801,6 +1972,16 @@ function partnerCard(rs, coName){
 }
 
 /* ===== 목록 ===== */
+/* 목록·상세용 하자기간 배지 — 접수 시점 판정이 아니라 현재 기준으로 다시 계산한다 */
+function wInfo(r){
+  if(!r || !r.openDate) return null;
+  return warrantyOf(r.openDate, wTypeOf(r));
+}
+function wBadge(r){
+  const w = wInfo(r); if(!w) return '';
+  if(!w.inW) return '<span class="badge b-red">하자기간 경과</span>';
+  return `<span class="badge ${w.left<=60?'b-amber':'b-green'}">하자 D-${w.left.toLocaleString('ko-KR')}</span>`;
+}
 function reqCard(r){
   const idx = STAGES.indexOf(r.stage);
   const bar = STAGES.slice(0,5).map((s,i)=>`<i class="${i<idx?'done':(i===idx&&r.stage!=='DONE'?'cur':(r.stage==='DONE'?'done':''))}"></i>`).join('');
@@ -1812,6 +1993,7 @@ function reqCard(r){
       ${r.kind==='open'?'<span class="badge b-purple">🏗 오픈 직후</span>':''}
       ${r.dept&&r.dept!=='잘모르겠음'?deptBadge(r.dept):''}
       ${isOver(r)?`<span class="badge b-overdue">기한초과</span>`:''}
+      ${wBadge(r)}
     </div>
     <h3>${esc(r.title)}</h3>
     <div class="meta">${esc(r.store)} · 접수 ${fmtD(r.createdAt)}</div>
@@ -1995,6 +2177,19 @@ async function delFileFromView(reqId, i){
   await delFile(reqId, i);
   closeModal();
 }
+/* 상세 화면의 하자기간 안내 */
+function wDetailHtml(r){
+  const w = wInfo(r); if(!w) return '';
+  const other = wTypeOf(r)==='gen' ? 'wp' : 'gen';
+  const o = warrantyOf(r.openDate, other);
+  return `<div class="kv"><b>오픈일</b>${fmtD(r.openDate)} <span style="color:var(--sub)">(${w.elapsed.toLocaleString('ko-KR')}일 경과)</span></div>
+    <div class="kv"><b>공사 구분</b>${esc(w.nm)} <span style="color:var(--sub)">(하자 ${w.yr}년)</span></div>
+    <div class="kv"><b>하자기간</b>${fmtD(w.end)} 까지 ${w.inW
+      ? `<span class="badge ${w.left<=60?'b-amber':'b-green'}">잔여 ${w.left.toLocaleString('ko-KR')}일</span>`
+      : `<span class="badge b-red">경과 ${Math.abs(w.left).toLocaleString('ko-KR')}일</span>`}</div>
+    ${w.inW ? '' : `<div class="note warn">⚠ <b>${esc(w.nm)} 하자기간이 지난 건</b>입니다 — 유상 보수 대상 여부를 확인해주세요.
+      (참고: ${esc(WARRANTY[other].nm)} 기준 ${fmtD(o.end)} 까지, ${o.inW?`잔여 ${o.left.toLocaleString('ko-KR')}일`:'경과'})</div>`}`;
+}
 function vDetail(){
   const r = R(state.detailId); if(!r) return '<div class="empty">접수 건을 찾을 수 없습니다</div>';
   const rl = role();
@@ -2003,8 +2198,9 @@ function vDetail(){
   const openDays = r.openDate!=null ? Math.floor((now()-r.openDate)/DAY) : null;
   secs += `<div class="sec"><div class="st">📋 1. 접수 내용
       ${r.kind==='open'?'<span class="badge b-purple">🏗 오픈 직후 추가요청</span>':''}</div>
-    <div class="kv"><b>점포</b>${esc(r.store)}</div>
+    <div class="kv"><b>점포</b>${esc(r.store)}${r.brand?` <span class="badge ${r.storeType==='직영점'?'b-blue':'b-gray'}">${esc(r.brand)} ${esc(r.storeType||'')}</span>`:''}</div>
     <div class="kv"><b>접수일</b>${fmtDT(r.createdAt)}</div>
+    ${wDetailHtml(r)}
     ${r.kind==='open'?`
       <div class="kv"><b>오픈일</b>${r.openDate?fmtD(r.openDate):'-'}${openDays!=null?` <span class="badge ${openDays<=30?'b-amber':'b-gray'}" style="margin-left:5px">오픈 후 ${openDays}일</span>`:''}</div>
       <div class="kv"><b>요청 구분</b><span class="badge b-purple">${esc(r.openType||'-')}</span></div>
@@ -2104,7 +2300,9 @@ function vDetail(){
     secs += `<div class="kv"><b>완료일</b>${fmtDT(r.completedAt)}</div>${photosHtml(r.id,'done') || photoPlaceholder(r,'done',0)}`;
     const signFile = (filesCache[r.id]||[]).find(f=>f.kind==='sign');
     if(r.signBy){
-      secs += `<div class="kv" style="margin-top:8px"><b>점포 확인</b><span class="badge b-green">서명 완료</span>&nbsp; ${esc(r.signBy)} · ${fmtDT(r.signAt)}</div>`;
+      secs += `<div class="kv" style="margin-top:8px"><b>점포 확인</b><span class="badge b-green">서명 완료</span>&nbsp; ${esc(r.signBy)} · ${fmtDT(r.signAt)}</div>
+        ${r.workHours?`<div class="kv"><b>작업 소요시간</b><span class="badge ${r.workHours==='gt4'?'b-amber':'b-gray'}">${r.workHours==='gt4'?'4시간 초과':'4시간 이내'}</span></div>`:''}
+        ${r.mgrStay?`<div class="kv"><b>관리자 상주</b><span class="badge b-green">확인</span> <span style="color:var(--sub)">작업 종료 시 점포 관리자 입회</span></div>`:''}`;
       if(r.rating) secs += `<div class="kv"><b>만족도</b><strong style="color:${r.rating<=4?'var(--red-dark)':r.rating<=7?'var(--amber)':'var(--green)'}">★ ${r.rating} / 10</strong></div>
         ${r.ratingReason?`<div class="kv"><b>사유</b>${esc(r.ratingReason)}</div>`:''}`;
       if(signFile) secs += `<img class="signimg" src="${signFile.data}" alt="서명">`;
@@ -2191,7 +2389,7 @@ function viewImg(i, key){
    ① 백그라운드 실시간 갱신으로 render()가 돌아도 폼이 초기화되지 않도록
    ② 휴대폰에서 카메라·사진첩을 열었다 돌아오며 페이지가 재시작돼도 살아남도록 */
 const EMPTY_DRAFT = { store:'', title:'', desc:'', urg:'보통', dept:'잘모르겠음', photos:[],
-                      kind:'fix', openDate:'', openType:'공사 보완', builder:'' };
+                      kind:'fix', openDate:'', openType:'공사 보완', builder:'', wType:'gen' };
 let newDraft = {...EMPTY_DRAFT, photos:[]};
 let draftPhotoWarn = false;
 
@@ -2226,7 +2424,7 @@ function updDraft(){
   const g = id => { const el=document.getElementById(id); return el ? el.value : null; };
   const before = hasDraft();
   const v = {store:g('nStore'), title:g('nTitle'), desc:g('nDesc'), urg:g('nUrg'), dept:g('nDept'),
-             openDate:g('nOpenDate'), openType:g('nOpenType'), builder:g('nBuilder')};
+             openDate:g('nOpenDate'), openType:g('nOpenType'), builder:g('nBuilder'), wType:g('nWType')};
   Object.keys(v).forEach(k=>{ if(v[k]!==null) newDraft[k]=v[k]; });
   saveDraft();
   if(hasDraft() !== before) refreshDraftUI();   // 임시저장 안내·초기화 버튼 표시 전환
@@ -2236,6 +2434,7 @@ function resetNew(){
   clearDraft();
   const m = document.getElementById('main');
   if(m) m.innerHTML = vNew();
+  warrantyHint();
   toast('작성 내용을 지웠습니다');
 }
 
@@ -2261,9 +2460,14 @@ function vNew(){
     <label>점포명 <span style="font-weight:500">(입력하면 전국 점포 목록에서 검색됩니다)</span></label>
     <div class="spwrap">
       <input id="nStore" value="${esc(d.store)}" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
-        oninput="spFilter('nStore');updDraft()" onchange="updDraft()" onfocus="spFilter('nStore')" onblur="spHide('nStore');updDraft()">
+        oninput="spFilter('nStore');updDraft()" onchange="updDraft();warrantyHint()" onfocus="spFilter('nStore')" onblur="spHide('nStore');updDraft();warrantyHint()">
       <div class="spdrop" id="nStoreDrop"></div>
     </div>
+    <div id="nWarn"></div>
+    <label>공사 구분 <span style="font-weight:500">(하자기간 판정 기준)</span></label>
+    <select id="nWType" onchange="updDraft();warrantyHint()">
+      ${WTYPES.map(([v,t])=>`<option value="${v}"${v===(d.wType||'gen')?' selected':''}>${t}</option>`).join('')}
+    </select>
     <label>${isOpen?'요청 제목':'공사 제목'}</label>
     <input id="nTitle" value="${esc(d.title)}" placeholder="${isOpen?'예) 홀 조명 밝기 보완 및 스위치 위치 변경':'예) 주방 배수구 막힘 보수'}" oninput="updDraft()" onchange="updDraft()">
     <label>${isOpen?'요청 내용 (상세)':'공사 내용 (상세)'}</label>
@@ -2282,13 +2486,71 @@ function vNew(){
     <div class="note">접수 즉시 모든 관계자 화면에 실시간 반영되며, 담당 시공업체가 ${state.cfg.sla.SURVEY}일 내 실측일정을 등록해야 합니다.</div>
   </div>`;
 }
+/* ── 점포 하자기간 안내 ──
+   점포명을 넣으면 마스터에서 오픈일을 찾아 잔여 하자기간을 보여준다.
+   못 찾으면 오픈일을 직접 넣을 수 있게 한다. */
+let _wFound = null;
+async function warrantyHint(){
+  const box = document.getElementById('nWarn');
+  const inp = document.getElementById('nStore');
+  if(!box || !inp) return;
+  const nm = inp.value.trim();
+  if(!nm){ box.innerHTML=''; _wFound=null; return; }
+  if(!window.STORE_OPEN){
+    box.innerHTML = '<div class="note"><span class="spin dk"></span> 점포 오픈일을 조회하는 중…</div>';
+    await loadStoreOpen();
+    const cur = document.getElementById('nStore');
+    if(!cur || cur.value.trim()!==nm) return;
+  }
+  const raw = findStoreOpen(nm);
+  const hit = (raw && raw.brandMismatch) ? null : raw;
+  _wFound = hit || null;
+  const wt = (document.getElementById('nWType')||{}).value || newDraft.wType || 'gen';
+  const manual = (newDraft.openDate||'').trim();
+  const openTs = hit ? hit.ts : (manual ? new Date(manual+'T12:00:00').getTime() : null);
+  if(raw && raw.brandMismatch && !manual){
+    box.innerHTML = `<div class="note warn">🔎 <b>${esc(nm)}</b> 은(는) 점포 목록에 없습니다.
+      같은 이름의 <b>${raw.near.map(x=>esc(x.brand)).join(' / ')}</b> 점포는 있습니다 — 브랜드를 확인해주세요.<br>
+      그대로 접수하시려면 오픈일을 직접 넣어주세요.
+      <input type="date" id="nOpenManual" style="margin-top:6px" value=""
+        onchange="newDraft.openDate=this.value;saveDraft();warrantyHint()"></div>`;
+    return;
+  }
+  if(!openTs){
+    box.innerHTML = `<div class="note warn">🔎 <b>${esc(nm)}</b> 의 오픈일을 찾지 못했습니다.
+      아래에 오픈일을 직접 넣으면 하자기간을 계산해 드립니다.
+      <input type="date" id="nOpenManual" style="margin-top:6px" value="${esc(manual)}"
+        onchange="newDraft.openDate=this.value;saveDraft();warrantyHint()"></div>`;
+    return;
+  }
+  const w = warrantyOf(openTs, wt);
+  const both = ['gen','wp'].map(k=>{
+    const x = warrantyOf(openTs, k);
+    return `<div class="kv" style="padding:3px 0"><b style="width:96px">${WARRANTY[k].nm}</b>
+      ${fmtD(x.end)} 까지 · ${x.inW
+        ? `<b style="color:var(--red-dark)">잔여 ${x.left.toLocaleString('ko-KR')}일</b>`
+        : `<span style="color:var(--sub)">경과 (${Math.abs(x.left).toLocaleString('ko-KR')}일 지남)</span>`}</div>`;
+  }).join('');
+  box.innerHTML = `<div class="note ${w.inW?'':'warn'}" style="line-height:1.6">
+    ${hit ? `📍 <b>${esc(hit.brand)} ${esc(hit.name)}</b> <span class="badge ${hit.type==='직영점'?'b-blue':'b-gray'}">${hit.type}</span>`
+          : '📍 <b>직접 입력한 오픈일</b>'}
+    · 오픈 <b>${fmtD(openTs)}</b> (${w.elapsed.toLocaleString('ko-KR')}일 경과)
+    ${hit && hit.ambiguous ? `<br><span style="color:var(--red-dark)">※ 같은 이름의 점포가 ${hit.ambiguous.length}곳 있습니다 —
+       ${hit.ambiguous.map(x=>esc(x.brand)).join(' / ')}. 브랜드까지 넣어 검색해주세요.</span>` : ''}
+    <div style="margin-top:5px">${both}</div>
+    ${w.inW ? `<b style="color:var(--red-dark)">✅ 선택하신 「${w.nm}」 하자기간 이내입니다 (잔여 ${w.left.toLocaleString('ko-KR')}일).</b>`
+            : `<b style="color:var(--red-dark)">⚠ 선택하신 「${w.nm}」 하자기간이 지났습니다 — 유상 보수 대상일 수 있습니다.</b>
+               접수는 그대로 가능하며, 본사 검토 시 참고 자료로 표시됩니다.`}
+  </div>`;
+}
+
 function setReqKind(k){
   updDraft();
   newDraft.kind = k;
   if(k==='open' && !newDraft.openDate) newDraft.openDate = tsToDateInput(now()-7*DAY);
   saveDraft();
   document.getElementById('main').innerHTML = vNew();
-  openDayHint();
+  openDayHint(); warrantyHint();
 }
 /* 오픈 후 며칠 지났는지 자동 계산해 보여준다 */
 function openDayHint(){
@@ -2367,6 +2629,20 @@ async function submitNew(){
     if(openTs!=null) r.openDate = openTs;
     r.openType = newDraft.openType || '공사 보완';
     if(newDraft.builder) r.builder = newDraft.builder;
+  }
+  /* 하자기간 — 점포 마스터에서 찾은 오픈일 기준으로 접수 시점의 판정을 남긴다 */
+  r.wType = newDraft.wType || 'gen';
+  try{ await loadStoreOpen(); }catch(e){}
+  const wRaw = findStoreOpen(storeNm);
+  const wHit = (wRaw && wRaw.brandMismatch) ? null : wRaw;   // 브랜드가 다르면 남의 오픈일을 쓰지 않는다
+  const wOpen = wHit ? wHit.ts : (r.openDate || openTs || null);
+  if(wOpen){
+    if(!r.openDate) r.openDate = wOpen;
+    if(wHit){ r.brand = wHit.brand; r.storeType = wHit.type; }
+    const wi = warrantyOf(wOpen, r.wType);
+    r.wEnd = wi.end; r.wLeft = wi.left; r.wIn = wi.inW;
+    r.history[0].action += wi.inW ? ` · ${wi.nm} 하자기간 잔여 ${wi.left}일`
+                                  : ` · ${wi.nm} 하자기간 경과 (유상 보수 검토)`;
   }
   try{
     await store.saveRequest(r);
@@ -2836,7 +3112,7 @@ function toggleReqNotiMine(){
 
 /* ===== 완료확인 전자서명 ===== */
 let sgCv=null, sgCtx=null, sgDirty=false, sgPrev=null;
-let sgRate=0;
+let sgRate=0, sgHr='le4', sgStay=false;
 function pickRate(n){
   sgRate=n;
   document.querySelectorAll('.ratebtn').forEach(b=>{
@@ -2847,8 +3123,20 @@ function pickRate(n){
   document.getElementById('rateLabel').textContent = n ? `${n}점 / 10점` : '';
 }
 function mSign(id){
-  sgDirty=false; sgRate=0;
+  sgDirty=false; sgRate=0; sgStay=false;
+  const rq = R(id);
+  const autoH = (rq && rq.workStart && rq.workEnd) ? ((rq.workEnd-rq.workStart)/3600000) : null;
   openModal(`<h2>공사완료 확인 서명</h2><div class="sub">${id} · 점포관리자 확인 서명입니다.</div>
+    <label>작업 소요시간</label>
+    ${autoH!=null?`<div class="note">앱에 기록된 작업 시간은 <b>약 ${autoH.toFixed(1)}시간</b>입니다 (${fmtDT(rq.workStart)} → ${fmtDT(rq.workEnd)}).</div>`:''}
+    <div class="kindtab" id="sgHrTab">
+      <button class="${(autoH==null||autoH<=4)?'on':''}" onclick="pickSgHr('le4')">4시간 이내<small>단시간 작업</small></button>
+      <button class="${(autoH!=null&&autoH>4)?'on':''}" onclick="pickSgHr('gt4')">4시간 초과<small>장시간 작업</small></button>
+    </div>
+    <label>작업 종료 시 관리자 상주 확인 <span style="font-weight:500">(필수)</span></label>
+    <label class="chk" onclick="toggleSgStay()"><span id="sgStayBox" class="chkbox"></span>
+      <span>작업 종료 시점에 <b>점포 관리자가 현장에 상주</b>하여 마감 상태를 함께 확인하였습니다.</span></label>
+    <div class="note" id="sgStayNote" style="display:none"></div>
     <label>이번 공사 만족도 (10점 만점) <span id="rateLabel" style="color:var(--red-dark)"></span></label>
     <div style="display:flex;gap:4px">${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="ratebtn" data-v="${n}" onclick="pickRate(${n})" style="flex:1;padding:9px 0;border-radius:8px;background:var(--gray-bg);color:var(--sub);font-weight:800;font-size:13px">${n}</button>`).join('')}</div>
     <label>점수 사유 (평가 관리에 활용됩니다)</label>
@@ -2874,6 +3162,19 @@ function mSign(id){
     sgCv.addEventListener('pointerup', up); sgCv.addEventListener('pointercancel', up);
   }, 60);
 }
+/* 작업시간 구분 · 관리자 상주 확인 */
+function pickSgHr(v){
+  sgHr = v;
+  const tab = document.getElementById('sgHrTab');
+  if(tab) [...tab.children].forEach((b,i)=>b.className = ((i===0)===(v==='le4'))?'on':'');
+}
+function toggleSgStay(){
+  sgStay = !sgStay;
+  const b = document.getElementById('sgStayBox'); if(b) b.className = 'chkbox'+(sgStay?' on':'');
+  const n = document.getElementById('sgStayNote');
+  if(n){ n.style.display = sgStay?'none':'block'; n.className='note warn';
+         n.textContent = '관리자 상주 확인은 필수입니다. 상주하지 못하셨다면 시공업체와 마감 상태를 확인한 뒤 체크해주세요.'; }
+}
 function sgClear(){
   if(!sgCtx) return;
   const w = sgCv.offsetWidth, h = sgCv.offsetHeight;
@@ -2881,15 +3182,19 @@ function sgClear(){
   sgDirty=false; document.getElementById('sgHint').style.display='flex';
 }
 async function doSign(id){
+  if(!sgStay){ toast('작업 종료 시 관리자 상주 확인에 체크해주세요'); toggleSgStay(); toggleSgStay(); return; }
   if(!sgRate){ toast('만족도 점수를 선택해주세요 (1~10점)'); return; }
   if(!sgDirty){ toast('서명을 해주세요'); return; }
   const data = sgCv.toDataURL('image/png');
   const why = document.getElementById('rateWhy').value.trim();
+  const hrNm = sgHr==='gt4' ? '4시간 초과' : '4시간 이내';
   try{
     await store.addFile(id, {kind:'sign', name:'sign.png', data, ts:now()});
-    await store.updateRequest(id, {signBy:actorLabel(), signAt:now(), rating:sgRate, ratingReason:why},
-      {ts:now(), actor:actorLabel(), action:`공사완료 확인 서명 (만족도 ${sgRate}/10)`});
-    closeModal(); toast('서명과 만족도가 저장되었습니다');
+    await store.updateRequest(id, {signBy:actorLabel(), signAt:now(), rating:sgRate, ratingReason:why,
+        workHours:sgHr, mgrStay:true, mgrStayAt:now()},
+      {ts:now(), actor:actorLabel(),
+       action:`공사완료 확인 서명 (${hrNm} · 관리자 상주 확인 · 만족도 ${sgRate}/10)`});
+    closeModal(); toast('서명과 확인 사항이 저장되었습니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
@@ -2909,7 +3214,7 @@ function spPick(inputId, val){
   const inp = document.getElementById(inputId);
   inp.value = val;
   document.getElementById(inputId+'Drop').style.display='none';
-  if(inputId==='nStore' && typeof updDraft==='function') updDraft();
+  if(inputId==='nStore'){ if(typeof updDraft==='function') updDraft(); if(typeof warrantyHint==='function') warrantyHint(); }
 }
 function spHide(inputId){ setTimeout(()=>{ const d=document.getElementById(inputId+'Drop'); if(d) d.style.display='none'; }, 200); }
 
@@ -4022,18 +4327,60 @@ function vODetail(){
     s += `<button class="btn blk grn" onclick="oReceiptModal('${o.id}')">✍ 물품 수령 · 납품확인서 작성</button>`;
   s += `</div>`;
 
-  /* 6. 정산 */
-  s += `<div class="sec"><div class="st">💰 ${oIsDir(o)?'7':'6'}. 정산 <span class="badge b-gray">${oSettleNm(o)}</span></div>`;
-  if(o.settle){
-    s += `<div class="kv"><b>정산금액</b><strong>${money(o.settle.amount)}</strong></div>
-      <div class="kv"><b>정산방식</b>${esc(o.settle.method)}</div>
-      <div class="kv"><b>정산월</b>${ymLabel(o.settle.month)}</div>
-      <div class="kv"><b>처리</b>${esc(o.settle.by)} · ${fmtDT(o.settle.at)}</div>
-      ${o.settle.note?`<div class="kv"><b>비고</b>${esc(o.settle.note)}</div>`:''}`;
-  } else s += `<div class="note">${o.receipt?`납품확인 완료 — ${oSettleNm(o)} 대기중입니다.`:'납품 확인 후 정산합니다.'}</div>`;
-  if(oCanAct(o,'DELIVERED'))
-    s += `<button class="btn blk" onclick="oSettleModal('${o.id}')">💳 정산 처리</button>`;
-  s += `</div>`;
+  /* 6. 반품 — 납품 완료 후 */
+  {
+    const rets = oReturns(o);
+    const base = oIsDir(o) ? 6 : 5;
+    s += `<div class="sec"><div class="st">↩ ${base+1}. 반품
+      ${rets.length?`<span class="badge ${oRetPending(o).length?'b-amber':'b-gray'}">${rets.length}건</span>`:''}</div>`;
+    if(rets.length){
+      s += rets.slice().sort((a,b)=>b.ts-a.ts).map(r=>`
+        <div class="qrow">
+          <div class="qhd"><span class="qt">
+            <b>${esc(r.rid)}</b> <span class="badge ${r.status==='확인'?'b-green':(r.status==='반려'?'b-red':'b-amber')}">${esc(r.status)}</span><br>
+            <span style="font-weight:700">${esc(r.reason)}</span>
+            <div class="qs">${esc(r.by)} · ${fmtDT(r.ts)}${r.note?` · ${esc(r.note)}`:''}</div>
+            ${r.confirmBy?`<div class="qs">확인 ${esc(r.confirmBy)} · ${fmtDT(r.confirmAt)}${r.confirmNote?` · ${esc(r.confirmNote)}`:''}</div>`:''}
+          </span><span class="sp">${money(r.amount)}</span></div>
+          ${r.items && r.items.length ? itemsTable(r.items) : ''}
+          ${r.status==='요청' && canRetOk(o) ? `<button class="btn sm blk" style="margin-top:6px" onclick="oReturnConfirm('${o.id}','${r.rid}')">✅ 반품 확인 / 반려</button>` : ''}
+        </div>`).join('');
+      s += photosHtml('O:'+o.id, 'return') || '';
+      if(oReturnAmt(o)) s += `<div class="note warn">확인된 반품 <b>${money(oReturnAmt(o))}</b>이 정산 금액에서 차감됩니다.</div>`;
+    } else {
+      s += `<div class="note">${o.receipt?'반품 등록 내역이 없습니다.':'납품 확인 후 반품을 등록할 수 있습니다.'}</div>`;
+    }
+    if(canRetAdd(o)) s += `<button class="btn sec2 blk" onclick="oReturnModal('${o.id}')">↩ 반품 등록</button>`;
+    s += `</div>`;
+  }
+
+  /* 7. 정산 — 공급사 요청 → 정산 처리로 마감 */
+  {
+    const base = oIsDir(o) ? 6 : 5;
+    const gross = oAmount(o)||0, ret = oReturnAmt(o);
+    s += `<div class="sec"><div class="st">💰 ${base+2}. 정산 <span class="badge b-gray">${oSettleNm(o)}</span></div>`;
+    if(o.settleReq){
+      s += `<div class="kv"><b>정산 요청</b>${esc(o.settleReq.by)} · ${fmtDT(o.settleReq.at)}</div>
+        <div class="kv"><b>청구 귀속월</b>${ymLabel(o.settleReq.month)}</div>
+        <div class="kv"><b>청구 금액</b><strong>${money(o.settleReq.amount)}</strong>${o.settleReq.returnAmt?` <span style="color:var(--sub);font-size:12px">(확정 ${money(o.settleReq.gross)} − 반품 ${money(o.settleReq.returnAmt)})</span>`:''}</div>
+        ${o.settleReq.note?`<div class="kv"><b>비고</b>${esc(o.settleReq.note)}</div>`:''}`;
+    }
+    if(o.settle){
+      s += `<div class="kv" style="margin-top:6px"><b>정산금액</b><strong>${money(o.settle.amount)}</strong>${o.settle.returnAmt?` <span style="color:var(--sub);font-size:12px">(반품 ${money(o.settle.returnAmt)} 차감)</span>`:''}</div>
+        <div class="kv"><b>정산방식</b>${esc(o.settle.method)}</div>
+        <div class="kv"><b>정산월</b>${ymLabel(o.settle.month)}</div>
+        <div class="kv"><b>처리</b>${esc(o.settle.by)} · ${fmtDT(o.settle.at)}</div>
+        ${o.settle.note?`<div class="kv"><b>비고</b>${esc(o.settle.note)}</div>`:''}`;
+    } else if(!o.settleReq){
+      s += `<div class="kv"><b>확정 금액</b>${money(gross)}${ret?` <span style="color:var(--red-dark)">− 반품 ${money(ret)}</span>`:''}</div>
+        <div class="note">${o.receipt?`납품확인 완료 — <b>${esc(o.supplier)}</b>의 정산 요청 대기중입니다.`:'납품 확인 후 정산합니다.'}</div>`;
+    }
+    if(oCanAct(o,'DELIVERED'))
+      s += `<button class="btn blk" onclick="oSettleReqModal('${o.id}')">📨 정산 요청</button>`;
+    if(oCanAct(o,'SREQ'))
+      s += `<button class="btn blk grn" onclick="oSettleModal('${o.id}')">💳 정산 처리 (마감)</button>`;
+    s += `</div>`;
+  }
 
   /* 의견·댓글 — 관계자 소통용 */
   s += `<div class="sec"><div class="st">💬 의견·댓글 <span class="badge b-gray">${(o.comments||[]).length}</span></div>
@@ -4048,7 +4395,7 @@ function vODetail(){
   {
     const key = 'O:'+o.id;
     const all = filesCache[key]||[];
-    const box = fileListHtml(key, ['drawing','quote','delivery','osign'], '전체 첨부파일');
+    const box = fileListHtml(key, ['drawing','quote','delivery','return','osign'], '전체 첨부파일');
     s += `<div class="sec"><div class="st">📎 첨부파일 <span class="badge b-gray">${all.length}</span></div>
       ${box || '<div class="note">첨부된 파일이 없습니다.</div>'}</div>`;
   }
@@ -4789,14 +5136,160 @@ async function oReceiptSave(id){
   }
 }
 
+/* ═══════ 반품 ═══════
+   ① 시공사가 납품받은 품목 중 반품분을 등록 → ② 공급사가 수거 확인 → ③ 정산 금액에서 차감 */
+let retQty = {}, retPhotos = [];
+function oReturnModal(id){
+  const o = O(id); if(!o) return;
+  const items = (o.quote && o.quote.items) || [];
+  retQty = {}; retPhotos = [];
+  openModal(`<h2>반품 등록</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${esc(o.supplier)}</div>
+    <div class="note">납품받은 품목 중 <b>반품할 수량</b>을 입력하세요. 공급사가 수거를 확인하면
+      <b>정산 금액에서 자동으로 차감</b>됩니다.</div>
+    <label>반품 품목</label>
+    <div id="retRows">${items.length? items.map((it,i)=>`
+      <div class="qrow">
+        <div class="qhd">
+          ${it.img?`<img src="${it.img}" alt="">`:'<span class="qnoimg">📦</span>'}
+          <span class="qt">${it.code?`<b>${esc(it.code)}</b><br>`:''}
+            <span style="font-weight:700">${esc(it.name)}</span>
+            <div class="qs">${esc(it.spec||'')} · 납품 ${it.qty}${esc(it.unit||'EA')} · ${money(it.price)}</div></span>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
+          <span style="font-size:12px;color:var(--sub);font-weight:700;flex:1">반품 수량</span>
+          <input type="number" inputmode="numeric" min="0" max="${it.qty}" value="" placeholder="0"
+            style="width:110px" oninput="retSet(${i},this.value,${it.qty},${it.price})">
+          <span style="font-size:12px;font-weight:700;width:74px;text-align:right">${esc(it.unit||'EA')}</span>
+        </div>
+      </div>`).join('') : '<div class="note warn">견적 품목 정보가 없어 반품 품목을 고를 수 없습니다. 아래 사유에 내용을 적어주세요.</div>'}</div>
+    <div class="kv" style="margin-top:10px;font-size:15px"><b>반품 금액</b><strong id="retTotal">0원</strong></div>
+    <label>반품 사유</label>
+    <select id="retReason">
+      <option>파손·불량</option><option>수량 초과 납품</option><option>규격 상이</option>
+      <option>현장 설계 변경</option><option>기타</option>
+    </select>
+    <label>상세 내용</label>
+    <textarea id="retNote" rows="2" placeholder="예) 팬던트 2SET 유리갓 파손 — 수거 요청"></textarea>
+    <label>반품 사진</label>
+    <input type="file" id="retF" accept="image/*" multiple style="display:none" onchange="retPick(this)">
+    <button class="file-add" onclick="document.getElementById('retF').click()">📷 사진 추가</button>
+    <div class="photos" id="retPrev"></div>
+    <button class="btn blk" onclick="oReturnSave('${id}')">반품 등록 · 공급사에 수거 요청</button>`);
+}
+function retSet(i, v, maxQ, price){
+  const q = Math.max(0, Math.min(Number(v)||0, maxQ));
+  if(q) retQty[i] = {qty:q, price:price}; else delete retQty[i];
+  const t = Object.values(retQty).reduce((s,x)=>s+x.qty*x.price, 0);
+  const el = document.getElementById('retTotal'); if(el) el.textContent = money(t);
+}
+async function retPick(inp){
+  for(const f of [...inp.files]){
+    try{ retPhotos.push(await compressImage(f,1400,0.7)); }
+    catch(e){ toast('사진 처리 실패: '+e.message); }
+  }
+  inp.value='';
+  document.getElementById('retPrev').innerHTML = retPhotos.map(d=>`<img src="${d}">`).join('');
+}
+async function oReturnSave(id){
+  const o = O(id); if(!o) return;
+  const src = (o.quote && o.quote.items) || [];
+  const items = Object.keys(retQty).map(i=>{
+    const it = src[i], q = retQty[i].qty;
+    return { code:it.code||'', name:it.name, spec:it.spec||'', unit:it.unit||'EA',
+             qty:q, price:it.price, amount:q*it.price, img:it.img||'' };
+  });
+  const note = document.getElementById('retNote').value.trim();
+  if(!items.length && !note){ toast('반품 수량이나 상세 내용을 입력해주세요'); return; }
+  const amount = items.reduce((s,x)=>s+x.amount,0);
+  const rec = { rid:'RT-'+rnd4(), ts:now(), by:actorLabel(), status:'요청',
+                reason:document.getElementById('retReason').value, note, items, amount,
+                photoCount:retPhotos.length };
+  try{
+    const list = (o.returns||[]).concat([rec]);
+    await store.updateOrder(id, {returns:list},
+      oEntry(`반품 등록 (${items.length}개 품목 · ${money(amount)} · ${rec.reason})`));
+    for(let i=0;i<retPhotos.length;i++){
+      try{ await store.addFile('O:'+id, {kind:'return', name:`return_${rec.rid}_${i+1}.jpg`,
+             data:retPhotos[i], ts:now(), by:actorLabel()}); }catch(e){}
+    }
+    filesLoaded['O:'+id] = false;
+    retQty={}; retPhotos=[];
+    closeModal(); toast('반품이 등록되었습니다 — 공급사 확인을 기다립니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+/* 공급사 수거 확인 / 반려 */
+function oReturnConfirm(id, rid){
+  const o = O(id); if(!o) return;
+  const r = oReturns(o).find(x=>x.rid===rid); if(!r) return;
+  openModal(`<h2>반품 확인</h2>
+    <div class="sub">${o.id} · ${esc(r.by)} 요청 · ${fmtDT(r.ts)}</div>
+    <div class="note">사유: <b>${esc(r.reason)}</b>${r.note?` — ${esc(r.note)}`:''}</div>
+    ${r.items.length?itemsTable(r.items):''}
+    <div class="kv" style="font-size:15px"><b>반품 금액</b><strong>${money(r.amount)}</strong></div>
+    <label>처리 결과</label>
+    <select id="rcRes"><option>확인</option><option>반려</option></select>
+    <label>비고 (수거일·반려 사유 등)</label>
+    <textarea id="rcNote" rows="2" placeholder="예) 8/29 수거 완료"></textarea>
+    <button class="btn blk grn" onclick="oReturnConfirmSave('${id}','${rid}')">저장</button>`);
+}
+async function oReturnConfirmSave(id, rid){
+  const o = O(id); if(!o) return;
+  const res = document.getElementById('rcRes').value;
+  const note = document.getElementById('rcNote').value.trim();
+  const list = oReturns(o).map(x=> x.rid===rid
+    ? {...x, status:res, confirmBy:actorLabel(), confirmAt:now(), confirmNote:note} : x);
+  const amt = list.filter(x=>x.status==='확인').reduce((s,x)=>s+(x.amount||0),0);
+  try{
+    await store.updateOrder(id, {returns:list},
+      oEntry(`반품 ${res} (${rid})${res==='확인'?` · 차감 누계 ${money(amt)}`:''}`));
+    closeModal(); toast(res==='확인' ? '반품이 확인되어 정산에서 차감됩니다' : '반품이 반려되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* ═══════ 정산 요청 (공급사) ═══════ */
+function oSettleReqModal(id){
+  const o = O(id); if(!o) return;
+  const gross = oAmount(o)||0, ret = oReturnAmt(o), net = oNetAmount(o);
+  const pend = oRetPending(o);
+  openModal(`<h2>정산 요청</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · 청구처 ${esc(oBillTo(o))}</div>
+    ${pend.length?`<div class="note warn">⚠ 확인하지 않은 반품 ${pend.length}건이 있습니다 (${money(pend.reduce((s,x)=>s+x.amount,0))}).
+      먼저 처리하지 않으면 차감 없이 청구됩니다.</div>`:''}
+    <div class="kv"><b>확정 금액</b>${money(gross)}</div>
+    <div class="kv"><b>반품 차감</b>${ret?`<span style="color:var(--red-dark)">- ${money(ret)}</span>`:'없음'}</div>
+    <div class="kv" style="font-size:15px"><b>청구 금액</b><strong>${money(net)}</strong></div>
+    <label>청구 귀속월</label>
+    <input id="srMonth" type="month" value="${ymOf(now())}">
+    <label>비고</label>
+    <textarea id="srNote" rows="2" placeholder="예) 8월분 청구 — 반품 2건 차감 반영"></textarea>
+    <button class="btn blk" onclick="oSettleReqSave('${id}')">정산 요청</button>`);
+}
+async function oSettleReqSave(id){
+  const o = O(id); if(!o) return;
+  const req = { at:now(), by:actorLabel(), month:document.getElementById('srMonth').value,
+                gross:oAmount(o)||0, returnAmt:oReturnAmt(o), amount:oNetAmount(o),
+                note:document.getElementById('srNote').value.trim() };
+  try{
+    await store.updateOrder(id, {settleReq:req, stage:'SREQ', stageAt:now()},
+      oEntry(`정산 요청 (${money(req.amount)}${req.returnAmt?` · 반품 -${money(req.returnAmt)}`:''} · ${ymLabel(req.month)})`));
+    closeModal(); toast('정산을 요청했습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
 function oSettleModal(id){
   const o = O(id); if(!o) return;
-  const isDir = o.type==='직영점';
+  const isDir = oIsDir(o);
+  const gross = oAmount(o)||0, ret = oReturnAmt(o), net = oNetAmount(o);
+  const req = o.settleReq;
   openModal(`<h2>정산 처리</h2>
     <div class="sub">${o.id} · ${esc(o.site)} · ${oSettleNm(o)}</div>
     ${o.receipt && !o.receipt.allOk ? `<div class="note warn">🚨 납품 이상 기재 건입니다: ${esc(o.receipt.shortItems)}<br>금액 조정 여부를 확인하세요.</div>`:''}
-    <label>정산 금액</label>
-    <input id="stAmt" type="number" inputmode="numeric" value="${oAmount(o)}">
+    ${req?`<div class="note">📨 <b>${esc(req.by)}</b> 정산 요청 · ${fmtDT(req.at)} · 귀속월 ${ymLabel(req.month)}${req.note?`<br>${esc(req.note)}`:''}</div>`:''}
+    <div class="kv"><b>확정 금액</b>${money(gross)}</div>
+    <div class="kv"><b>반품 차감</b>${ret?`<span style="color:var(--red-dark)">- ${money(ret)}</span> (${oRetOk(o).length}건)`:'없음'}</div>
+    <label>정산 금액 <span style="font-weight:500">(반품 차감 반영값)</span></label>
+    <input id="stAmt" type="number" inputmode="numeric" value="${net}">
     <label>정산 ${isDir?'귀속월':'지급월'}</label>
     <input id="stMonth" type="month" value="${ymOf(now())}">
     <label>비고</label>
@@ -4808,7 +5301,8 @@ async function oSettleSave(id){
   const amt = Number(document.getElementById('stAmt').value);
   if(!amt){ toast('정산 금액을 입력해주세요'); return; }
   const settle = { at:now(), by:actorLabel(), method:oSettleNm(o), month:document.getElementById('stMonth').value,
-                   amount:amt, note:document.getElementById('stNote').value.trim() };
+                   amount:amt, gross:oAmount(o)||0, returnAmt:oReturnAmt(o),
+                   note:document.getElementById('stNote').value.trim() };
   try{
     await store.updateOrder(id, {settle, stage:'SETTLED', stageAt:now()},
       oEntry(`정산 완료 (${money(amt)} · ${ymLabel(settle.month)})`));
@@ -4822,9 +5316,11 @@ async function oSettleSave(id){
 function vSupplySettle(){
   const ym = state.settleMonth || ymOf(now());
   const all = visibleOrders().filter(o=>o.receipt);            // 납품확인서가 나온 건만 청구 대상
-  const waiting = all.filter(o=>o.stage==='DELIVERED');
+  const toReq   = all.filter(o=>o.stage==='DELIVERED');          // 아직 정산요청 전
+  const waiting = all.filter(o=>['DELIVERED','SREQ'].includes(o.stage));
   const done = all.filter(o=>o.stage==='SETTLED' && o.settle && o.settle.month===ym);
-  const sum = a => a.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const sum = a => a.reduce((s,o)=>s+(o.stage==='SETTLED'&&o.settle?o.settle.amount:oNetAmount(o)),0);
+  const retSum = a => a.reduce((s,o)=>s+oReturnAmt(o),0);
 
   /* 청구처별로 묶기 — 본사 1개 + 시공사 N개 */
   const groups = {};
@@ -4841,9 +5337,11 @@ function vSupplySettle(){
       <div class="oline"><span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
         <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
         ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
-        ${o.stage==='SETTLED'?'<span class="badge b-green">정산완료</span>':''}</div>
+        ${o.stage==='SETTLED'?'<span class="badge b-green">정산완료</span>':(o.stage==='SREQ'?'<span class="badge b-blue">정산요청 완료</span>':'<span class="badge b-amber">정산요청 필요</span>')}
+        ${oReturnAmt(o)?`<span class="badge b-red">반품 -${money(oReturnAmt(o))}</span>`:''}
+        ${oRetPending(o).length?`<span class="badge b-amber">반품확인 ${oRetPending(o).length}건</span>`:''}</div>
       <div style="font-weight:700;font-size:13.5px;margin-top:3px">${esc(o.site)}</div>
-      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 납품 ${fmtD(o.receipt.receivedAt)} · <strong style="color:var(--ink)">${money(oAmount(o))}</strong></div>
+      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 납품 ${fmtD(o.receipt.receivedAt)} · <strong style="color:var(--ink)">${money(o.stage==='SETTLED'&&o.settle?o.settle.amount:oNetAmount(o))}</strong>${oReturnAmt(o)?` <span style="color:var(--red-dark)">(반품 차감 후)</span>`:''}</div>
     </button>`).join('') || '<div class="empty">해당 건이 없습니다</div>';
 
   return roleNote()+`
@@ -4853,6 +5351,8 @@ function vSupplySettle(){
       직영점분은 <b>롯데GRS 본사</b>에 월단위로, 가맹점분은 <b>시공사별로 개별</b> 청구합니다.</div>
     <div class="kv"><b style="width:118px">청구 대기</b><strong>${money(sum(waiting))}</strong>
       <span style="color:var(--sub);font-size:12.5px;margin-left:6px">${waiting.length}건</span></div>
+    <div class="kv"><b style="width:118px">└ 정산요청 필요</b>${toReq.length}건 · ${money(sum(toReq))}</div>
+    <div class="kv"><b style="width:118px">└ 반품 차감</b>${retSum(waiting)?`<span style="color:var(--red-dark)">- ${money(retSum(waiting))}</span>`:'없음'}</div>
     <div class="kv"><b style="width:118px">${ymLabel(ym)} 수금완료</b><strong style="color:var(--green)">${money(sum(done))}</strong></div>
     <label>정산 귀속월</label>
     <input type="month" value="${ym}" onchange="state.settleMonth=this.value;render()">
@@ -4864,8 +5364,10 @@ function vSupplySettle(){
       <div class="h2">${g.type==='직영점'?'🏢':'🏗'} ${esc(g.key)}
         <span class="badge ${g.type==='직영점'?'b-blue':'b-gray'}">${g.type}</span></div>
       <div class="note" style="margin:0 0 4px">${oBillNote(g.list[0])} · ${g.list.length}건 · 합계 <strong>${money(sum(g.list))}</strong>
+        ${retSum(g.list)?`<span style="display:block;color:var(--red-dark)">반품 ${money(retSum(g.list))} 차감 반영</span>`:''}
         <span style="display:block;margin-top:2px">부가세 별도 금액입니다.</span></div>
       ${rowsOf(g.list)}
+      ${g.list.some(o=>o.stage==='DELIVERED')?`<button class="btn blk" onclick="oBulkSettleReq('${esc(g.key).replace(/'/g,"\\'")}')">📨 정산 요청 (${g.list.filter(o=>o.stage==='DELIVERED').length}건 일괄)</button>`:''}
       <button class="btn sec2 blk" onclick="printBill('${esc(g.key).replace(/'/g,"\\'")}')">📄 거래명세서 출력 (PDF 저장)</button>
     </div>`).join('')
    : `<div class="card"><div class="empty">청구 대기 중인 건이 없습니다</div></div>`}
@@ -4876,13 +5378,33 @@ function vSupplySettle(){
     ${rowsOf(done)}
   </div>`;
 }
+/* 청구처별 일괄 정산 요청 */
+async function oBulkSettleReq(billTo){
+  const list = visibleOrders().filter(o=>o.receipt && o.stage==='DELIVERED' && oBillTo(o)===billTo);
+  if(!list.length){ toast('정산 요청할 건이 없습니다'); return; }
+  const pend = list.reduce((s,o)=>s+oRetPending(o).length,0);
+  const total = list.reduce((s,o)=>s+oNetAmount(o),0);
+  if(!confirm(`${billTo} 앞 ${list.length}건 · ${money(total)}을 정산 요청할까요?`
+      + (pend?`\n\n※ 확인하지 않은 반품 ${pend}건이 있습니다. 차감 없이 청구됩니다.`:''))) return;
+  const month = ymOf(now());
+  let ok=0;
+  for(const o of list){
+    const req = { at:now(), by:actorLabel(), month, gross:oAmount(o)||0,
+                  returnAmt:oReturnAmt(o), amount:oNetAmount(o), note:'일괄 정산 요청' };
+    try{ await store.updateOrder(o.id, {settleReq:req, stage:'SREQ', stageAt:now()},
+           oEntry(`정산 요청 (${money(req.amount)} · ${ymLabel(month)})`)); ok++; }
+    catch(e){ console.warn('bulk settle req', e); }
+  }
+  toast(`${ok}건 정산 요청 완료`); render();
+}
 function exportBillCSV(){
   const rows = visibleOrders().filter(o=>o.receipt).map(o=>[
     o.id, oBillTo(o), o.type, o.cat, o.site, o.builder,
     fmtD(o.receipt.receivedAt), o.receipt.allOk?'이상없음':'이상: '+(o.receipt.shortItems||''),
-    oAmount(o), O_NM[o.stage]||o.stage, o.settle?o.settle.month:'', o.settle?fmtD(o.settle.at):''
+    oAmount(o), oReturnAmt(o), oNetAmount(o), O_NM[o.stage]||o.stage,
+    o.settleReq?fmtD(o.settleReq.at):'', o.settle?o.settle.month:'', o.settle?fmtD(o.settle.at):''
   ]);
-  const head = ['발주번호','청구처','구분','품목','현장','시공사','납품일','검수','청구금액(VAT별도)','상태','정산월','정산일'];
+  const head = ['발주번호','청구처','구분','품목','현장','시공사','납품일','검수','확정금액','반품차감','청구금액(VAT별도)','상태','정산요청일','정산월','정산일'];
   const csv = '﻿'+[head,...rows].map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
@@ -4891,10 +5413,10 @@ function exportBillCSV(){
 }
 /* 청구처별 거래명세서 */
 function printBill(billTo){
-  const list = visibleOrders().filter(o=>o.receipt && o.stage==='DELIVERED' && oBillTo(o)===billTo);
+  const list = visibleOrders().filter(o=>o.receipt && ['DELIVERED','SREQ'].includes(o.stage) && oBillTo(o)===billTo);
   if(!list.length){ toast('청구할 건이 없습니다'); return; }
   const box='border:1px solid #999;padding:6px 10px;';
-  const total = list.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const total = list.reduce((s,o)=>s+oNetAmount(o),0);
   const vat = Math.round(total*0.1);
   document.getElementById('printArea').innerHTML = `
   <div style="font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;max-width:700px;margin:0 auto">
@@ -4915,7 +5437,7 @@ function printBill(billTo){
       ${list.map(o=>`<tr>
         <td style="${box}">${esc(o.id)}</td><td style="${box}">${esc(o.site)}</td><td style="${box}">${o.cat}</td>
         <td style="${box}">${esc(o.builder)}</td><td style="${box}">${fmtD(o.receipt.receivedAt)}</td>
-        <td style="${box}text-align:right">${(oAmount(o)||0).toLocaleString('ko-KR')}</td></tr>`).join('')}
+        <td style="${box}text-align:right">${oNetAmount(o).toLocaleString('ko-KR')}${oReturnAmt(o)?`<div style="font-size:8pt;color:#B32B22">반품 -${oReturnAmt(o).toLocaleString('ko-KR')}</div>`:''}</td></tr>`).join('')}
       <tr style="font-weight:700"><td style="${box}" colspan="5">공급가액</td><td style="${box}text-align:right">${total.toLocaleString('ko-KR')}</td></tr>
       <tr><td style="${box}" colspan="5">부가세 (10%)</td><td style="${box}text-align:right">${vat.toLocaleString('ko-KR')}</td></tr>
       <tr style="font-weight:800;background:#f8f8f8"><td style="${box}" colspan="5">합계금액</td>
@@ -4930,18 +5452,21 @@ function printBill(billTo){
 function vBuilderSettle(){
   const ym = state.settleMonth || ymOf(now());
   const all = visibleOrders().filter(o=>o.receipt && !oIsDir(o));
-  const waiting = all.filter(o=>o.stage==='DELIVERED');
+  const waiting = all.filter(o=>o.stage==='SREQ');                  // 공급사가 요청한 건 = 지급 처리 대상
+  const notYet  = all.filter(o=>o.stage==='DELIVERED');             // 아직 공급사 요청 전
   const done = all.filter(o=>o.stage==='SETTLED' && o.settle && o.settle.month===ym);
   const dirs = visibleOrders().filter(o=>o.receipt && oIsDir(o));   // 본사 정산분 (참고용)
-  const sum = a => a.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const sum = a => a.reduce((s,o)=>s+(o.stage==='SETTLED'&&o.settle?o.settle.amount:oNetAmount(o)),0);
   const rowsOf = arr => arr.map(o=>`
     <button style="width:100%;text-align:left;padding:9px 0;border-top:1px solid var(--line)" onclick="goOrder('${o.id}')">
       <div class="oline"><span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
         <span class="badge ${oIsDir(o)?'b-blue':'b-gray'}">${oProcNm(o)}</span>
         ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
-        ${o.stage==='SETTLED'?'<span class="badge b-green">지급완료</span>':''}</div>
+        ${o.stage==='SETTLED'?'<span class="badge b-green">지급완료</span>':(o.stage==='SREQ'?'<span class="badge b-blue">정산요청 접수</span>':'<span class="badge b-gray">공급사 요청 전</span>')}
+        ${oReturnAmt(o)?`<span class="badge b-red">반품 -${money(oReturnAmt(o))}</span>`:''}
+        ${oRetPending(o).length?`<span class="badge b-amber">반품확인 대기</span>`:''}</div>
       <div style="font-weight:700;font-size:13.5px;margin-top:3px">${esc(o.site)} <span style="color:var(--sub);font-weight:500">· ${esc(o.supplier)}</span></div>
-      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 수령 ${fmtD(o.receipt.receivedAt)} · <strong style="color:var(--ink)">${money(oAmount(o))}</strong></div>
+      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 수령 ${fmtD(o.receipt.receivedAt)} · <strong style="color:var(--ink)">${money(o.stage==='SETTLED'&&o.settle?o.settle.amount:oNetAmount(o))}</strong></div>
     </button>`).join('') || '<div class="empty">해당 건이 없습니다</div>';
   return roleNote()+`
   <div class="card">
@@ -4955,8 +5480,15 @@ function vBuilderSettle(){
     <input type="month" value="${ym}" onchange="state.settleMonth=this.value;render()">
   </div>
   <div class="card">
-    <div class="h2">💳 지급 대기 <span class="badge b-amber">${waiting.length}건</span></div>
+    <div class="h2">💳 지급 처리 대기 <span class="badge b-amber">${waiting.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">공급사가 <b>정산 요청</b>한 건입니다. 각 건에 들어가 「정산 처리」로 마감하세요.</div>
     ${rowsOf(waiting)}
+  </div>
+  <div class="card">
+    <div class="h2">⏳ 공급사 정산요청 전 <span class="badge b-gray">${notYet.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">납품은 끝났고 <b>${esc(all.length?all[0].supplier:'공급사')}</b>의 정산 요청을 기다리는 건입니다.
+      반품이 있으면 요청 전에 등록해 주세요.</div>
+    ${rowsOf(notYet)}
   </div>
   <div class="card">
     <div class="h2">✅ ${ymLabel(ym)} 지급 완료 <span class="badge b-green">${done.length}건</span></div>
@@ -4975,27 +5507,30 @@ function vSettle(){
   const list = visibleOrders();
   const ym = state.settleMonth || ymOf(now());
   /* 정산 대기: 납품 완료 건 / 정산 완료: 해당 월 귀속 건 */
-  const waiting = list.filter(o=>o.stage==='DELIVERED' && oIsDir(o));
+  const waiting = list.filter(o=>o.stage==='SREQ' && oIsDir(o));                 // 공급사 요청 완료 = 처리 대상
+  const notYet  = list.filter(o=>o.stage==='DELIVERED' && oIsDir(o));            // 공급사 요청 전
   const done = list.filter(o=>o.stage==='SETTLED' && oIsDir(o) && o.settle && o.settle.month===ym);
-  const frWait = list.filter(o=>o.stage==='DELIVERED' && !oIsDir(o));
+  const frWait = list.filter(o=>['DELIVERED','SREQ'].includes(o.stage) && !oIsDir(o));
   const bySupplier = {};
   waiting.concat(done).forEach(o=>{
     const k = o.supplier;
     if(!bySupplier[k]) bySupplier[k] = {wait:0, waitAmt:0, done:0, doneAmt:0};
-    if(o.stage==='DELIVERED'){ bySupplier[k].wait++; bySupplier[k].waitAmt += oAmount(o)||0; }
-    else { bySupplier[k].done++; bySupplier[k].doneAmt += oAmount(o)||0; }
+    if(o.stage!=='SETTLED'){ bySupplier[k].wait++; bySupplier[k].waitAmt += oNetAmount(o); }
+    else { bySupplier[k].done++; bySupplier[k].doneAmt += (o.settle?o.settle.amount:oNetAmount(o)); }
   });
   const dirWait = waiting;
-  const sumOf = a => a.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const sumOf = a => a.reduce((s,o)=>s+(o.stage==='SETTLED'&&o.settle?o.settle.amount:oNetAmount(o)),0);
 
   const rowsOf = (arr) => arr.length ? arr.map(o=>`
     <button style="width:100%;text-align:left;padding:10px 0;border-top:1px solid var(--line)" onclick="goOrder('${o.id}')">
       <div class="oline"><span class="badge b-gray">${CAT_ICON[o.cat]} ${o.cat}</span>
         <span class="badge ${o.type==='직영점'?'b-blue':'b-gray'}">${o.type}</span>
-        ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}</div>
+        ${o.receipt&&!o.receipt.allOk?'<span class="badge b-red">납품 이상</span>':''}
+        ${o.stage==='SREQ'?'<span class="badge b-blue">정산요청 접수</span>':(o.stage==='DELIVERED'?'<span class="badge b-gray">공급사 요청 전</span>':'')}
+        ${oReturnAmt(o)?`<span class="badge b-red">반품 -${money(oReturnAmt(o))}</span>`:''}</div>
       <div style="font-weight:700;font-size:13.5px;margin-top:3px">${esc(o.site)} <span style="color:var(--sub);font-weight:500">· ${esc(o.supplier)}</span></div>
       <div style="font-size:11.5px;color:var(--sub)">청구처: ${esc(oBillTo(o))} (${oBillNote(o)})</div>
-      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 수령 ${o.receipt?fmtD(o.receipt.receivedAt):'-'} · <strong style="color:var(--ink)">${money(oAmount(o))}</strong></div>
+      <div style="font-size:12.5px;color:var(--sub)">${o.id} · 수령 ${o.receipt?fmtD(o.receipt.receivedAt):'-'} · <strong style="color:var(--ink)">${money(o.stage==='SETTLED'&&o.settle?o.settle.amount:oNetAmount(o))}</strong></div>
     </button>`).join('') : '<div class="empty">해당 건이 없습니다</div>';
 
   return oRoleNote()+`
@@ -5019,9 +5554,15 @@ function vSettle(){
   </div>
 
   <div class="card">
-    <div class="h2">🏢 본사 월단위 정산 대기 <span class="badge b-amber">${dirWait.length}건</span></div>
-    <div class="note" style="margin:0 0 4px">납품확인서 서명이 완료된 건입니다. 월단위로 묶어 정산합니다. 합계 <strong>${money(sumOf(dirWait))}</strong></div>
+    <div class="h2">🏢 본사 정산 처리 대기 <span class="badge b-amber">${dirWait.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">공급사가 <b>정산 요청</b>한 건입니다. 각 건에 들어가 「정산 처리」로 마감합니다.
+      합계 <strong>${money(sumOf(dirWait))}</strong></div>
     ${rowsOf(dirWait)}
+  </div>
+  <div class="card">
+    <div class="h2">⏳ 공급사 정산요청 전 <span class="badge b-gray">${notYet.length}건</span></div>
+    <div class="note" style="margin:0 0 4px">납품은 끝났고 공급사의 정산 요청을 기다리는 건입니다. 합계 <strong>${money(sumOf(notYet))}</strong></div>
+    ${rowsOf(notYet)}
   </div>
 
   <div class="card">
@@ -5170,16 +5711,19 @@ async function runDiag(){
 
 /* ===== CSV ===== */
 function exportCSV(){
-  const head = ['접수번호','접수유형','오픈일','오픈요청구분','오픈시공사','점포','공사명','긴급도','담당부서','시공업체','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','일정승인','작업시작(실제)','작업종료(실제)','완료일','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
+  const head = ['접수번호','접수유형','오픈일','오픈요청구분','오픈시공사','브랜드','점포구분','공사구분','하자만료일','하자잔여일','하자여부','점포','공사명','긴급도','담당부서','시공업체','접수일','현재단계','기한상태','견적금액','실측일','공사시작','공사종료','일정승인','작업시작(실제)','작업종료(실제)','완료일','작업시간구분','관리자상주','만족도','만족도사유','견적반려횟수','기한초과이력','중단사유'];
   const rows = state.reqs.map(r=>{
     const last = (r.estimates||[])[(r.estimates||[]).length-1];
     const d = ddays(r);
     const od = (r.overdues||[]).map(o=>`${STAGE_NM[o.stage]||o.stage} ${o.days}일`).join('; ');
+    const wi = wInfo(r);
     return [r.id, REQ_KIND_NM[r.kind||'fix'], r.openDate?fmtD(r.openDate):'', r.openType||'', r.builder||'',
+      r.brand||'', r.storeType||'', wi?wi.nm:'', wi?fmtD(wi.end):'', wi?wi.left:'', wi?(wi.inW?'하자기간내':'경과'):'',
       r.store, r.title, r.urgency, r.dept||'', reqVendor(r), fmtD(r.createdAt), waitLabel(r),
       (r.stage==='DONE'||r.stage==='DROPPED')?'-':(d<0?`기한초과 ${-d}일`:`D-${d}`), last?last.amount:'',
       r.surveySkipped?'미실측('+(r.surveySkipReason||'')+')':(r.surveyDate?fmtD(r.surveyDate):''), r.constStart?fmtD(r.constStart):'', r.constEnd?fmtD(r.constEnd):'',
       r.schedStatus==='승인'?`승인(${r.schedBy||''})`:(r.schedStatus||''), r.workStart?fmtDT(r.workStart):'', r.workEnd?fmtDT(r.workEnd):'', r.completedAt?fmtD(r.completedAt):'',
+      r.workHours==='gt4'?'4시간 초과':(r.workHours==='le4'?'4시간 이내':''), r.mgrStay?'확인':'',
       r.rating||'', r.ratingReason||'', r.rejectCount||0, od, r.dropReason||''];
   });
   const csv = '\uFEFF'+[head,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
