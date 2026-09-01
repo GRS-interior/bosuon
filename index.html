@@ -2295,7 +2295,12 @@ function vDetail(){
       <div class="kv"><b>검토의견</b>${esc(r.review.opinion)}</div>
       <div class="kv"><b>검토일</b>${fmtDT(r.review.at)}</div>`;
   } else secs += `<div class="note">견적 검토 전입니다.</div>`;
+  if(r.revokes && r.revokes.length){
+    secs += `<div class="note warn">↩ <b>승인 철회 ${r.revokes.length}회</b><br>` + r.revokes.map(v=>
+      `${fmtDT(v.at)} · ${esc(v.by)} — ${esc(v.reason)}`).join('<br>') + `</div>`;
+  }
   if(rl==='hq' && r.stage==='REVIEW') secs += `<button class="btn blk" onclick="mReview('${r.id}')">✍ 견적 검토하기</button>`;
+  if(canRevokeApv(r)) secs += `<button class="btn sec2 blk" onclick="mRevoke('${r.id}')">↩ 승인 철회 · 재견적 요청</button>`;
   secs += `</div>`;
 
     secs += `<div class="sec"><div class="st">🏗 4. 공사 일정 ${slaTag(r,'SCHEDULE')}</div>`;
@@ -2796,6 +2801,51 @@ async function doReview(id){
   try{
     await store.updateRequest(id, patch, {ts:now(),actor:actorLabel(),action:dec==='승인'?'견적 승인':'견적 보완요청 → 재견적 대기'});
     closeModal(); toast('검토가 등록되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+/* ═══════ 본사 승인 철회 → 재견적 ═══════
+   승인 후 현장 여건이 바뀌어 견적을 다시 받아야 할 때 쓴다.
+   단계를 ESTIMATE 로 되돌려 시공업체가 견적서를 다시 올릴 수 있게 하고,
+   확정돼 있던 공사 일정은 비운다. 철회 이력은 누적해서 남긴다. */
+const canRevokeApv = r => role()==='hq' && r && r.review && r.review.decision==='승인'
+  && ['SCHEDULE','CONSTRUCT'].includes(r.stage);
+function mRevoke(id){
+  const r = R(id); if(!r) return;
+  const last = (r.estimates||[]).slice(-1)[0];
+  const onSite = r.stage==='CONSTRUCT';
+  openModal(`<h2>견적 승인 철회</h2>
+    <div class="sub">${id} · ${esc(r.store)}</div>
+    <div class="note">현재 승인된 견적 — <b>${last?money(last.amount):'-'}</b>${last&&last.ts?` · ${fmtD(last.ts)}`:''}
+      <br>승인 ${fmtDT(r.review.at)} · ${esc(r.review.opinion||'')}</div>
+    <div class="note warn">철회하면 <b>「견적 등록」 단계로 되돌아가</b> 시공업체가 견적서를 다시 올릴 수 있습니다.
+      ${r.constStart?'<br>확정돼 있던 <b>공사 일정은 취소</b>되고, 새 견적이 승인된 뒤 다시 잡습니다.':''}
+      ${onSite?'<br><b>⚠ 이미 공사가 진행 중인 건입니다.</b> 현장 작업을 멈춰야 하는지 시공업체·점포와 먼저 협의해주세요.':''}
+      <br>지금까지의 견적서와 기록은 <b>그대로 남습니다.</b></div>
+    <label>철회 사유 <span style="font-weight:500">(관계자 전체에게 공개됩니다)</span></label>
+    <textarea id="rvWhy" rows="3" placeholder="예) 현장 여건 변경으로 배관 교체 범위 확대 — 재견적 요청"></textarea>
+    <button class="btn blk" onclick="doRevoke('${id}')">승인 철회 · 재견적 요청</button>`);
+}
+async function doRevoke(id){
+  const r = R(id); if(!r) return;
+  const why = document.getElementById('rvWhy').value.trim();
+  if(!why){ toast('철회 사유를 입력해주세요'); return; }
+  const ests = (r.estimates||[]).slice();
+  if(ests.length) ests[ests.length-1] = {...ests[ests.length-1], status:'승인 철회'};
+  const rec = { at:now(), by:actorLabel(), reason:why, prevAt:r.review.at,
+                prevAmount:(ests.slice(-1)[0]||{}).amount||null, fromStage:r.stage };
+  const patch = {
+    stage:'ESTIMATE', stageAt:now(), estimates:ests,
+    review:{ at:now(), decision:'승인 철회', opinion:why },
+    revokes:(r.revokes||[]).concat([rec]),
+    rejectCount:(r.rejectCount||0)+1,
+    /* 확정 일정·작업 기록 초기화 — 새 견적 승인 후 다시 잡는다 */
+    constStart:null, constEnd:null, scheduleAt:null, schedStatus:null,
+    schedBy:null, schedAt:null, schedNegoReason:'', workStart:null, workEnd:null
+  };
+  try{
+    await store.updateRequest(id, patch,
+      {ts:now(), actor:actorLabel(), action:`본사 견적 승인 철회 → 재견적 대기 (${why})`});
+    closeModal(); toast('승인을 철회했습니다 — 시공업체에 재견적을 요청합니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 function mSurvey(id){
