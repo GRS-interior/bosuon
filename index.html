@@ -733,6 +733,7 @@ function myApps(){
 }
 function canApp(a){ return myApps().includes(a); }
 /* 채팅은 보수공사 관계자(점포·보수업체·본사)만 사용한다 */
+const roomId = n => String(n||'').replace(/\//g,'∕').replace(/^__(.*)__$/,'_$1_') || '_';
 const canChat = () => ['hq','store','vendor','branch'].includes(role())
   || (role()==='builder' && state.app==='bosu');
 /* 내 하자 A/S 건이 있는 점포 이름들 */
@@ -1067,13 +1068,17 @@ const store = {
     const i = (state.posts||[]).findIndex(x=>x.id===id);
     if(i>=0) state.posts.splice(i,1);
   },
-  /* ---- 채팅 ---- */
+  /* ---- 채팅 ----
+     채팅방 문서 ID 는 점포명에서 만든다. Firestore 문서 ID 에는 '/' 를 쓸 수 없고
+     __x__ 형태는 예약어라, 그런 점포명(예: 「인천공항 T1 A/S서편」)은 방을 만들지 못했다
+     → 「전송 실패: invalid-argument」. ID 만 안전하게 바꾸고 name 필드는 원래 이름을 유지한다.
+     '/' 가 없는 기존 방은 ID 가 그대로라 영향이 없다. */
   subscribeRooms(cb){
     if(LIVE){
       if(role()==='store'){
         const names = ['전체', state.user.store||state.user.name];
         const metas = {};
-        const unsubs = names.map(n=>FB.onSnapshot(FB.doc(fs,'chats',n), d=>{
+        const unsubs = names.map(n=>FB.onSnapshot(FB.doc(fs,'chats',roomId(n)), d=>{
           if(d.exists()) metas[n]={id:n, ...d.data()};
           cb(Object.values(metas));
         }, err=>console.warn('room',err)));
@@ -1085,14 +1090,14 @@ const store = {
     demoChats.roomCb = cb; cb(demoRoomMetas()); return ()=>{demoChats.roomCb=null};
   },
   subscribeMsgs(room, cb){
-    if(LIVE) return FB.onSnapshot(FB.query(FB.collection(fs,'chats',room,'messages'), FB.orderBy('ts'), FB.limit(300)),
+    if(LIVE) return FB.onSnapshot(FB.query(FB.collection(fs,'chats',roomId(room),'messages'), FB.orderBy('ts'), FB.limit(300)),
       snap=>cb(snap.docs.map(d=>d.data())), err=>console.warn('msgs',err));
     demoChats.msgCb = {room, cb}; cb((demoChats.msgs[room]||[]).slice()); return ()=>{demoChats.msgCb=null};
   },
   async sendMsg(room, msg){
     if(LIVE){
-      await FB.addDoc(FB.collection(fs,'chats',room,'messages'), msg);
-      await FB.setDoc(FB.doc(fs,'chats',room),
+      await FB.addDoc(FB.collection(fs,'chats',roomId(room),'messages'), msg);
+      await FB.setDoc(FB.doc(fs,'chats',roomId(room)),
         {name:room, lastMsg:msg.text, lastTs:msg.ts, lastBy:msg.author, msgN:FB.increment(1)}, {merge:true});
     } else {
       if(!demoChats.msgs[room]) demoChats.msgs[room]=[];
@@ -6088,7 +6093,7 @@ async function runDiag(){
   paint();
   if(!fs){ return; }
 
-  const testId = '__diag__';
+  const testId = 'diag-check';   // ※ __x__ 형태는 Firestore 예약 ID 라 쓸 수 없다
   /* 1) 하위 컬렉션 쓰기 */
   let wrote = false;
   try{
