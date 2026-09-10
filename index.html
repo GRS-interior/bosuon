@@ -28,7 +28,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.5}
   button{font-family:inherit;cursor:pointer;border:none;background:none;font-size:14px}
-  input,select,textarea{font-family:inherit;font-size:15px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;background:#fff}
+  input,select,textarea{font-family:inherit;font-size:16px;/* 16px 미만이면 iOS 사파리가 입력칸 포커스 때 화면을 확대해 드롭다운이 가려진다 */border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;background:#fff}
   input:focus,select:focus,textarea:focus{outline:2px solid var(--red);outline-offset:-1px;border-color:var(--red)}
   label{font-size:13px;font-weight:700;color:var(--sub);display:block;margin:14px 0 6px}
 
@@ -335,11 +335,11 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
     <div id="loginStoreWrap" style="display:none">
       <label>점포명</label>
       <div class="spwrap">
-        <input id="lgStore" placeholder="🔍 점포명 검색 또는 입력" autocomplete="off"
+        <input id="lgStore" placeholder="🔍 지역명 입력 → 아래 목록에서 선택" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="search"
           oninput="spFilter('lgStore')" onfocus="spFilter('lgStore')" onblur="spHide('lgStore')">
         <div class="spdrop" id="lgStoreDrop"></div>
       </div>
-      <datalist id="storeList"></datalist>
+      <div class="note" style="margin-top:6px">점포명은 <b>목록에서 눌러 선택</b>해야 입장됩니다. 예) 「인덕원」 입력 → 「(직영)리아 인덕원역」 선택</div>
     </div>
     <div id="loginBuilderWrap" style="display:none">
       <label>시공사 선택</label>
@@ -364,6 +364,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
       <div class="kk-t">📱 장비 M/T 접수 관련 아래 링크 참고</div>
       <a href="http://pf.kakao.com/_JExbnj" target="_blank" rel="noopener">http://pf.kakao.com/_JExbnj</a>
     </div>
+    <div class="note" id="lgVer" style="text-align:center;margin-top:12px;color:var(--sub)"></div>
   </div>
 </div>
 
@@ -414,6 +415,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
+const APP_VERSION = '2026.09.10';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -908,8 +910,9 @@ const store = {
           if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor.map(x=>Array.isArray(x)?[String(x[0]),+x[1]]:[String(x.j),+x.r]);
           if(c.laborNote) state.cfg.laborNote=c.laborNote;
         }
+        state.cfgLoaded = true;
         fillStoreList(); if(state.ready) render();
-      }, err=>console.warn('config',err));
+      }, err=>{ console.warn('config',err); state.cfgErr = err && (err.code||err.message) || 'config'; });
       // 접수건 실시간 구독은 로그인 후 역할에 맞춰 시작 (subscribeReqs)
       if(state.user) subscribeReqs(onReqs);
       else state._onReqs = onReqs;
@@ -1649,8 +1652,9 @@ function pickRole(r){
   }
 }
 function fillStoreList(){
-  const dl=document.getElementById('storeList');
-  if(dl) dl.innerHTML = state.cfg.stores.map(s=>`<option value="${esc(s)}">`).join('');
+  /* 목록이 늦게 도착했을 때 열려 있는 로그인 검색창을 갱신 */
+  const inp = document.getElementById('lgStore');
+  if(inp && document.activeElement===inp) spFilter('lgStore');
 }
 function doLogin(){
   const err = m => { const el=document.getElementById('lgErr'); el.textContent=m; el.style.display='block'; };
@@ -1675,8 +1679,12 @@ function doLogin(){
   } else if(code !== state.cfg.codes[pickedRole]){ err('접속코드가 올바르지 않습니다'); return; }
   let name='', storeNm='';
   if(pickedRole==='store'){
-    storeNm = document.getElementById('lgStore').value.trim();
-    if(!storeNm){ err('점포명을 입력해주세요'); return; }
+    const typed = document.getElementById('lgStore').value.trim();
+    if(!typed){ err('점포명을 입력하고 목록에서 선택해주세요'); return; }
+    if(!spListReady()){ err('점포 목록을 아직 불러오지 못했습니다. 인터넷 연결을 확인하고 잠시 후 다시 눌러주세요'+(state.cfgErr?` (${state.cfgErr})`:'')); return; }
+    storeNm = spExact(typed);
+    if(!storeNm){ err(`「${typed}」은(는) 등록된 점포명이 아닙니다. 점포명 칸에 지역명을 입력한 뒤 아래 목록에서 점포를 눌러 선택해주세요.`); spFilter('lgStore'); return; }
+    document.getElementById('lgStore').value = storeNm;
     name = storeNm;
   } else {
     name = document.getElementById('lgName').value.trim() || ROLE_NM[pickedRole];
@@ -1694,11 +1702,21 @@ function doLogin(){
 }
 function showLogin(){
   fillStoreList();
+  const lv = document.getElementById('lgVer');
+  if(lv) lv.innerHTML = `앱 버전 ${APP_VERSION} · 화면이 이상하면 <a href="#" onclick="hardReload();return false" style="color:var(--sub);text-decoration:underline">최신 버전으로 새로고침</a>`;
   backGate();
   document.getElementById('login').classList.add('open');
   document.getElementById('main').innerHTML='';
   document.getElementById('nav').innerHTML='';
   document.getElementById('whoami').style.display='none';
+}
+/* 서비스워커 캐시를 비우고 새로 받는다 — 옛 화면이 남아 있는 휴대폰용 */
+async function hardReload(){
+  try{
+    if(navigator.serviceWorker){ const regs = await navigator.serviceWorker.getRegistrations(); for(const r of regs) await r.unregister(); }
+    if(window.caches){ const ks = await caches.keys(); for(const k of ks) await caches.delete(k); }
+  }catch(e){}
+  location.href = location.pathname + '?r=' + Date.now();
 }
 function actorLabel(){
   const u = state.user;
@@ -2330,7 +2348,7 @@ function vDetail(){
   const openDays = r.openDate!=null ? Math.floor((now()-r.openDate)/DAY) : null;
   secs += `<div class="sec"><div class="st">📋 1. 접수 내용
       ${r.kind==='open'?'<span class="badge b-purple">🏗 오픈 직후 추가요청</span>':''}</div>
-    <div class="kv"><b>점포</b>${esc(r.store)}${r.brand?` <span class="badge ${r.storeType==='직영점'?'b-blue':'b-gray'}">${esc(r.brand)} ${esc(r.storeType||'')}</span>`:''}</div>
+    <div class="kv"><b>점포</b>${esc(r.store)}${r.brand?` <span class="badge ${r.storeType==='직영점'?'b-blue':'b-gray'}">${esc(r.brand)} ${esc(r.storeType||'')}</span>`:''}${!spExact(r.store)?' <span class="badge b-red">⚠ 미등록 점포명</span>':''}${canManage(r)&&r.stage!=='DONE'&&r.stage!=='DROPPED'?` <button style="font-size:11.5px;color:var(--sub);text-decoration:underline;font-weight:700" onclick="mFixStore('${r.id}')">정정</button>`:''}</div>
     <div class="kv"><b>접수일</b>${fmtDT(r.createdAt)}</div>
     ${wDetailHtml(r)}
     ${r.kind==='open'?`
@@ -2613,7 +2631,7 @@ function resetNew(){
 }
 
 function vNew(){
-  if(!newDraft.store) newDraft.store = state.user.store || '';
+  if(!newDraft.store || role()==='store') newDraft.store = state.user.store || newDraft.store || '';
   const d = newDraft;
   const opt = (v,cur) => `<option${v===cur?' selected':''}>${v}</option>`;
   const isOpen = d.kind==='open';
@@ -2632,10 +2650,10 @@ function vNew(){
     <label>오픈 시공사 (인테리어)</label>
     <select id="nBuilder" onchange="onBuilderPick();updDraft()"><option value="">모르겠음 / 해당없음</option>${state.cfg.builders.map(b=>`<option${b===d.builder?' selected':''}>${esc(b)}</option>`).join('')}<option value="__etc"${d.builder&&!isRegBuilder(d.builder)?' selected':''}>기타 (직접 입력)</option></select>
     <input id="nBuilderEtc" placeholder="업체명을 입력해주세요" style="margin-top:6px;display:${d.builder&&!isRegBuilder(d.builder)?'block':'none'}" value="${d.builder&&!isRegBuilder(d.builder)?esc(d.builder):''}" oninput="updDraft()">`:''}
-    <label>점포명 <span style="font-weight:500">(입력하면 전국 점포 목록에서 검색됩니다)</span></label>
+    <label>점포명 ${role()==='store'?'<span style="font-weight:500">(로그인한 점포)</span>':'<span style="font-weight:500">(지역명 입력 → 목록에서 선택)</span>'}</label>
     <div class="spwrap">
-      <input id="nStore" value="${esc(d.store)}" placeholder="🔍 점포명 검색 또는 직접 입력" autocomplete="off"
-        oninput="spFilter('nStore');updDraft()" onchange="updDraft();warrantyHint()" onfocus="spFilter('nStore')" onblur="spHide('nStore');updDraft();warrantyHint()">
+      <input id="nStore" value="${esc(d.store)}" placeholder="🔍 지역명 입력 → 아래 목록에서 선택" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+        ${role()==='store'?'readonly style="background:var(--gray-bg)"':`oninput="spFilter('nStore');updDraft()" onchange="updDraft();warrantyHint()" onfocus="spFilter('nStore')" onblur="spHide('nStore');updDraft();warrantyHint()"`}>
       <div class="spdrop" id="nStoreDrop"></div>
     </div>
     <div id="nWarn"></div>
@@ -2784,8 +2802,16 @@ async function submitNew(){
   updDraft();
   const title = (newDraft.title||'').trim();
   const desc = (newDraft.desc||'').trim();
-  const storeNm = (newDraft.store||'').trim();
+  let storeNm = (newDraft.store||'').trim();
   if(!storeNm){ toast('점포명을 입력해주세요'); return; }
+  /* 점포명은 등록된 점포 목록과 정확히 일치해야 한다 (본사담당만 예외 — 설정에서 점포를 먼저 등록할 것) */
+  if(role()==='store') storeNm = state.user.store || storeNm;
+  else {
+    const ex = spExact(storeNm);
+    if(!ex && role()!=='hq'){ toast(`「${storeNm}」은(는) 등록된 점포명이 아닙니다 — 목록에서 선택해주세요`); return; }
+    if(ex) storeNm = ex;
+  }
+  newDraft.store = storeNm;
   if(!title){ toast('공사 제목을 입력해주세요'); return; }
   const photos = (newDraft.photos||[]).slice();
   const btn = document.getElementById('nSubmit'); btn.disabled=true; btn.innerHTML='<span class="spin"></span> 접수 중…';
@@ -3085,6 +3111,44 @@ async function doAsObject(id){
    확정돼 있던 공사 일정은 비운다. 철회 이력은 누적해서 남긴다. */
 const canRevokeApv = r => !!r && canManage(r) && r.review && r.review.decision==='승인'
   && ['SCHEDULE','CONSTRUCT'].includes(r.stage);
+/* 점포명 정정 (본사담당·지점) — 목록에서 고른 점포명으로 바꾸고 보수업체·하자기간을 다시 판정 */
+function mFixStore(id){
+  const r = R(id); if(!r) return;
+  openModal(`<h2>점포명 정정</h2>
+    <div class="sub">${id} · 현재: <b>${esc(r.store)}</b>${spExact(r.store)?'':' <span class="badge b-red">미등록 점포명</span>'}</div>
+    <div class="note">접수 때 점포명이 잘못 들어간 건을 바로잡습니다. 점포명은 <b>목록에서 눌러 선택</b>해야 합니다.
+      <br>바꾸면 담당 보수업체(인천공항=우리아이엔티)와 하자기간 판정도 새 점포 기준으로 다시 계산됩니다.</div>
+    <label>점포명</label>
+    <div class="spwrap">
+      <input id="fxStore" placeholder="🔍 지역명 입력 → 아래 목록에서 선택" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+        oninput="spFilter('fxStore')" onfocus="spFilter('fxStore')" onblur="spHide('fxStore')">
+      <div class="spdrop" id="fxStoreDrop"></div>
+    </div>
+    <button class="btn blk" onclick="doFixStore('${id}')">점포명 정정</button>`);
+  setTimeout(()=>{ const i=document.getElementById('fxStore'); if(i) i.focus(); }, 50);
+}
+async function doFixStore(id){
+  const r = R(id); if(!r) return;
+  const nm = spValue('fxStore');
+  if(!nm){ toast('점포명을 목록에서 선택해주세요'); return; }
+  if(nm===r.store){ toast('현재 점포명과 같습니다'); return; }
+  const patch = { store:nm, vendorCo:storeVendor(nm), brand:null, storeType:null, wEnd:null, wLeft:null, wIn:null };
+  let note = '';
+  try{ await loadStoreOpen(); }catch(e){}
+  const wRaw = findStoreOpen(nm);
+  const wHit = (wRaw && wRaw.brandMismatch) ? null : wRaw;
+  const wOpen = wHit ? wHit.ts : (r.kind==='open' ? r.openDate : null);
+  if(wOpen){
+    if(wHit){ patch.brand = wHit.brand; patch.storeType = wHit.type; if(!r.openDate || wHit) patch.openDate = wHit ? wHit.ts : r.openDate; }
+    const wi = warrantyOf(wOpen, r.wType||'gen');
+    patch.wEnd = wi.end; patch.wLeft = wi.left; patch.wIn = wi.inW;
+    note = wi.inW ? ` · ${wi.nm} 하자기간 잔여 ${wi.left}일` : ` · ${wi.nm} 하자기간 경과`;
+  }
+  try{
+    await store.updateRequest(id, patch, {ts:now(), actor:actorLabel(), action:`점포명 정정: ${r.store} → ${nm}${note}`});
+    closeModal(); toast('점포명을 정정했습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 function mRevoke(id){
   const r = R(id); if(!r) return;
   const last = (r.estimates||[]).slice(-1)[0];
@@ -3565,24 +3629,52 @@ async function doSign(id){
 }
 
 /* ===== 점포 검색 선택 ===== */
+/* 점포명은 반드시 목록에서 고르게 한다 (2026-09-10) — 자유 입력으로 「13267」 같은 점포명이 접수되던 문제.
+   spPicked[inputId] = 목록에서 고른 값. 입력칸 값이 그것과 다르면 「선택 안 됨」으로 본다.
+   iOS 사파리: 탭이 mousedown 으로 안 오는 경우를 대비해 click 으로도 받는다 (스크롤을 막지 않도록 touchstart 는 쓰지 않음). */
+const spPicked = {};
+const spNorm = s => String(s||'').replace(/\s+/g,'').toLowerCase();
+/* 목록에 있는 점포명이면 그 정식 표기를, 없으면 null */
+function spExact(v){
+  const n = spNorm(v); if(!n) return null;
+  return state.cfg.stores.map(String).find(s=>spNorm(s)===n) || null;
+}
+function spListReady(){ return Array.isArray(state.cfg.stores) && state.cfg.stores.length > 0 && (!LIVE || state.cfgLoaded); }
 function spFilter(inputId){
   const inp = document.getElementById(inputId);
   const drop = document.getElementById(inputId+'Drop');
   if(!inp||!drop) return;
   const v = inp.value.trim().toLowerCase();
-  const hits = state.cfg.stores.map(String).filter(s=>s.toLowerCase().includes(v));
+  if(!spListReady()){
+    drop.innerHTML = `<div class="spcnt">⏳ 점포 목록을 불러오는 중입니다… 잠시 후 다시 입력해주세요</div>`;
+    drop.style.display = 'block';
+    if(!spFilter._retry) spFilter._retry = setTimeout(()=>{ spFilter._retry=null; if(document.activeElement===inp) spFilter(inputId); }, 1500);
+    return;
+  }
+  const nv = spNorm(v);
+  const hits = state.cfg.stores.map(String).filter(s=>spNorm(s).includes(nv));
   const top = hits.slice(0,50);
+  const pk = s => `spPick('${inputId}','${esc(s).replace(/'/g,"\\'")}',event)`;
   drop.innerHTML = (hits.length>50?`<div class="spcnt">${hits.length}개 중 50개 표시 — 더 검색해보세요</div>`:'') +
-    top.map(sname=>`<div class="spitem" onmousedown="spPick('${inputId}','${esc(sname).replace(/'/g,"\\'")}')">${esc(sname)}</div>`).join('');
-  drop.style.display = top.length? 'block':'none';
+    (top.length ? top.map(sname=>`<div class="spitem" onmousedown="${pk(sname)}" onclick="${pk(sname)}">${esc(sname)}</div>`).join('')
+                : (nv ? `<div class="spcnt">「${esc(inp.value.trim())}」 — 일치하는 점포가 없습니다. 브랜드 없이 지역명만 넣어보세요 (예: 인덕원)</div>` : ''));
+  drop.style.display = (top.length || nv) ? 'block':'none';
 }
-function spPick(inputId, val){
+function spPick(inputId, val, ev){
+  if(ev && ev.preventDefault) ev.preventDefault();     /* 입력칸 blur → 드롭다운 닫힘 전에 값이 들어가게 */
   const inp = document.getElementById(inputId);
-  inp.value = val;
-  document.getElementById(inputId+'Drop').style.display='none';
+  if(!inp) return;
+  inp.value = val; spPicked[inputId] = val;
+  const d = document.getElementById(inputId+'Drop'); if(d) d.style.display='none';
   if(inputId==='nStore'){ if(typeof updDraft==='function') updDraft(); if(typeof warrantyHint==='function') warrantyHint(); }
+  if(inputId==='lgStore'){ const e=document.getElementById('lgErr'); if(e) e.style.display='none'; }
 }
-function spHide(inputId){ setTimeout(()=>{ const d=document.getElementById(inputId+'Drop'); if(d) d.style.display='none'; }, 200); }
+function spHide(inputId){ setTimeout(()=>{ const d=document.getElementById(inputId+'Drop'); if(d) d.style.display='none'; }, 250); }
+/* 입력칸 값이 목록의 점포와 정확히 같으면 그 정식 표기, 아니면 null */
+function spValue(inputId){
+  const inp = document.getElementById(inputId); if(!inp) return null;
+  return spExact(inp.value);
+}
 
 /* ===== 공사완료보고서 (인쇄→PDF 저장) ===== */
 async function printReport(id){
