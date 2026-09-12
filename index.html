@@ -291,6 +291,8 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .unsum .urow .ul{flex:1;min-width:0;font-size:12.5px;color:#7A2E00;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .unsum .umore{font-size:11.5px;color:#7A2E00;padding-top:6px;opacity:.8}
   .chatbar{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:#FFD028;color:#7A2E00;padding:8px 14px}
+  .signbar{background:var(--red-dark);color:#fff}
+  .signbar .cb-n{background:#fff;color:var(--red-dark)}
   .chatbar:active{background:#F2C500}
   .chatbar .cb-n{background:var(--red);color:#fff;border-radius:99px;font-size:11px;font-weight:800;padding:2px 8px;flex-shrink:0}
   .chatbar .cb-t{flex:1;min-width:0;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -410,6 +412,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   <div class="appsw" id="appsw" style="display:none"></div>
   <nav id="nav"></nav>
   <button class="chatbar" id="chatbar" style="display:none" onclick="goUnreadChat()"></button>
+  <button class="chatbar signbar" id="signbar" style="display:none" onclick="goSignList()"></button>
 </header>
 
 <main id="main"></main>
@@ -439,7 +442,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.09.12';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.09.12b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -1264,6 +1267,8 @@ function notiRelevant(r){
   if(rl==='store')   return !state.user.store || r.store===state.user.store;
   return true; // 본사담당은 전체
 }
+/* 공사는 끝났는데 점포 관리자 서명이 아직 없는 건 */
+const unsignedDone = r => r.stage==='DONE' && !r.signBy;
 /* 내가 다음으로 조치해야 하는 건인지 */
 function needsMyAction(r){
   const rl = role();
@@ -1625,6 +1630,7 @@ function readSmallFile(file, maxKB=650){ // PDF·엑셀 등 비이미지 (base64
 function endOfDay(ts){ const d=new Date(ts); d.setHours(23,59,59,999); return d.getTime(); }
 function deadline(r){
   if(r.stage==='DONE'||r.stage==='DROPPED') return null;
+  if(isICNReq(r)) return null;   /* 인천공항 건은 단계별 처리기한을 두지 않는다 (2026-09-12, 지점 요청) */
   if(r.stage==='SURVEY' && r.surveyDate && !r.surveyDone) return Math.max(endOfDay(r.surveyDate), r.stageAt + (state.cfg.sla.SURVEY||3)*DAY);
   return r.stageAt + (state.cfg.sla[r.stage]||3)*DAY;
 }
@@ -2023,7 +2029,7 @@ function renderNav(){
   document.getElementById('nav').innerHTML = tabs.map(([v,t])=>
     `<button class="${(state.view===v || alias[state.view]===v)?'on':''}" onclick="go('${v}')">${t}</button>`).join('');
 
-  renderChatBar();
+  renderChatBar(); renderSignBar();
   /* 시스템 전환 바 — 두 시스템을 모두 쓸 수 있는 역할에게만 */
   const sw = document.getElementById('appsw');
   const apps = myApps();
@@ -2046,6 +2052,23 @@ function renderChatBar(){
   bar.innerHTML = `<span class="cb-n">${unreadTotal()}</span>
     <span class="cb-t"><b>${esc(first.name)}</b> ${esc((first.meta.lastBy?first.meta.lastBy+': ':'')+(first.meta.lastMsg||''))}${more}</span>
     <span class="cb-go">보기 ›</span>`;
+}
+/* 점포 — 서명 안 된 완료 건이 있으면 어느 화면에서든 상단에 띄운다 */
+function renderSignBar(){
+  const bar = document.getElementById('signbar');
+  if(!bar) return;
+  if(!state.user || role()!=='store' || isOrderApp(state.app)){ bar.style.display='none'; return; }
+  const un = visibleReqs().filter(unsignedDone);
+  const onIt = (state.view==='detail' && un.some(r=>r.id===state.detailId)) || (state.view==='list' && state.filter==='UNSIGNED');
+  if(!un.length || onIt){ bar.style.display='none'; return; }
+  bar.style.display='flex';
+  bar.innerHTML = `<span class="cb-n">${un.length}</span>
+    <span class="cb-t"><b>✍ 공사완료 확인 서명 필요</b> ${esc(un[0].title)}${un.length>1?` 외 ${un.length-1}건`:''}</span>
+    <span class="cb-go">서명하기 ›</span>`;
+}
+function goSignList(){
+  const un = visibleReqs().filter(unsignedDone);
+  if(un.length===1) go('detail', un[0].id); else goList('UNSIGNED');
 }
 function goUnreadChat(){
   const un = unreadRoomList();
@@ -2127,8 +2150,12 @@ function vDash(){
       <div class="tr"><div class="fl" style="width:${cnt(s)/max*100}%;${s==='DONE'?'background:var(--green)':s==='DROPPED'?'background:#9CA3AF':''}"></div></div>
       <span class="v">${cnt(s)}</span></button>`).join('');
   const overList = over.length ? over.map(reqCard).join('') : '<div class="card" style="color:var(--sub);font-weight:700;text-align:center">기한초과 건이 없습니다 👍</div>';
+  const unsigned = rs.filter(unsignedDone);
+  const signBanner = unsigned.length ? `<button class="card" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;border:2px solid var(--red);background:#FEF7F6" onclick="goList('UNSIGNED')">
+      <span style="font-size:24px">✍</span><span><b>${role()==='store'?`공사 완료 확인 서명이 필요한 건 ${unsigned.length}건`:`점포 서명 대기 ${unsigned.length}건`}</b>
+      <div style="font-size:12.5px;color:var(--sub)">${role()==='store'?'공사 결과를 확인하고 완료 서명을 해주셔야 처리가 끝납니다 · 터치해서 서명하기':'공사는 끝났으나 점포 관리자 서명이 아직 없습니다'}</div></span></button>` : '';
   const installBanner = window.deferredPrompt ? `<button class="card" style="width:100%;text-align:left;display:flex;align-items:center;gap:10px;border:2px solid var(--red)" onclick="installApp()"><span style="font-size:24px">📲</span><span><b>앱으로 설치하기</b><div style="font-size:12.5px;color:var(--sub)">홈 화면에 설치하면 앱처럼 바로 실행됩니다</div></span></button>` : '';
-  return roleNote()+installBanner+`
+  return roleNote()+signBanner+installBanner+`
     <div class="tiles">
       <button class="tile" onclick="goList('ALL')"><div class="n">${rs.length}</div><div class="t">전체 접수 ›</div></button>
       <button class="tile" onclick="goList('OPEN')"><div class="n">${open.length}</div><div class="t">진행중 ›</div></button>
@@ -2212,6 +2239,7 @@ function reqCard(r){
       ${r.kind==='open'?'<span class="badge b-purple">🏗 오픈 직후</span>':''}
       ${r.dept&&r.dept!=='잘모르겠음'?deptBadge(r.dept):''}
       ${isOver(r)?`<span class="badge b-overdue">기한초과</span>`:''}
+      ${unsignedDone(r)?`<span class="badge b-red">✍ ${role()==='store'?'서명 필요':'점포 서명 대기'}</span>`:''}
       ${wBadge(r)}
     </div>
     <h3>${esc(r.title)}</h3>
@@ -2229,12 +2257,13 @@ function reqCardsHtml(){
   else if(state.filter==='OPEN') rs = rs.filter(r=>r.stage!=='DONE'&&r.stage!=='DROPPED');
   else if(state.filter==='OPENREQ') rs = rs.filter(r=>r.kind==='open');
   else if(state.filter==='MINE') rs = rs.filter(r=>r.store===state.user.store);
+  else if(state.filter==='UNSIGNED') rs = rs.filter(unsignedDone);
   else if(state.filter!=='ALL') rs = rs.filter(r=>r.stage===state.filter);
   if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')+(r.dept||'')).toLowerCase().includes(String(state.q).toLowerCase()));
   return rs.length? rs.map(reqCard).join('') : '<div class="empty">조건에 맞는 접수 건이 없습니다</div>';
 }
 function vList(){
-  const chips = [['ALL','전체'],['OPEN','진행중'],['OPENREQ','🏗 오픈 직후'],['MINE','내 점포'],['OVER','⚠ 기한초과'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
+  const chips = [['ALL','전체'],['OPEN','진행중'],['OPENREQ','🏗 오픈 직후'],['MINE','내 점포'],['OVER','⚠ 기한초과'],['UNSIGNED','✍ 서명 대기'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
   const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
   return roleNote()+`
     <div class="search"><input id="listSq" placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;const el=document.getElementById('reqList');if(el)el.innerHTML=reqCardsHtml()"></div>
@@ -2557,7 +2586,7 @@ function vDetail(){
         ${r.ratingReason?`<div class="kv"><b>사유</b>${esc(r.ratingReason)}</div>`:''}`;
       if(signFile) secs += `<img class="signimg" src="${signFile.data}" alt="서명">`;
     } else if(rl==='store'){
-      secs += `<div class="note">공사 결과를 확인하셨다면 완료 확인 서명을 해주세요.</div>
+      secs += `<div class="note warn">✍ <b>완료 확인 서명이 아직 없습니다.</b> 공사 결과를 확인하셨다면 아래에서 서명해 주세요. 서명해야 이 건이 마무리됩니다.</div>
         <button class="btn blk grn" onclick="mSign('${r.id}')">✍ 공사완료 확인 서명</button>`;
     } else {
       secs += `<div class="note">점포관리자 확인 서명 대기중입니다.</div>`;
