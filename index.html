@@ -112,6 +112,30 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   .btn.blk{width:100%;margin-top:10px}
   .file-add{border:2px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--sub);font-weight:700;font-size:13px;width:100%}
   .note{font-size:12.5px;color:var(--sub);background:var(--gray-bg);border-radius:8px;padding:8px 10px;margin-top:8px}
+  /* 인천공항 방문 일정 달력 */
+  .calhd{display:flex;align-items:center;justify-content:space-between;margin:4px 0 8px}
+  .calhd b{font-size:16px}
+  .calhd button{font-size:18px;font-weight:800;padding:2px 12px;border-radius:8px;background:var(--gray-bg)}
+  .calwk{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:10.5px;font-weight:800;color:var(--sub);text-align:center;margin-bottom:2px}
+  .calwk span:first-child{color:var(--red)}.calwk span:last-child{color:#2B6CB0}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .cd{min-height:66px;border:1px solid var(--line);border-radius:6px;padding:2px 3px;background:#fff;overflow:hidden;text-align:left;cursor:pointer}
+  .cd.cp{min-height:44px}
+  .cd .n{display:block;font-size:11px;font-weight:800;line-height:1.3}
+  .cd.sun .n{color:var(--red)}.cd.sat .n{color:#2B6CB0}
+  .cd.om{opacity:.35}
+  .cd.today{border-color:var(--red);box-shadow:inset 0 0 0 1px var(--red)}
+  .cd.pick{background:#FEF7F6;border:2px solid var(--red)}
+  .ci{display:block;font-size:9.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:4px;padding:1px 3px;margin-top:2px;font-weight:700}
+  .ci.survey{background:#EEF4FB;color:#1D4E89}.ci.work{background:#F4EEFB;color:#4B2A8A}.ci.due{background:#FEF7F6;color:#B32A22}.ci.memo{background:#FBF7EA;color:#6B4E00}
+  .ci.done{opacity:.55;text-decoration:line-through}
+  .cdots{display:flex;gap:2px;flex-wrap:wrap;margin-top:3px}
+  .cdots i{width:6px;height:6px;border-radius:50%;display:inline-block}
+  .cdots i.survey{background:#2B6CB0}.cdots i.work{background:#6B34B8}.cdots i.due{background:#D6392F}.cdots i.memo{background:#C9A227}
+  .callg{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--sub);font-weight:700;margin-top:8px}
+  .callg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:3px;vertical-align:-1px}
+  .dayrow{display:flex;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--gray-bg);font-size:13px}
+  .dayrow .ci{display:inline-block;font-size:11px;white-space:normal;margin:0}
   .warn{background:var(--red-bg);color:var(--red-dark);font-weight:700}
   .spin.dk{border-color:rgba(0,0,0,.18);border-top-color:var(--sub)}
   .imgfail{width:86px;height:86px;border-radius:10px;border:1px dashed var(--line);background:var(--gray-bg);color:var(--sub);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;text-align:center;padding:4px}
@@ -415,7 +439,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.09.11';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.09.12';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -828,6 +852,7 @@ const oNetAmount  = o => Math.max(0, (oAmount(o)||0) - oReturnAmt(o));
 const canRetAdd   = o => role()==='builder' && o.builder===myCo() && !!o.receipt && ['DELIVERED','SREQ'].includes(o.stage);
 const canRetOk    = o => role()==='supplier' && o.supplier===myCo();
 const ymOf = ts => { const d=new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; };
+const dkey = ts => { const d=new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; };
 const ymLabel = ym => ym ? `${ym.split('-')[0]}년 ${+ym.split('-')[1]}월` : '';
 
 const state = {
@@ -839,6 +864,7 @@ const state = {
   unsubOrders:null, ordersReady:false, orderErr:null, prevOrderSig:{}, ordersInit:false,
   /* 개선요청 게시판 */
   posts:[], postId:null, bdFilter:'ALL', unsubPosts:null,
+  icnCal:[], unsubIcnCal:null, calYm:null, calPick:null, calDay:null,
   cfg:{ codes:{...DEFAULT_CODES}, sla:{...DEFAULT_SLA}, stores:[...DEFAULT_STORES], labor:DEFAULT_LABOR.slice(), laborNote:DEFAULT_LABOR_NOTE,
         builders:[...DEFAULT_BUILDERS], osla:{...DEFAULT_O_SLA}, builderCodes:{}, lightContract:DEFAULT_LIGHT_CONTRACT },
   reqs:[], ready:false, dbError:null,
@@ -1070,6 +1096,32 @@ const store = {
     const p = (state.posts||[]).find(x=>x.id===id);
     if(p) (p.replies=p.replies||[]).push(r);
   },
+  /* 인천공항 방문 일정 메모 — config/icnCal 문서 하나에 배열로 보관 (규칙 변경 없이 쓸 수 있는 경로) */
+  subscribeIcnCal(cb){
+    if(!LIVE){ setTimeout(()=>cb(state.icnCal||[]),0); return ()=>{}; }
+    return FB.onSnapshot(FB.doc(fs,'config','icnCal'), d=>{ cb(d.exists() ? (d.data().items||[]) : []); }, err=>console.warn('icnCal', err));
+  },
+  async saveIcnCal(items){
+    state.icnCal = items;
+    if(LIVE) await FB.setDoc(FB.doc(fs,'config','icnCal'), {items, updatedAt:now()}, {merge:true});
+  },
+  /* 접수건·발주건 완전 삭제 (본사담당 전용, 2026-09-12) — 첨부파일 하위 컬렉션까지 지운다. 되돌릴 수 없음 */
+  async deleteRequest(id){
+    if(LIVE){
+      try{ const snap = await FB.getDocs(FB.collection(fs,'requests',id,'files')); for(const d of snap.docs) await FB.deleteDoc(d.ref); }catch(e){ console.warn('files del', e); }
+      await FB.deleteDoc(FB.doc(fs,'requests',id));
+    }
+    const i = state.reqs.findIndex(x=>x.id===id); if(i>=0) state.reqs.splice(i,1);
+    delete filesCache[id]; delete filesLoaded[id];
+  },
+  async deleteOrder(id){
+    if(LIVE){
+      try{ const snap = await FB.getDocs(FB.collection(fs,'orders',id,'files')); for(const d of snap.docs) await FB.deleteDoc(d.ref); }catch(e){ console.warn('files del', e); }
+      await FB.deleteDoc(FB.doc(fs,'orders',id));
+    }
+    const i = state.orders.findIndex(x=>x.id===id); if(i>=0) state.orders.splice(i,1);
+    delete filesCache['O:'+id]; delete filesLoaded['O:'+id];
+  },
   async deletePost(id){
     if(LIVE) await FB.deleteDoc(FB.doc(fs,'posts',id));
     const i = (state.posts||[]).findIndex(x=>x.id===id);
@@ -1083,7 +1135,7 @@ const store = {
   subscribeRooms(cb){
     if(LIVE){
       if(role()==='store'){
-        const names = ['전체', state.user.store||state.user.name];
+        const names = [state.user.store||state.user.name];   /* 전체 공지방 폐지 (2026-09-12) */
         const metas = {};
         const unsubs = names.map(n=>FB.onSnapshot(FB.doc(fs,'chats',roomId(n)), d=>{
           if(d.exists()) metas[n]={id:n, ...d.data()};
@@ -1264,11 +1316,7 @@ function detectReqNotis(list){
 const demoChats = { msgs:{}, meta:{}, roomCb:null, msgCb:null };
 function demoRoomMetas(){ return Object.values(demoChats.meta).sort((a,b)=>b.lastTs-a.lastTs); }
 function seedChats(){
-  demoChats.msgs['전체'] = [
-    {ts:daysAgo(1), author:'본사담당(보수팀)', role:'hq', text:'8월부터 보수 접수는 이 앱으로 일원화됩니다. 접수 후 진행상황은 접수목록에서 실시간 확인 가능합니다.'},
-    {ts:daysAgo(0.5), author:'토마토세븐(관제)', role:'vendor', text:'금주 실측 일정은 순차 등록 중입니다. 긴급 건은 채팅으로 알려주세요.'}
-  ];
-  demoChats.meta['전체'] = {name:'전체', lastMsg:'금주 실측 일정은 순차 등록 중입니다…', lastTs:daysAgo(0.5), lastBy:'토마토세븐(관제)'};
+
   demoChats.msgs['롯데리아 강남역점'] = [
     {ts:daysAgo(0.3), author:'점포(롯데리아 강남역점)', role:'store', text:'배수구 건 오늘도 역류가 심한데 실측 언제쯤 가능할까요?'},
     {ts:daysAgo(0.2), author:'토마토세븐(김기사)', role:'vendor', text:'견적 승인되는 대로 내일 오전 방문 가능합니다!'}
@@ -1342,6 +1390,10 @@ function seed(){
   filesCache['R-2607-M3N4']=[{kind:'photo',name:'p1',data:svg('카운터','#4C3B2A'),ts:daysAgo(8)}];
   filesCache['R-2608-ICN1']=[{kind:'photo',name:'p1',data:svg('배관 누수','#2C5282'),ts:daysAgo(5)}];
   filesCache['R-2607-ICN2']=[{kind:'photo',name:'p1',data:svg('천장 텍스','#4A5568'),ts:daysAgo(20)}];
+  state.icnCal = [
+    { id:'M1', date:dkey(daysAgo(-2)), text:'(주간) 9월 점검 T1 LS · 롯데리아 T1 유도등 교체', by:'우리아이엔티(김기사)', ts:daysAgo(3) },
+    { id:'M2', date:dkey(daysAgo(-4)), text:'(야간) Angel T1 LS 1F 스프링클러 헤드 교체', by:'우리아이엔티(김기사)', ts:daysAgo(3) },
+  ];
   Object.keys(filesCache).forEach(k=>{ filesLoaded[k]=true; });
 
   /* ── 오픈 직후 추가요청 샘플 ── */
@@ -1568,7 +1620,14 @@ function readSmallFile(file, maxKB=650){ // PDF·엑셀 등 비이미지 (base64
 }
 
 /* ================= SLA / 알림 ================= */
-function deadline(r){ if(r.stage==='DONE'||r.stage==='DROPPED') return null; return r.stageAt + (state.cfg.sla[r.stage]||3)*DAY; }
+/* 실측 단계 기한 — 실측일정이 등록되어 있으면 그 날짜(당일 자정)까지는 기한초과로 보지 않는다 (2026-09-12).
+   등록만 해 두고 그 날 실측을 안 하면 다음 날부터 초과. */
+function endOfDay(ts){ const d=new Date(ts); d.setHours(23,59,59,999); return d.getTime(); }
+function deadline(r){
+  if(r.stage==='DONE'||r.stage==='DROPPED') return null;
+  if(r.stage==='SURVEY' && r.surveyDate && !r.surveyDone) return Math.max(endOfDay(r.surveyDate), r.stageAt + (state.cfg.sla.SURVEY||3)*DAY);
+  return r.stageAt + (state.cfg.sla[r.stage]||3)*DAY;
+}
 function ddays(r){ const dl=deadline(r); if(dl===null) return null; return Math.ceil((dl-now())/DAY); }
 function isOver(r){ const d=ddays(r); return d!==null && d<0; }
 function ddayBadge(r){
@@ -1749,7 +1808,7 @@ function setRole(r){
   if(!canApp(state.app)) state.app = myApps()[0];
   const allowed = isOrderApp(state.app)
     ? ['odash','olist','odetail','board','post','settle'].concat(r==='hq'?['onew','set']:[]).concat(r==='builder'?['onew']:[])
-    : ['dash','list','detail','board','post'].concat(canChat()?['chat','chatroom']:[]).concat(r==='store'?['new']:[]).concat(r==='hq'?['set']:[]);
+    : ['dash','list','detail','board','post'].concat(canChat()?['chat','chatroom']:[]).concat(r==='store'?['new']:[]).concat(r==='hq'?['set']:[]).concat(canIcnCal()?['cal']:[]);
   if(!allowed.includes(state.view)) state.view = isOrderApp(state.app)?'odash':'dash';
   render();
 }
@@ -1781,6 +1840,7 @@ function go(v,id){
   if(v==='odetail') state.orderId = id || state.orderId;
   else state.detailId = id || null;
   if(v==='chat') ensureRooms();
+  if(v==='cal') ensureIcnCal();
   if((v==='board'||v==='post') && LIVE && state.postsLazy && !state.unsubPosts) subscribePosts(null, true);
   render(); window.scrollTo(0,0);
   if(v==='detail'&&id) loadDetailFiles(id);
@@ -1877,6 +1937,7 @@ function render(){
   else if(state.view==='new'){ if(!document.getElementById('nTitle')){ m.innerHTML = vNew(); setTimeout(warrantyHint,0); } }
   else if(state.view==='set') m.innerHTML = vSet();
   else if(state.view==='chat') m.innerHTML = vChat();
+  else if(state.view==='cal') m.innerHTML = vCal();
   else if(state.view==='chatroom') m.innerHTML = vChatRoom();
   /* ── 조명·타일 발주 ── */
   else if(state.view==='odash') m.innerHTML = vODash();
@@ -1952,6 +2013,7 @@ function renderNav(){
     alias = { odetail:'olist', post:'board' };
   } else {
     tabs = [ ['dash','대시보드'], ['list','접수 목록'] ];
+    if(canIcnCal()) tabs.push(['cal','📅 인천공항 일정']);
     if(canChat()) tabs.push(['chat',chatLabel]);
     if(role()==='store') tabs.push(['new','+ 신규 접수']);
     tabs.push(['board', bdLabel]);
@@ -2379,7 +2441,7 @@ function vDetail(){
     secs += `<div class="kv"><b>실측</b><span class="badge b-gray">미실측 (생략)</span></div>
       ${r.surveySkipReason?`<div class="kv"><b>생략 사유</b>${esc(r.surveySkipReason)}</div>`:''}`;
   } else if(r.surveyDate){
-    secs += `<div class="kv"><b>실측일</b>${fmtD(r.surveyDate)} ${r.surveyDone?'<span class="badge b-green">실측완료</span>':'<span class="badge b-amber">예정</span>'}</div>`;
+    secs += `<div class="kv"><b>실측일</b>${fmtD(r.surveyDate)} ${r.surveyDone?'<span class="badge b-green">실측완료</span>':'<span class="badge b-amber">예정</span>'}${r.surveyNote?` <span style="color:var(--sub);font-size:12px">· ${esc(r.surveyNote)}</span>`:''}</div>`;
   } else secs += `<div class="note">실측 일정이 등록되지 않았습니다.</div>`;
   secs += photosHtml(r.id,'survey');
   if(isFixer(r) && r.stage==='SURVEY' && !r.surveyDate) secs += `<button class="btn blk" onclick="mSurvey('${r.id}')">📅 실측일정 등록</button>
@@ -2539,7 +2601,9 @@ function vDetail(){
     · 처리자: ${esc(r.droppedBy||'-')} · ${r.droppedAt?fmtDT(r.droppedAt):''}<br>
     · 사유: ${esc(r.dropReason||'-')}
     ${canManage(r)?`<div style="margin-top:8px"><button class="btn sm" onclick="doResume('${r.id}')">↩ 프로젝트 재개</button></div>`:''}</div>` : '';
-  const dropBtn = (r.stage!=='DONE' && r.stage!=='DROPPED') ? `<div style="text-align:right;margin-top:12px"><button style="color:var(--sub);font-size:12.5px;font-weight:700;text-decoration:underline" onclick="mDrop('${r.id}')">⛔ 프로젝트 중단 처리</button></div>` : '';
+  const dropBtn = `<div style="text-align:right;margin-top:12px;display:flex;gap:14px;justify-content:flex-end">
+    ${(r.stage!=='DONE' && r.stage!=='DROPPED') ? `<button style="color:var(--sub);font-size:12.5px;font-weight:700;text-decoration:underline" onclick="mDrop('${r.id}')">⛔ 프로젝트 중단 처리</button>`:''}
+    ${rl==='hq' ? `<button style="color:var(--red-dark);font-size:12.5px;font-weight:700;text-decoration:underline" onclick="mDelete('${r.id}')">🗑 완전 삭제</button>`:''}</div>`;
   return `<button class="back" onclick="go('list')">← 목록으로</button>
     <div class="card">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -3198,17 +3262,42 @@ async function doRevoke(id){
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 function mSurvey(id){
+  const r = R(id);
+  if(r && isICNReq(r)){ ensureIcnCal(); state.calPick = null; state.calYm = state.calYm || ymOf(now()); mSurveyCal(id); return; }
   openModal(`<h2>실측일정 등록</h2><div class="sub">${id}</div>
     <label>실측 예정일</label><input id="mDt" type="date">
     <button class="btn blk" onclick="doSurvey('${id}')">등록</button>`);
 }
+/* 인천공항 건 — 월력에서 날짜를 고른다. 같은 날 잡힌 다른 방문 일정이 보여서 묶어 갈 수 있다 */
+function mSurveyCal(id){
+  const r = R(id); if(!r) return;
+  const pk = state.calPick;
+  const noteEl = document.getElementById('svNote'); const keep = noteEl ? noteEl.value : '';
+  openModal(`<h2>실측일정 등록 · 인천공항</h2><div class="sub">${id} · ${esc(r.store)}</div>
+    <div class="note" style="margin:0 0 8px">날짜를 누르면 선택됩니다. 이미 잡힌 실측·공사·점검 일정이 함께 보입니다.</div>
+    ${calHtml(state.calYm, {pick:pk, compact:true, onPick:'calPickSurvey', onNav:'calNavSurvey', navArg:id})}
+    ${pk ? `<div style="margin-top:8px;font-weight:800;font-size:14px">선택: ${pk} <span style="color:var(--sub);font-weight:600;font-size:12px">${calDayLabel(pk)}</span></div>${calDayListHtml(pk, true)}` : ''}
+    <label>방문 메모 <span style="font-weight:500">(주간/야간, 동선 등 · 선택)</span></label>
+    <input id="svNote" placeholder="예) 야간 · T1 4층 배관 확인" value="${esc(keep)}">
+    <button class="btn blk" onclick="doSurvey('${id}')">등록</button>`);
+}
+function calPickSurvey(k, id){ state.calPick = k; mSurveyCal(id); }
+function calNavSurvey(delta, id){ state.calYm = ymShift(state.calYm, delta); mSurveyCal(id); }
 async function doSurvey(id){
-  const v = document.getElementById('mDt').value;
-  if(!v){ toast('날짜를 선택해주세요'); return; }
-  const ts = new Date(v+'T09:00:00').getTime();
+  const r = R(id);
+  let ts, note='';
+  if(r && isICNReq(r)){
+    if(!state.calPick){ toast('달력에서 날짜를 눌러 선택해주세요'); return; }
+    ts = new Date(state.calPick+'T09:00:00').getTime();
+    note = (document.getElementById('svNote')||{}).value || '';
+  } else {
+    const v = document.getElementById('mDt').value;
+    if(!v){ toast('날짜를 선택해주세요'); return; }
+    ts = new Date(v+'T09:00:00').getTime();
+  }
   try{
-    await store.updateRequest(id,{surveyDate:ts, surveyAt:now(), surveyDone:false},
-      {ts:now(),actor:actorLabel(),action:`실측일정 등록 (${fmtD(ts)})`});
+    await store.updateRequest(id,{surveyDate:ts, surveyAt:now(), surveyDone:false, surveyNote:note.trim()},
+      {ts:now(),actor:actorLabel(),action:`실측일정 등록 (${fmtD(ts)}${note.trim()?` · ${note.trim()}`:''})`});
     closeModal(); toast('실측일정이 등록되었습니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
@@ -3330,35 +3419,157 @@ async function addCmt(id){
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
+/* ===== 인천공항 방문 일정 달력 (2026-09-12) =====
+   우리아이엔티가 엑셀 월력에 적던 방문 일정을 앱으로 옮긴 것.
+   - 실측일정(📐)·공사일정(🏗)·단계별 처리기한(⏰)은 접수건에서 자동으로 뽑고
+   - 정기 점검·기타 방문(📝)은 달력에 직접 적는다 (config/icnCal).
+   보는 사람: 우리아이엔티 · 컨세션인천공항지점 · 본사담당 */
+const WK = ['일','월','화','수','목','금','토'];
+const ymShift = (ym, delta) => { const [y,m]=ym.split('-').map(Number); const d=new Date(y, m-1+delta, 1); return ymOf(d.getTime()); };
+function canIcnCal(){ return !!state.user && (role()==='hq' || isBranch() || (role()==='vendor' && myCo()==='우리아이엔티')); }
+function ensureIcnCal(){
+  if(!canIcnCal()) return;
+  if(!state.calYm) state.calYm = ymOf(now());
+  if(state.unsubIcnCal) return;
+  state.unsubIcnCal = ()=>{};   /* 구독 중 표시 (콜백이 동기로 render 를 부를 때 재진입 방지) */
+  state.unsubIcnCal = store.subscribeIcnCal(items=>{ state.icnCal = items||[]; if(state.view==='cal' && !modalOpen()) render(); else if(modalOpen() && state.calDay) mCalDay(state.calDay); });
+}
+function calShort(store){ return String(store||'').replace(/^\(직영\)|^\(가맹\)/,'').replace(/인천공항/,'').trim() || store; }
+/* 그 날의 일정 항목 */
+function calItems(k){
+  const out = [];
+  state.reqs.filter(r=>isICNReq(r) && r.stage!=='DROPPED').forEach(r=>{
+    const nm = esc(calShort(r.store));
+    if(r.surveyDate && dkey(r.surveyDate)===k)
+      out.push({type:'survey', done:!!r.surveyDone, reqId:r.id, short:nm, text:`📐 ${nm} 실측${r.surveyNote?' · '+esc(r.surveyNote):''}`});
+    if(r.constStart){
+      const a = dkey(r.constStart), b = dkey(r.constEnd||r.constStart);
+      if(k>=a && k<=b) out.push({type:'work', done:r.stage==='DONE', reqId:r.id, short:nm, text:`🏗 ${nm} 공사${r.schedStatus==='제안'?'(제안)':r.schedStatus==='조율요청'?'(조율중)':''} · ${esc(r.title)}`});
+    }
+    if(r.stage!=='DONE'){
+      const dl = deadline(r);
+      if(dl && dkey(dl)===k && !(r.stage==='SURVEY' && r.surveyDate))
+        out.push({type:'due', reqId:r.id, short:nm, text:`⏰ ${nm} ${STAGE_NM[r.stage]} 기한 (${STAGE_OWNER[r.stage]||''})`});
+    }
+  });
+  (state.icnCal||[]).filter(m=>m.date===k).forEach(m=>{
+    const t = String(m.text||''), sh = (t.match(/^\((주간|야간)\)\s*/)||[])[1], body = t.replace(/^\((주간|야간)\)\s*/,'');
+    out.push({type:'memo', memoId:m.id, by:m.by, short:esc(body), text:`📝 ${esc(body)}${sh?` <span style="opacity:.75">(${sh})</span>`:''}`});
+  });
+  return out;
+}
+function calDayLabel(k){ const d=new Date(k+'T00:00:00'); return `${d.getMonth()+1}월 ${d.getDate()}일 (${WK[d.getDay()]})`; }
+/* 월력 HTML. opts: pick(선택된 날짜), compact(점만 표시), onPick(fn명), onNav(fn명), navArg */
+function calHtml(ym, opts={}){
+  const [y,m] = ym.split('-').map(Number);
+  const first = new Date(y, m-1, 1), start = new Date(y, m-1, 1 - first.getDay());
+  const today = dkey(now());
+  const cells = [];
+  for(let i=0;i<42;i++){
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate()+i);
+    if(i>=35 && d.getMonth()!==m-1) break;
+    const k = dkey(d.getTime()), items = calItems(k), om = d.getMonth()!==m-1;
+    const cls = ['cd', opts.compact?'cp':'', om?'om':'', k===today?'today':'', k===opts.pick?'pick':'', d.getDay()===0?'sun':d.getDay()===6?'sat':''].filter(Boolean).join(' ');
+    const onclick = opts.onPick ? `${opts.onPick}('${k}'${opts.navArg?`,'${opts.navArg}'`:''})` : `mCalDay('${k}')`;
+    const body = opts.compact
+      ? (items.length?`<span class="cdots">${items.map(it=>`<i class="${it.type}"></i>`).join('')}</span>`:'')
+      : items.slice(0,3).map(it=>`<span class="ci ${it.type}${it.done?' done':''}">${it.short||it.text}</span>`).join('') + (items.length>3?`<span class="ci" style="color:var(--sub)">+${items.length-3}</span>`:'');
+    cells.push(`<button class="${cls}" onclick="${onclick}"><span class="n">${d.getDate()}</span>${body}</button>`);
+  }
+  const nav = opts.onNav ? `${opts.onNav}(-1${opts.navArg?`,'${opts.navArg}'`:''})` : 'calNav(-1)';
+  const nav2 = opts.onNav ? `${opts.onNav}(1${opts.navArg?`,'${opts.navArg}'`:''})` : 'calNav(1)';
+  return `<div class="calhd"><button onclick="${nav}">‹</button><b>${y}년 ${m}월</b><button onclick="${nav2}">›</button></div>
+    <div class="calwk">${WK.map(w=>`<span>${w}</span>`).join('')}</div>
+    <div class="cal">${cells.join('')}</div>`;
+}
+function calNav(delta){ state.calYm = ymShift(state.calYm||ymOf(now()), delta); render(); }
+function calDayListHtml(k, brief){
+  const items = calItems(k);
+  if(!items.length) return `<div class="note" style="margin-top:6px">${brief?'이 날 잡힌 일정 없음':'잡힌 일정이 없습니다'}</div>`;
+  return `<div style="margin-top:6px">${items.map(it=>`<div class="dayrow">
+      <span class="ci ${it.type}${it.done?' done':''}" style="flex:1">${it.text}${it.by?` <span style="font-weight:500;opacity:.8">· ${esc(it.by)}</span>`:''}</span>
+      ${it.reqId && !brief ? `<button class="btn sm sec2" style="margin:0" onclick="closeModal();go('detail','${it.reqId}')">열기</button>`:''}
+      ${it.memoId && !brief && canIcnCal() ? `<button class="btn sm sec2" style="margin:0" onclick="delIcnMemo('${it.memoId}')">삭제</button>`:''}
+    </div>`).join('')}</div>`;
+}
+/* 날짜 상세 — 일정 목록 + 방문 메모 추가 */
+function mCalDay(k){
+  state.calDay = k;
+  const keepEl = document.getElementById('cmText'); const keep = keepEl ? keepEl.value : '';
+  openModal(`<h2>📅 ${calDayLabel(k)}</h2><div class="sub">인천공항 방문 일정</div>
+    ${calDayListHtml(k, false)}
+    ${canIcnCal() ? `<label style="margin-top:12px">방문 일정 추가 <span style="font-weight:500">(정기 점검, 기타 방문 등)</span></label>
+    <div style="display:flex;gap:6px">
+      <select id="cmShift" style="width:88px"><option value="">시간</option><option>주간</option><option>야간</option></select>
+      <input id="cmText" placeholder="예) 9월 점검 T1 LS · 롯데리아 T1 유도등 교체" value="${esc(keep)}">
+    </div>
+    <button class="btn blk" onclick="addIcnMemo('${k}')">＋ 추가</button>`:''}`);
+}
+async function addIcnMemo(k){
+  const t = (document.getElementById('cmText').value||'').trim();
+  const sh = (document.getElementById('cmShift')||{}).value || '';
+  if(!t){ toast('내용을 입력해주세요'); return; }
+  const item = { id:'M'+Date.now().toString(36)+rnd4().toLowerCase(), date:k, text:(sh?`(${sh}) `:'')+t, by:actorLabel(), ts:now() };
+  try{
+    await store.saveIcnCal([...(state.icnCal||[]), item]);
+    toast('추가했습니다'); mCalDay(k); if(document.getElementById('cmText')) document.getElementById('cmText').value='';
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function delIcnMemo(id){
+  const m = (state.icnCal||[]).find(x=>x.id===id); if(!m) return;
+  if(!confirm(`「${m.text}」 일정을 지울까요?`)) return;
+  try{ await store.saveIcnCal((state.icnCal||[]).filter(x=>x.id!==id)); toast('삭제했습니다'); mCalDay(m.date); }
+  catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function vCal(){
+  ensureIcnCal();
+  const ym = state.calYm || ymOf(now());
+  const [y,m] = ym.split('-').map(Number);
+  const cnt = {survey:0, work:0, due:0, memo:0};
+  const days = new Date(y, m, 0).getDate();
+  for(let d=1; d<=days; d++) calItems(`${ym}-${String(d).padStart(2,'0')}`).forEach(it=>cnt[it.type]++);
+  return `<div class="card">
+    <div class="h2">📅 인천공항 방문 일정 <span class="badge b-blue">우리아이엔티</span></div>
+    <div class="note" style="margin:0 0 10px">인천공항 점포의 실측·공사 일정과 처리기한이 자동으로 표시됩니다. 정기 점검 등은 날짜를 눌러 직접 추가하세요.</div>
+    ${calHtml(ym, {})}
+    <div class="callg">
+      <span><i style="background:#EEF4FB;border:1px solid #9DB8DA"></i>📐 실측 ${cnt.survey}</span>
+      <span><i style="background:#F4EEFB;border:1px solid #B8A3DE"></i>🏗 공사 ${cnt.work}</span>
+      <span><i style="background:#FEF7F6;border:1px solid #E48176"></i>⏰ 처리기한 ${cnt.due}</span>
+      <span><i style="background:#FBF7EA;border:1px solid #D9C48A"></i>📝 점검·방문 ${cnt.memo}</span>
+    </div>
+  </div>`;
+}
+
 /* ===== 채팅 ===== */
 /* 내가 참여하는 방 이름 목록 (검색어 무시) */
 function myRoomNames(){
   if(!state.user || !canChat()) return [];
-  if(role()==='store') return ['전체', state.user.store || state.user.name];
-  const known = new Set(['전체', ...state.cfg.stores]);
+  if(role()==='store') return [state.user.store || state.user.name];
+  const known = new Set(state.cfg.stores);
   (state.chatRooms||[]).forEach(r=>known.add(r.name||r.id));
   myDefectStores().forEach(n=>known.add(n));
-  let names = ['전체', ...[...known].filter(n=>n!=='전체')];
-  if(role()==='vendor') names = names.filter(n=>n==='전체' || storeVendor(n)===myCo());
-  if(isBranch())        names = names.filter(n=>n==='전체' || isICN(n));
-  if(role()==='builder'){ const mine = myDefectStores(); names = names.filter(n=>n==='전체' || mine.has(n)); }
+  let names = [...known].filter(n=>n!=='전체');          /* 전체 공지방 폐지 (2026-09-12) */
+  if(role()==='vendor') names = names.filter(n=>storeVendor(n)===myCo());
+  if(isBranch())        names = names.filter(n=>isICN(n));
+  if(role()==='builder'){ const mine = myDefectStores(); names = names.filter(n=>mine.has(n)); }
   return names;
 }
 function myRooms(){
   const metaMap = {};
   state.chatRooms.forEach(r=>metaMap[r.name||r.id]=r);
   let names;
-  if(role()==='store') names = ['전체', state.user.store || state.user.name];
+  if(role()==='store') names = [state.user.store || state.user.name];
   else {
-    const known = new Set(['전체', ...state.cfg.stores]);
+    const known = new Set(state.cfg.stores);
     state.chatRooms.forEach(r=>known.add(r.name||r.id));
     myDefectStores().forEach(n=>known.add(n));
-    names = ['전체', ...[...known].filter(n=>n!=='전체')];
+    names = [...known].filter(n=>n!=='전체');            /* 전체 공지방 폐지 (2026-09-12) */
   }
   let rooms = names.map(n=>({name:n, ...(metaMap[n]||{})}));
-  if(role()==='vendor') rooms = rooms.filter(r=>r.name==='전체' || storeVendor(r.name)===myCo());
-  if(isBranch())        rooms = rooms.filter(r=>r.name==='전체' || isICN(r.name));
-  if(role()==='builder'){ const mine = myDefectStores(); rooms = rooms.filter(r=>r.name==='전체' || mine.has(r.name)); }
+  if(role()==='vendor') rooms = rooms.filter(r=>storeVendor(r.name)===myCo());
+  if(isBranch())        rooms = rooms.filter(r=>isICN(r.name));
+  if(role()==='builder'){ const mine = myDefectStores(); rooms = rooms.filter(r=>mine.has(r.name)); }
   if(state.roomQ) rooms = rooms.filter(r=>r.name.toLowerCase().includes(state.roomQ.toLowerCase()));
   /* ① 미확인 방 먼저 (그 안에서는 최근 도착 순)
      ② 그다음 전체방(공지) 고정
@@ -3367,7 +3578,6 @@ function myRooms(){
     const ua = hasUnread(a.name)?0:1, ub = hasUnread(b.name)?0:1;
     if(ua!==ub) return ua-ub;
     if(ua===0) return (b.lastTs||0)-(a.lastTs||0);   // 미확인끼리는 최근 순
-    if(a.name==='전체') return -1; if(b.name==='전체') return 1;
     return (b.lastTs||0)-(a.lastTs||0);
   });
 }
@@ -3376,8 +3586,8 @@ function roomsHtml(){
   return rooms.map(r=>{
     const u = unreadOf(r.name);
     return `<button class="card roomrow${u?' unread':''}" onclick="openRoom('${esc(r.name).replace(/'/g,"\\'")}')">
-      <span style="font-size:22px">${r.name==='전체'?'📢':'🏪'}</span>
-      <span class="rmain"><span class="rname">${esc(r.name)}${r.name==='전체'?' (공지·전체방)':''}</span>
+      <span style="font-size:22px">🏪</span>
+      <span class="rmain"><span class="rname">${esc(r.name)}</span>
       <div class="rlast">${r.lastBy?esc(r.lastBy)+': ':''}${esc(r.lastMsg||'대화를 시작해보세요')}</div></span>
       <span class="rright">${unreadBadge(u)}<span class="rts">${r.lastTs?fmtD(r.lastTs):''}</span></span>
     </button>`;
@@ -3413,7 +3623,7 @@ function openRoom(room){
 function vChatRoom(){
   return `<button class="back" onclick="go('chat')">← 채팅 목록</button>
     <div class="card" style="padding:14px">
-      <div style="font-weight:800;font-size:15px">${state.chatRoom==='전체'?'📢':'🏪'} ${esc(state.chatRoom)} <span style="color:var(--sub);font-weight:500;font-size:12px">· 관계자 전체 열람</span></div>
+      <div style="font-weight:800;font-size:15px">🏪 ${esc(state.chatRoom)} <span style="color:var(--sub);font-weight:500;font-size:12px">· 관계자 전체 열람</span></div>
       <div id="chatMsgs"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <input id="chatIn" placeholder="메시지 입력" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat();}">
@@ -3438,6 +3648,86 @@ async function sendChat(){
   catch(e){ toast('전송 실패: '+(e.code||e.message)); inp.value=t; }
 }
 
+/* 예전 규칙으로 쌓인 실측 기한초과 기록을 새 규칙(실측일정일 기준)으로 재계산 */
+async function recalcSurveyOverdues(){
+  if(role()!=='hq') return;
+  const out = document.getElementById('recalcOut');
+  let touched=0, removed=0, reduced=0, fail=0;
+  for(const r of state.reqs){
+    const od = r.overdues||[];
+    if(!od.some(o=>o.stage==='SURVEY') || !r.surveyDate) continue;
+    const dl = endOfDay(r.surveyDate);
+    const next = [];
+    let changed=false;
+    for(const o of od){
+      if(o.stage!=='SURVEY'){ next.push(o); continue; }
+      const at = o.ts || 0;
+      if(!at || at <= dl){ removed++; changed=true; continue; }          /* 실측일 안에 처리 → 초과 아님 */
+      const days = Math.max(1, Math.ceil((at - dl)/DAY));
+      if(days !== o.days){ reduced++; changed=true; next.push({...o, days}); } else next.push(o);
+    }
+    if(!changed) continue;
+    try{ await store.updateRequest(r.id, {overdues:next}); touched++; }
+    catch(e){ fail++; console.warn('recalc', r.id, e); }
+  }
+  state.recalcMsg = `완료 — 접수건 ${touched}건 갱신 · 기한초과 기록 ${removed}건 삭제 · ${reduced}건 일수 축소${fail?` · 실패 ${fail}건`:''}`;
+  render();
+}
+/* 설정 화면 — 여러 건 골라 삭제 */
+function bulkDelHtml(){
+  const rows = [
+    ...state.reqs.map(r=>({k:'req', id:r.id, a:r.store, b:r.title, c:STAGE_NM[r.stage]||r.stage, ts:r.createdAt})),
+    ...state.orders.map(o=>({k:'order', id:o.id, a:o.site||o.store||'', b:`${o.cat||''} ${o.title||''}`, c:(typeof O_NM!=='undefined'&&O_NM[o.stage])||o.stage, ts:o.createdAt}))
+  ].sort((x,y)=>(y.ts||0)-(x.ts||0));
+  if(!rows.length) return '<div class="empty">건이 없습니다</div>';
+  return `<div style="max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:10px;margin-top:10px">
+    ${rows.map(r=>`<label style="display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--gray-bg);font-size:12.5px;cursor:pointer">
+      <input type="checkbox" class="bulkDel" data-k="${r.k}" data-id="${r.id}" style="width:18px;height:18px;margin:0">
+      <span style="flex:1;min-width:0"><b>${r.id}</b> <span class="badge ${r.k==='order'?'b-blue':'b-gray'}" style="font-size:10px">${r.k==='order'?'발주':'보수'}</span> · ${esc(r.a)} · ${esc(r.b||'')}<br><span style="color:var(--sub)">${esc(r.c)} · ${r.ts?fmtD(r.ts):''}</span></span>
+    </label>`).join('')}
+  </div>
+  <div style="display:flex;gap:8px;margin-top:10px">
+    <button class="btn sec2" style="flex:1;margin:0" onclick="document.querySelectorAll('.bulkDel').forEach(c=>c.checked=true)">전체 선택</button>
+    <button class="btn" style="flex:2;margin:0;background:var(--red-dark)" onclick="doBulkDelete()">선택 삭제</button>
+  </div>`;
+}
+async function doBulkDelete(){
+  if(role()!=='hq') return;
+  const picks = [...document.querySelectorAll('.bulkDel:checked')].map(c=>({k:c.dataset.k, id:c.dataset.id}));
+  if(!picks.length){ toast('삭제할 건을 선택해주세요'); return; }
+  if(!confirm(`선택한 ${picks.length}건을 완전히 삭제할까요?\n첨부파일까지 지워지며 되돌릴 수 없습니다.`)) return;
+  const typed = prompt(`정말 삭제하려면 "삭제" 라고 입력하세요 (${picks.length}건)`);
+  if(typed!=='삭제'){ toast('취소했습니다'); return; }
+  let ok=0, fail=0;
+  for(const p of picks){
+    try{ if(p.k==='order') await store.deleteOrder(p.id); else await store.deleteRequest(p.id); ok++; }
+    catch(e){ fail++; console.warn('bulk del', p, e); }
+  }
+  toast(`삭제 ${ok}건${fail?` · 실패 ${fail}건`:''}`); render();
+}
+/* 완전 삭제 — 본사담당만. 테스트로 만든 건 정리용. 삭제 확인을 위해 번호를 직접 입력하게 한다 */
+function mDelete(id, kind){
+  if(role()!=='hq'){ toast('본사담당만 삭제할 수 있습니다'); return; }
+  const isO = kind==='order';
+  const r = isO ? O(id) : R(id); if(!r) return;
+  openModal(`<h2>🗑 ${isO?'발주건':'접수건'} 완전 삭제</h2>
+    <div class="sub">${id} · ${esc(isO?(r.site||r.store||''):r.store)} · ${esc(r.title||'')}</div>
+    <div class="note warn"><b>되돌릴 수 없습니다.</b> 접수 내용, 이력, 첨부 사진·견적서가 서버에서 모두 지워집니다.
+      <br>실제 진행 건은 삭제 대신 <b>「중단 처리」</b>를 써 주세요 (기록이 남습니다).</div>
+    <label>확인을 위해 번호를 그대로 입력 <span style="font-weight:500">(${id})</span></label>
+    <input id="delConfirm" placeholder="${id}" autocomplete="off" autocapitalize="characters">
+    <button class="btn blk" style="background:var(--red-dark)" onclick="doDelete('${id}','${isO?'order':'req'}')">삭제</button>`);
+}
+async function doDelete(id, kind){
+  const v = (document.getElementById('delConfirm').value||'').trim().toUpperCase();
+  if(v !== id.toUpperCase()){ toast('번호가 일치하지 않습니다'); return; }
+  const isO = kind==='order';
+  try{
+    if(isO) await store.deleteOrder(id); else await store.deleteRequest(id);
+    closeModal(); toast('삭제했습니다');
+    go(isO?'olist':'list');
+  }catch(e){ toast('삭제 실패: '+(e.code||e.message)); }
+}
 function mDrop(id){
   openModal(`<h2>프로젝트 중단 처리</h2><div class="sub">${id} · 중단 사유는 전체 관계자에게 공개되며 평가 이력에 기록됩니다</div>
     <label>중단 사유 (필수)</label>
@@ -4102,6 +4392,20 @@ function vSet(){
       <input value="${esc(state.cfg.codes[rk]||'')}" onchange="updCode('${rk}',this.value)">
     </div>`).join('');
   return roleNote()+`<div class="card">
+    <div class="h2">🗑 테스트 데이터 정리</div>
+    <div class="note" style="margin:0 0 10px">테스트로 만든 접수건·발주건을 골라서 <b>완전 삭제</b>합니다. 첨부 사진·견적서까지 서버에서 지워지고 되돌릴 수 없습니다.
+      실제 진행 건은 삭제하지 말고 「중단 처리」를 써 주세요.</div>
+    <button class="btn sec2 blk" style="margin-top:0" onclick="state.bulkOpen=!state.bulkOpen;render()">${state.bulkOpen?'닫기':'목록 열기'}</button>
+    ${state.bulkOpen?bulkDelHtml():''}
+  </div>
+  <div class="card">
+    <div class="h2">⏱ 실측 기한초과 재계산</div>
+    <div class="note" style="margin:0 0 10px">실측일정을 등록해 둔 건은 그 날짜까지 기한초과로 보지 않도록 규칙이 바뀌었습니다(2026-09-12).
+      예전 규칙으로 파트너 평가에 누적된 「실측 일정」 기한초과 기록을 새 규칙으로 다시 계산해 차감합니다. 한 번만 실행하면 됩니다.</div>
+    <button class="btn sec2 blk" style="margin-top:0" onclick="recalcSurveyOverdues()">🔄 재계산 실행</button>
+    <div id="recalcOut">${state.recalcMsg?`<div class="note" style="margin-top:10px">${state.recalcMsg}</div>`:''}</div>
+  </div>
+  <div class="card">
     <div class="h2">🩺 서버 연결 진단</div>
     <div class="note" style="margin:0 0 10px">사진·견적서가 안 보이거나 저장이 안 될 때 눌러주세요. 실제 저장·조회를 시험해 원인을 알려드립니다.</div>
     <button class="btn sec2 blk" style="margin-top:0" onclick="runDiag()">🔍 진단 실행</button>
@@ -4885,6 +5189,7 @@ function vODetail(){
     ${canEdit?`<button style="font-size:12.5px;color:var(--sub);font-weight:700;text-decoration:underline" onclick="oEditModal('${o.id}')">✏ 발주 정보 수정</button>`:''}
     ${rl==='hq' && o.stage!=='SETTLED' && o.stage!=='CANCEL'?`<button style="font-size:12.5px;color:var(--red-dark);font-weight:800" onclick="oCancelModal('${o.id}')">⛔ 발주 중단 처리</button>`:''}
     ${rl==='hq' && o.stage==='CANCEL'?`<button style="font-size:12.5px;color:var(--sub);font-weight:700;text-decoration:underline" onclick="oResume('${o.id}')">↩ 중단 취소 (되돌리기)</button>`:''}
+    ${rl==='hq'?`<button style="font-size:12.5px;color:var(--red-dark);font-weight:700;text-decoration:underline" onclick="mDelete('${o.id}','order')">🗑 완전 삭제</button>`:''}
   </div>`;
 
   return `<button class="back" onclick="go('olist')">← 목록으로</button>
