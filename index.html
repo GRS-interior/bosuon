@@ -408,14 +408,14 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
 try{
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js');
   const { getAuth, signInAnonymously } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js');
-  const { getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion, increment } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
-  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion, increment };
+  const { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion, increment } = await import('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js');
+  window.FB = { initializeApp, getAuth, signInAnonymously, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, setDoc, updateDoc, deleteDoc, getDocs, addDoc, onSnapshot, query, orderBy, limit, where, arrayUnion, increment };
 }catch(e){ window.FB_LOAD_ERROR = e.message; }
 window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.09.10';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.09.11';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -887,7 +887,11 @@ const store = {
       await waitFB();
       const app = FB.initializeApp(FIREBASE_CONFIG);
       await FB.signInAnonymously(FB.getAuth(app));
-      fs = FB.getFirestore(app, FIRESTORE_DB_ID);
+      /* 로컬 영구 캐시 (2026-09-11) — 앱을 다시 열 때 바뀐 문서만 서버에서 읽는다.
+         무료 요금제 일일 읽기 한도(5만 건) 초과로 resource-exhausted 가 났던 원인 대책. */
+      try{
+        fs = FB.initializeFirestore(app, { localCache: FB.persistentLocalCache({ tabManager: FB.persistentMultipleTabManager() }) }, FIRESTORE_DB_ID);
+      }catch(e){ console.warn('persistent cache 미지원 → 메모리 캐시', e); fs = FB.getFirestore(app, FIRESTORE_DB_ID); }
       // 설정 문서 구독
       FB.onSnapshot(FB.doc(fs,'config','app'), d=>{
         if(d.exists()){
@@ -1135,8 +1139,11 @@ function subscribeReqs(onReqs){
 }
 
 /* 개선요청 게시판 구독 — 모든 사용자 공통 */
-function subscribePosts(cb){
+/* 개선요청 게시판 — 본사담당만 항상 구독(미처리 배지용), 나머지는 게시판 탭을 열 때 구독한다 (읽기 사용량 절감) */
+function subscribePosts(cb, force){
   if(!LIVE || !state.user) return;
+  if(!force && role()!=='hq'){ state.postsLazy = true; return; }
+  state.postsLazy = false;
   if(state.unsubPosts){ try{state.unsubPosts()}catch(e){} state.unsubPosts=null; }
   cb = cb || (()=>{ if(['board','post'].includes(state.view) && !modalOpen()) render(); else renderNav(); });
   try{
@@ -1774,6 +1781,7 @@ function go(v,id){
   if(v==='odetail') state.orderId = id || state.orderId;
   else state.detailId = id || null;
   if(v==='chat') ensureRooms();
+  if((v==='board'||v==='post') && LIVE && state.postsLazy && !state.unsubPosts) subscribePosts(null, true);
   render(); window.scrollTo(0,0);
   if(v==='detail'&&id) loadDetailFiles(id);
   if(v==='odetail'&&state.orderId) loadDetailFiles('O:'+state.orderId);
@@ -1839,6 +1847,7 @@ function render(){
     if(ec.includes('admin-restricted')||ec.includes('operation-not-allowed')) msg='⚠ 익명 로그인이 꺼져 있습니다 — Firebase 콘솔 > Authentication > 로그인 방법에서 「익명」을 사용 설정하세요';
     else if(ec.includes('permission-denied')) msg='⚠ 접근 권한 오류 — Firestore 보안 규칙이 게시되었는지 확인하세요';
     else if(ec.includes('unavailable')||ec.includes('network')) msg='⚠ 네트워크 오류 — 인터넷 연결을 확인하세요';
+    else if(ec.includes('resource-exhausted')) msg='⚠ 서버 무료 사용량(하루 한도)을 넘었습니다 — 매일 오후 4시(미국 태평양 자정)에 자동 복구됩니다. 그 전까지 조회·저장이 안 될 수 있습니다';
     sys.className='sysbar err'; sys.textContent=msg; sys.style.display='block';
   }
   else sys.style.display='none';
