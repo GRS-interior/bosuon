@@ -442,7 +442,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.09.12b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.09.16';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -880,6 +880,44 @@ const state = {
 };
 const filesCache  = {};  // reqId -> [{kind,name,data,ts}]
 const filesLoaded = {};  // reqId -> true (한 번이라도 성공적으로 조회됨)
+const filesStamp  = {};  // reqId -> 이 캐시가 대응하는 부모 문서의 filesAt (첨부 변경 시각)
+/* ── 첨부파일 휴대폰 저장소 (IndexedDB, 2026-09-16) ──
+   사진·견적서를 한 번 받으면 기기에 저장해 두고, 부모 문서의 filesAt(첨부가 마지막으로 바뀐 시각)이
+   같으면 서버를 다시 읽지 않는다. 읽기 사용량의 대부분이 사진 재조회였던 문제 대책. */
+const IDB_NAME='bosuon-files', IDB_STORE='files', IDB_KEEP_DAYS=90;
+let idbP = null;
+function idb(){
+  if(idbP) return idbP;
+  idbP = new Promise((res,rej)=>{
+    try{
+      const rq = indexedDB.open(IDB_NAME, 1);
+      rq.onupgradeneeded = ()=>{ rq.result.createObjectStore(IDB_STORE); };
+      rq.onsuccess = ()=>res(rq.result); rq.onerror = ()=>rej(rq.error);
+    }catch(e){ rej(e); }
+  });
+  return idbP;
+}
+async function idbGet(k){ try{ const db=await idb(); return await new Promise((res,rej)=>{ const t=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(k); t.onsuccess=()=>res(t.result||null); t.onerror=()=>rej(t.error); }); }catch(e){ return null; } }
+async function idbSet(k,v){ try{ const db=await idb(); await new Promise((res,rej)=>{ const t=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(v,k); t.onsuccess=res; t.onerror=()=>rej(t.error); }); }catch(e){ console.warn('idbSet',e); } }
+async function idbDel(k){ try{ const db=await idb(); await new Promise((res,rej)=>{ const t=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).delete(k); t.onsuccess=res; t.onerror=()=>rej(t.error); }); }catch(e){} }
+/* 오래된 캐시 정리 — 앱 시작 때 한 번 */
+async function idbPrune(){
+  try{
+    const db=await idb(); const st=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE);
+    const cut = now() - IDB_KEEP_DAYS*DAY;
+    st.openCursor().onsuccess = e=>{ const c=e.target.result; if(!c) return; if((c.value&&c.value.savedAt||0) < cut) c.delete(); c.continue(); };
+  }catch(e){}
+}
+/* 첨부 캐시 키의 부모 문서(접수/발주/게시글)와 그 filesAt */
+function filesParent(key){
+  if(key.startsWith('O:')) return (state.orders||[]).find(o=>o.id===key.slice(2)) || null;
+  if(key.startsWith('B:')) return (state.posts||[]).find(p=>p.id===key.slice(2)) || null;
+  return (state.reqs||[]).find(r=>r.id===key) || null;
+}
+const parentFilesAt = key => { const p = filesParent(key); return p ? (p.filesAt||0) : 0; };
+async function filesCacheSave(key){
+  await idbSet(key, { files: filesCache[key]||[], filesAt: filesStamp[key]||0, savedAt: now() });
+}
 const filesErr    = {};  // reqId -> 마지막 조회 오류 코드
 /* Firestore 문서 1건 최대 1,048,576 bytes — 안전 여유를 두고 900KB로 제한 */
 const MAX_FILE_CHARS = 900000;
@@ -991,15 +1029,31 @@ const store = {
   async addFile(reqId, file){ // file={kind,name,data,ts} — reqId가 'O:xxx'면 발주건
     if(file && file.data && file.data.length > MAX_FILE_CHARS)
       throw new Error(`파일 용량 초과 (${Math.round(file.data.length/1024)}KB / 최대 ${Math.round(MAX_FILE_CHARS/1024)}KB)`);
-    if(LIVE){ const [c,d] = filesPath(reqId); await FB.addDoc(FB.collection(fs,c,d,'files'), file); }
+    const stamp = now();
+    if(LIVE){
+      const [c,d] = filesPath(reqId);
+      await FB.addDoc(FB.collection(fs,c,d,'files'), file);
+      /* 부모 문서에 첨부 변경 시각을 남긴다 → 다른 기기는 이 값이 바뀔 때만 첨부를 다시 읽는다 */
+      try{ await FB.updateDoc(FB.doc(fs,c,d), {filesAt:stamp}); }catch(e){ console.warn('filesAt', e); }
+    }
+    const p = filesParent(reqId); if(p) p.filesAt = stamp;
     if(!filesCache[reqId]) filesCache[reqId]=[];
     filesCache[reqId].push(file);
-    filesLoaded[reqId] = true; filesErr[reqId] = null;
+    filesLoaded[reqId] = true; filesErr[reqId] = null; filesStamp[reqId] = stamp;
+    filesCacheSave(reqId);
   },
   /* 한 번 조회 — 실패하면 캐시에 남기지 않고 오류를 기록해 재시도가 가능하게 한다 */
   async getFiles(reqId, force){
     if(!force && filesLoaded[reqId]) return filesCache[reqId]||[];
     if(!LIVE){ filesCache[reqId] = filesCache[reqId]||[]; filesLoaded[reqId]=true; return filesCache[reqId]; }
+    /* 기기 저장소에 같은 시각(filesAt)의 첨부가 있으면 서버를 읽지 않는다 */
+    if(!force){
+      const hit = await idbGet(reqId);
+      if(hit && Array.isArray(hit.files) && (hit.filesAt||0) === parentFilesAt(reqId)){
+        filesCache[reqId] = hit.files; filesLoaded[reqId] = true; filesErr[reqId] = null; filesStamp[reqId] = hit.filesAt||0;
+        return filesCache[reqId];
+      }
+    }
     const [pc,pd] = filesPath(reqId);
     const pull = async (useOrder) => {
       const col = FB.collection(fs,pc,pd,'files');
@@ -1008,12 +1062,12 @@ const store = {
     };
     try{
       filesCache[reqId] = await pull(true);
-      filesLoaded[reqId] = true; filesErr[reqId] = null;
+      filesLoaded[reqId] = true; filesErr[reqId] = null; filesStamp[reqId] = parentFilesAt(reqId); filesCacheSave(reqId);
     }catch(e){
       /* ts 필드 누락 등 정렬 실패 대비 — 정렬 없이 한 번 더 시도 */
       try{
         filesCache[reqId] = await pull(false);
-        filesLoaded[reqId] = true; filesErr[reqId] = null;
+        filesLoaded[reqId] = true; filesErr[reqId] = null; filesStamp[reqId] = parentFilesAt(reqId); filesCacheSave(reqId);
       }catch(e2){
         filesErr[reqId] = e2.code || e2.message || String(e2);
         console.warn('getFiles', reqId, e2);
@@ -1035,30 +1089,20 @@ const store = {
     const arr = filesCache[reqId]||[];
     const i = arr.findIndex(f=>f.ts===file.ts && f.kind===file.kind && f.name===file.name);
     if(i>=0) arr.splice(i,1);
+    const stamp = now();
+    if(LIVE){ const [c,d] = filesPath(reqId); try{ await FB.updateDoc(FB.doc(fs,c,d), {filesAt:stamp}); }catch(e){} }
+    const p = filesParent(reqId); if(p) p.filesAt = stamp;
+    filesStamp[reqId] = stamp; filesCacheSave(reqId);
   },
   /* 실시간 구독 — 다른 사람이 올린 사진·견적서가 새로고침 없이 바로 보인다 */
+  /* 첨부 로드 (2026-09-16 개편) — 첨부 컬렉션을 실시간 구독하지 않는다.
+     부모 문서의 filesAt 이 바뀌면(다른 사람이 사진을 올리면) 접수건 구독이 그걸 전달하고,
+     syncDetailFiles() 가 시각이 다른 것을 보고 그때만 다시 읽는다. */
   subscribeFiles(reqId, cb){
     if(!LIVE){ filesLoaded[reqId]=true; cb(); return ()=>{}; }
-    let unsub = null;
-    const [sc,sd] = filesPath(reqId);
-    try{
-      unsub = FB.onSnapshot(FB.collection(fs,sc,sd,'files'),
-        snap=>{
-          filesCache[reqId] = snap.docs.map(d=>d.data()).sort((a,b)=>(a.ts||0)-(b.ts||0));
-          filesLoaded[reqId] = true; filesErr[reqId] = null;
-          cb();
-        },
-        err=>{
-          filesErr[reqId] = err.code || String(err);
-          console.warn('subscribeFiles', reqId, err);
-          /* 구독이 막히면 1회 조회로 폴백 */
-          store.getFiles(reqId, true).then(cb).catch(()=>cb());
-        });
-    }catch(e){
-      filesErr[reqId] = e.code || e.message || String(e);
-      store.getFiles(reqId, true).then(cb).catch(()=>cb());
-    }
-    return ()=>{ if(unsub){ try{unsub()}catch(e){} } };
+    let alive = true;
+    store.getFiles(reqId, false).then(()=>{ if(alive) cb(); }).catch(()=>{ if(alive) cb(); });
+    return ()=>{ alive=false; };
   },
   /* ---- 조명·타일 발주 ---- */
   async saveOrder(o){
@@ -1115,7 +1159,7 @@ const store = {
       await FB.deleteDoc(FB.doc(fs,'requests',id));
     }
     const i = state.reqs.findIndex(x=>x.id===id); if(i>=0) state.reqs.splice(i,1);
-    delete filesCache[id]; delete filesLoaded[id];
+    delete filesCache[id]; delete filesLoaded[id]; idbDel(id);
   },
   async deleteOrder(id){
     if(LIVE){
@@ -1123,7 +1167,7 @@ const store = {
       await FB.deleteDoc(FB.doc(fs,'orders',id));
     }
     const i = state.orders.findIndex(x=>x.id===id); if(i>=0) state.orders.splice(i,1);
-    delete filesCache['O:'+id]; delete filesLoaded['O:'+id];
+    delete filesCache['O:'+id]; delete filesLoaded['O:'+id]; idbDel('O:'+id);
   },
   async deletePost(id){
     if(LIVE) await FB.deleteDoc(FB.doc(fs,'posts',id));
@@ -1146,7 +1190,8 @@ const store = {
         }, err=>console.warn('room',err)));
         return ()=>unsubs.forEach(u=>{try{u()}catch(e){}});
       }
-      return FB.onSnapshot(FB.query(FB.collection(fs,'chats'), FB.orderBy('lastTs','desc'), FB.limit(100)),
+      /* 최근 30일 안에 대화가 있던 방만 받는다 (읽기 절감, 2026-09-16) */
+      return FB.onSnapshot(FB.query(FB.collection(fs,'chats'), FB.where('lastTs','>', now()-30*DAY), FB.orderBy('lastTs','desc'), FB.limit(100)),
         snap=>cb(snap.docs.map(d=>({id:d.id, ...d.data()}))), err=>console.warn('rooms',err));
     }
     demoChats.roomCb = cb; cb(demoRoomMetas()); return ()=>{demoChats.roomCb=null};
@@ -1821,7 +1866,7 @@ function setRole(r){
 function ensureRooms(){
   if(state.roomsSubbed || !state.user || !canChat()) return;
   state.roomsSubbed = true;
-  store.subscribeRooms(list=>{
+  state.unsubRooms = store.subscribeRooms(list=>{
     state.chatRooms = list;
     const me = actorLabel();
     list.forEach(m=>{
@@ -1872,6 +1917,15 @@ function stopDetailFiles(){
   if(state.unsubFiles){ try{ state.unsubFiles(); }catch(e){} }
   state.unsubFiles = null; state.filesFor = null;
 }
+/* 상세 화면을 보는 중에 부모 문서의 filesAt 이 바뀌면 첨부를 다시 읽는다 */
+function syncDetailFiles(){
+  const key = state.filesFor; if(!key || !LIVE) return;
+  const pAt = parentFilesAt(key);
+  if(filesLoaded[key] && (filesStamp[key]||0) !== pAt && !state._filesSyncing){
+    state._filesSyncing = true;
+    store.getFiles(key, true).then(()=>{ state._filesSyncing=false; if(state.filesFor===key && !modalOpen()) render(); }).catch(()=>{ state._filesSyncing=false; });
+  }
+}
 function loadDetailFiles(id){
   if(state.filesFor === id && state.unsubFiles) return;   // 이미 구독 중
   stopDetailFiles();
@@ -1898,6 +1952,7 @@ function render(){
   if(!state.user){ showLogin(); return; }
   document.getElementById('login').classList.remove('open');
   if(modalOpen()) return; // 모달 작업 중엔 실시간 갱신으로 화면 덮지 않음
+  syncDetailFiles();
   const cmtEl = document.getElementById('cmtIn');
   const cmtVal = cmtEl ? cmtEl.value : '';
   const oCmtEl = document.getElementById('oCmtIn');
@@ -3677,6 +3732,27 @@ async function sendChat(){
   catch(e){ toast('전송 실패: '+(e.code||e.message)); inp.value=t; }
 }
 
+/* 백그라운드 절전 — 구독 전부 해제 / 복귀 시 재구독 */
+function pauseLive(){
+  if(!LIVE || !state.user || state.livePaused) return;
+  state.livePaused = true;
+  ['unsubReqs','unsubOrders','unsubPosts','unsubMsgs','unsubIcnCal'].forEach(k=>{ if(state[k]){ try{state[k]()}catch(e){} state[k]=null; } });
+  if(state.unsubRooms){ try{state.unsubRooms()}catch(e){} state.unsubRooms=null; }
+  state.roomsSubbed = false;
+  stopDetailFiles();
+}
+function resumeLive(){
+  if(!LIVE || !state.user || !state.livePaused) return;
+  state.livePaused = false;
+  subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts();
+  if(state.view==='board'||state.view==='post') subscribePosts(null, true);
+  ensureRooms();
+  if(state.view==='chatroom' && state.chatRoom) openRoom(state.chatRoom);
+  if(state.view==='cal') ensureIcnCal();
+  if(state.view==='detail' && state.detailId) loadDetailFiles(state.detailId);
+  if(state.view==='odetail' && state.orderId) loadDetailFiles('O:'+state.orderId);
+  if(state.view==='post' && state.postId) loadDetailFiles('B:'+state.postId);
+}
 /* 예전 규칙으로 쌓인 실측 기한초과 기록을 새 규칙(실측일정일 기준)으로 재계산 */
 async function recalcSurveyOverdues(){
   if(role()!=='hq') return;
@@ -6612,6 +6688,14 @@ function exportCSV(){
   render();
   // 1분마다 D-day/기한초과 재계산
   setInterval(()=>{ if(state.user && !modalOpen()) render(); }, 60000);
+  /* 앱이 화면 뒤로 가면 3분 뒤 서버 구독을 모두 끊고, 다시 앞으로 오면 잇는다 (2026-09-16).
+     뒤에 열어둔 화면이 모든 변경을 계속 받아 읽기를 소모하던 것을 막는다. */
+  document.addEventListener('visibilitychange', ()=>{
+    if(!LIVE) return;
+    if(document.hidden){ clearTimeout(state._hideT); state._hideT = setTimeout(pauseLive, 3*60*1000); }
+    else { clearTimeout(state._hideT); if(state.livePaused) resumeLive(); }
+  });
+  idbPrune();
 })();
 </script>
 </body>
