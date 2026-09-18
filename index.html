@@ -442,7 +442,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.09.16';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.09.18';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -980,6 +980,8 @@ const store = {
           if(c.lightContract) state.cfg.lightContract = c.lightContract;
           if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor.map(x=>Array.isArray(x)?[String(x[0]),+x[1]]:[String(x.j),+x.r]);
           if(c.laborNote) state.cfg.laborNote=c.laborNote;
+          state.cfg.notice = c.notice || null;
+          if(state.user) showNoticeIfAny();
         }
         state.cfgLoaded = true;
         fillStoreList(); if(state.ready) render();
@@ -1811,6 +1813,7 @@ function doLogin(){
   document.getElementById('login').classList.remove('open');
   if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); }
   loadChatPrefs(); ensureRooms();
+  setTimeout(showNoticeIfAny, 300);
   /* 로그인 1단계에서 고른 업무로 바로 들어간다 (본사담당은 탭 전환으로 오갈 수 있음) */
   const apps = myApps();
   const want = pickedGate==='order' ? apps.find(isOrderApp) : apps.find(a=>a==='bosu');
@@ -2421,7 +2424,7 @@ function canDelFile(reqId, f){
     const o = O(String(reqId).slice(2));
     if(!o) return false;
     if(role()==='supplier' && o.supplier===myCo()) return ['quote'].includes(f.kind);
-    if(role()==='builder'  && o.builder===myCo())  return ['delivery'].includes(f.kind);
+    if(role()==='builder'  && o.builder===myCo())  return ['delivery','drawing'].includes(f.kind) && !['SETTLED','CANCEL'].includes(o.stage);
     return false;
   }
   const r = R(reqId);
@@ -4496,7 +4499,7 @@ function vSet(){
       <span style="width:110px;font-weight:700;font-size:14px">${CODE_NM[rk]}</span>
       <input value="${esc(state.cfg.codes[rk]||'')}" onchange="updCode('${rk}',this.value)">
     </div>`).join('');
-  return roleNote()+`<div class="card">
+  return roleNote()+noticeSetHtml()+`<div class="card">
     <div class="h2">🗑 테스트 데이터 정리</div>
     <div class="note" style="margin:0 0 10px">테스트로 만든 접수건·발주건을 골라서 <b>완전 삭제</b>합니다. 첨부 사진·견적서까지 서버에서 지워지고 되돌릴 수 없습니다.
       실제 진행 건은 삭제하지 말고 「중단 처리」를 써 주세요.</div>
@@ -4595,6 +4598,92 @@ function vSet(){
              : '· <b style="color:var(--red-dark)">데모 모드</b> — 데이터가 저장되지 않습니다.<br>· 운영하려면 파일 상단 주석의 안내에 따라 Firebase 설정(무료)을 넣어주세요.'}
     </div>
   </div>`;
+}
+/* ===== 접속 공지 팝업 (2026-09-18) =====
+   본사담당이 설정에서 제목·내용·시작일·표시 일수·대상을 정하면 config/app.notice 에 저장되고,
+   그 기간 동안 대상 역할이 앱을 열 때마다 팝업으로 뜬다. 「오늘 하루 보지 않기」는 기기별(localStorage). */
+const NOTICE_ROLES = [['store','점포'],['vendor','보수업체'],['branch','인천공항지점'],['builder','시공사'],['supplier','공급사'],['hq','본사담당']];
+function noticeActive(n){
+  if(!n || !n.text) return false;
+  const t = now();
+  return t >= (n.from||0) && t < (n.until||0);
+}
+function noticeForMe(){
+  const n = state.cfg.notice;
+  if(!noticeActive(n) || !state.user) return null;
+  const roles = Array.isArray(n.roles) && n.roles.length ? n.roles : NOTICE_ROLES.map(x=>x[0]);
+  return roles.includes(role()) ? n : null;
+}
+function showNoticeIfAny(){
+  const n = noticeForMe(); if(!n) return;
+  if(modalOpen()) return;
+  try{ if(localStorage.getItem('bosuon_notice_skip_'+n.id) === dkey(now())) return; }catch(e){}
+  openModal(`<div style="text-align:center;font-size:30px;margin-bottom:4px">📢</div>
+    <h2 style="text-align:center">${esc(n.title||'안내')}</h2>
+    <div class="sub" style="text-align:center">${fmtD(n.from)} ~ ${fmtD((n.until||0)-1)} · 본사 인테리어팀</div>
+    <div style="white-space:pre-wrap;line-height:1.6;font-size:14.5px;margin:14px 0 6px;padding:12px 14px;background:var(--gray-bg);border-radius:10px">${esc(n.text)}</div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer"><input type="checkbox" id="ntSkip" style="width:18px;height:18px;margin:0"> 오늘 하루 보지 않기</label>
+    <button class="btn blk" onclick="closeNotice('${n.id}')">확인</button>`);
+}
+function closeNotice(id){
+  try{ if(document.getElementById('ntSkip')?.checked) localStorage.setItem('bosuon_notice_skip_'+id, dkey(now())); }catch(e){}
+  closeModal();
+}
+function noticeSetHtml(){
+  const n = state.cfg.notice || {};
+  const active = noticeActive(n);
+  const roles = Array.isArray(n.roles) && n.roles.length ? n.roles : NOTICE_ROLES.map(x=>x[0]);
+  const fromV = n.from ? tsToDateInput(n.from) : tsToDateInput(now());
+  const days = n.days || 7;
+  return `<div class="card">
+    <div class="h2">📢 접속 시 공지 팝업</div>
+    <div class="note" style="margin:0 0 10px">${active
+      ? `<b style="color:var(--green)">표시 중</b> — ${fmtD(n.from)} ~ ${fmtD((n.until||0)-1)} · 대상: ${roles.map(r=>(NOTICE_ROLES.find(x=>x[0]===r)||[])[1]||r).join(', ')}`
+      : n.text ? `<b>종료됨</b> (${fmtD(n.from)} ~ ${fmtD((n.until||0)-1)}) — 아래에서 다시 등록할 수 있습니다` : '지정한 기간 동안 사용자가 앱을 열 때마다 팝업으로 보여줍니다. 사용자는 「오늘 하루 보지 않기」로 하루씩 넘길 수 있습니다.'}</div>
+    <label>제목</label><input id="ntTitle" value="${esc(n.title||'')}" placeholder="예) 9월 추석 연휴 보수 접수 안내">
+    <label>내용</label><textarea id="ntText" rows="5" placeholder="줄바꿈 그대로 표시됩니다">${esc(n.text||'')}</textarea>
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>시작일</label><input id="ntFrom" type="date" value="${fromV}"></div>
+      <div style="width:120px"><label>표시 기간</label><div style="display:flex;align-items:center;gap:6px"><input id="ntDays" type="number" min="1" max="90" value="${days}" style="text-align:center"><span style="font-size:13px;color:var(--sub)">일</span></div></div>
+    </div>
+    <label>대상</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-bottom:6px">${NOTICE_ROLES.map(([k,nm])=>`<label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer"><input type="checkbox" class="ntRole" value="${k}" ${roles.includes(k)?'checked':''} style="width:17px;height:17px;margin:0">${nm}</label>`).join('')}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" style="flex:2;margin:0" onclick="saveNotice()">${active?'수정 저장':'공지 시작'}</button>
+      <button class="btn sec2" style="flex:1;margin:0" onclick="previewNotice()">미리보기</button>
+      ${n.text?`<button class="btn sec2" style="flex:1;margin:0" onclick="endNotice()">${active?'지금 종료':'삭제'}</button>`:''}
+    </div>
+  </div>`;
+}
+function readNoticeForm(){
+  const title = document.getElementById('ntTitle').value.trim();
+  const text = document.getElementById('ntText').value.trim();
+  const fromV = document.getElementById('ntFrom').value;
+  const days = Math.max(1, Math.min(90, Number(document.getElementById('ntDays').value)||7));
+  const roles = [...document.querySelectorAll('.ntRole:checked')].map(c=>c.value);
+  if(!text){ toast('공지 내용을 입력해주세요'); return null; }
+  if(!fromV){ toast('시작일을 선택해주세요'); return null; }
+  if(!roles.length){ toast('대상을 하나 이상 선택해주세요'); return null; }
+  const from = new Date(fromV+'T00:00:00').getTime();
+  const cur = state.cfg.notice || {};
+  return { id: (cur.text===text && cur.title===title && cur.id) ? cur.id : 'N'+Date.now().toString(36),
+           title, text, from, days, until: from + days*DAY, roles, by: actorLabel(), ts: now() };
+}
+async function saveNotice(){
+  const n = readNoticeForm(); if(!n) return;
+  try{ await store.saveConfig({notice:n}); toast(n.from<=now() ? '공지가 시작되었습니다' : `${fmtD(n.from)}부터 표시됩니다`); render(); }
+  catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function previewNotice(){
+  const n = readNoticeForm(); if(!n) return;
+  const keep = state.cfg.notice; state.cfg.notice = {...n, from:now()-1, until:now()+DAY};
+  try{ localStorage.removeItem('bosuon_notice_skip_'+n.id); }catch(e){}
+  showNoticeIfAny(); state.cfg.notice = keep;
+}
+async function endNotice(){
+  if(!confirm('공지를 종료(삭제)할까요?')) return;
+  try{ await store.saveConfig({notice:null}); toast('공지를 종료했습니다'); render(); }
+  catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 async function updSla(s,v){ const sla={...state.cfg.sla}; sla[s]=Math.max(1,Number(v)||1); try{ await store.saveConfig({sla}); toast('저장되었습니다'); render(); }catch(e){ toast('저장 실패'); } }
 async function updCode(rk,v){ if(!v.trim()){ toast('코드는 비울 수 없습니다'); render(); return;} const codes={...state.cfg.codes}; codes[rk]=v.trim(); try{ await store.saveConfig({codes}); toast('접속코드가 변경되었습니다'); }catch(e){ toast('저장 실패'); } }
@@ -5104,9 +5193,11 @@ function vODetail(){
       ${prevPriceNote()}. 견적 규격에 「${esc(specPrev().maker)}」이 표기됩니다.</div>`:''}`;
   s += fileListHtml('O:'+o.id, ['drawing'], '📥 제공 도면');
   s += oDwLinkHtml(o);
-  if(rl==='hq' && o.stage==='DRAWING')
+  /* 도면 추가 — 본사담당과 그 건의 시공사, 정산·중단 전까지 (2026-09-18: 예전엔 본사·도면 단계에서만 가능해 수정이 막혔음) */
+  if(canDwLink(o) && !['SETTLED','CANCEL'].includes(o.stage))
     s += `<input type="file" id="oDwF" accept="image/*,.pdf" multiple style="display:none" onchange="oAddDrawing('${o.id}',this)">
-      <button class="btn sec2 blk" onclick="document.getElementById('oDwF').click()">📎 도면 추가 제공</button>`;
+      <button class="btn sec2 blk" onclick="document.getElementById('oDwF').click()">📎 도면 추가·교체 (파일)</button>
+      <div class="note" style="margin-top:6px">잘못 올린 도면은 목록의 🗑 로 지우고 다시 올리면 됩니다. 변경 내역은 이력에 남습니다.</div>`;
   if(canDwLink(o) && !['SETTLED','CANCEL'].includes(o.stage))
     s += `<button class="btn sec2 blk" onclick="oDwLinkModal('${o.id}')">🔗 도면 링크 추가</button>`;
   s += `</div>`;
@@ -5400,7 +5491,7 @@ async function submitOrder(){
     await store.saveOrder(o);
     let saved=0;
     for(const dw of oNewDrawings){
-      try{ await store.addFile('O:'+id, {kind:'drawing', name:dw.name, data:dw.data, ts:now()}); saved++; }
+      try{ await store.addFile('O:'+id, {kind:'drawing', name:dw.name, data:dw.data, ts:now(), by:actorLabel()}); saved++; }
       catch(e){ console.warn('drawing', e); }
     }
     if(saved !== oNewDrawings.length) await store.updateOrder(id, {drawingCount:saved});
@@ -6678,7 +6769,7 @@ function exportCSV(){
   loadDraft();   // 작성 중이던 신규 접수 내용 복원
   if(LIVE){
     const sess = loadSession();
-    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); loadChatPrefs(); ensureRooms(); }
+    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); loadChatPrefs(); ensureRooms(); setTimeout(showNoticeIfAny, 800); }
   } else {
     state.user = {role:'hq', name:'본사담당', store:'', co:''}; // 데모: 본사 화면으로 시작
     loadChatPrefs(); ensureRooms();
