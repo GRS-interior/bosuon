@@ -442,7 +442,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.09.18';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.09.28';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -2520,6 +2520,8 @@ function vDetail(){
     ${asJudgeHtml(r)}
     <div class="kv"><b>공사내용</b>${esc(r.desc)}</div>
     ${photosHtml(r.id,'photo') || photoPlaceholder(r,'photo',r.photoCount||0)}
+    ${canAddReqPhoto(r)?`<input type="file" id="rpF" accept="image/*" multiple style="display:none" onchange="addReqPhotos('${r.id}',this)">
+      <button class="btn sec2 blk" onclick="document.getElementById('rpF').click()">📷 사진 추가</button>`:''}
   </div>`;
 
   if(!(isDefect(r) && !r.surveyDate && !r.surveySkipped)){
@@ -3812,6 +3814,31 @@ async function doBulkDelete(){
     catch(e){ fail++; console.warn('bulk del', p, e); }
   }
   toast(`삭제 ${ok}건${fail?` · 실패 ${fail}건`:''}`); render();
+}
+/* 진행 중 접수 사진 추가 (2026-09-28) — 점포(자기 점포)·본사·지점, 완료·중단 전까지 */
+function canAddReqPhoto(r){
+  if(!r || ['DONE','DROPPED'].includes(r.stage)) return false;
+  if(role()==='store') return r.store === state.user.store;
+  return canManage(r);
+}
+async function addReqPhotos(id, inp){
+  const r = R(id); if(!r) return;
+  const files = [...inp.files]; inp.value='';
+  if(!files.length) return;
+  toast('사진을 올리는 중…');
+  let n=0, fail=0;
+  for(const f of files){
+    try{
+      const d = await compressImage(f);
+      await store.addFile(id, {kind:'photo', name:f.name||`photo_${Date.now()}.jpg`, data:d, ts:now(), by:actorLabel()}); n++;
+    }catch(e){ fail++; console.warn('addReqPhotos', e); }
+  }
+  if(n){
+    try{ await store.updateRequest(id, {photoCount:(r.photoCount||0)+n}, {ts:now(), actor:actorLabel(), action:`접수 사진 ${n}장 추가`}); }
+    catch(e){ toast('사진은 올렸지만 기록 저장에 실패했습니다: '+(e.code||e.message)); }
+  }
+  toast(n ? `사진 ${n}장 추가${fail?` · 실패 ${fail}장`:''}` : '사진을 올리지 못했습니다');
+  render();
 }
 /* 완전 삭제 — 본사담당만. 테스트로 만든 건 정리용. 삭제 확인을 위해 번호를 직접 입력하게 한다 */
 function mDelete(id, kind){
@@ -5212,7 +5239,14 @@ function vODetail(){
       ${o.quote.note?`<div class="kv"><b>비고</b>${esc(o.quote.note)}</div>`:''}
       ${itemsTable(o.quote.items||[], o.quote.freight)}`;
     if(o.quote.analysis) s += analysisHtml(o.quote.analysis);
+    if((o.quote.adjustments||[]).length){
+      const last = o.quote.adjustments[o.quote.adjustments.length-1];
+      s += `<div class="note warn">✏ <b>품목·수량 조정됨</b> (${o.quote.adjustments.length}회) — 공급사 원 견적 <b>${money(o.quote.orig?o.quote.orig.amount:null)}</b> → 현재 <b>${money(o.quote.amount)}</b>
+        <br>최근: ${esc(last.by)} · ${fmtDT(last.at)} · ${esc(last.reason)}
+        <div style="margin-top:6px"><button class="btn sm sec2" style="margin:0" onclick="oOrigQuoteModal('${o.id}')">공급사 원 견적 보기</button></div></div>`;
+    }
     s += fileListHtml('O:'+o.id, ['quote'], '📥 견적서 파일');
+    if(canAdjustQuote(o)) s += `<button class="btn sec2 blk" onclick="oAdjustModal('${o.id}')">✏ 품목·수량 조정 (${rl==='hq'?'본사':'시공사'})</button>`;
   } else {
     s += `<div class="note">${o.supplier}의 수량산출·견적서 제출 대기중입니다.</div>`;
   }
@@ -5610,6 +5644,7 @@ async function oAddDeliveryPhotos(id, inp){
 let oQItems = [], oqAnalysis = null, oqFreight = null, oqDraft = null;
 async function oQuoteModal(id, keep){
   const o = O(id); if(!o) return;
+  oqAdjustFor = null;
   /* keep=true 는 품목 선택기에서 돌아온 경우 — 작성 중이던 내용을 유지한다 */
   if(!keep){
     oQItems = o.quote && o.quote.items ? JSON.parse(JSON.stringify(o.quote.items)) : [];
@@ -5738,7 +5773,76 @@ function oqPickAdd(code){
   oqBackToQuote();
 }
 function oqBackToQuote(){
-  if(oqPickFor) oQuoteModal(oqPickFor, true);
+  if(!oqPickFor) return;
+  if(oqAdjustFor===oqPickFor) oAdjustModal(oqPickFor, true); else oQuoteModal(oqPickFor, true);
+}
+/* ── 승인 단계에서 본사·시공사가 공급사 견적의 품목·수량을 조정 (2026-09-28) ──
+   원 견적은 quote.orig 에 보존, 조정 내역은 quote.adjustments[] 에 누적. 공급사는 이력·조정 표시로 알 수 있다. */
+let oqAdjustFor = null;
+function canAdjustQuote(o){
+  if(!o || !o.quote || !o.quote.items) return false;
+  const rl = role();
+  if(rl==='hq') return ['QUOTE','HQAPV'].includes(o.stage);
+  if(rl==='builder' && o.builder===myCo()) return o.stage === (oIsDir(o) ? 'HQAPV' : 'QUOTE');
+  return false;
+}
+async function oAdjustModal(id, keep){
+  const o = O(id); if(!o || !canAdjustQuote(o)) return;
+  oqAdjustFor = id;
+  if(!keep){
+    oQItems = JSON.parse(JSON.stringify(o.quote.items||[]));
+    oqFreight = o.quote.freight ? {...o.quote.freight} : null;
+  }
+  const reasonEl = document.getElementById('oaWhy'); const keepWhy = reasonEl ? reasonEl.value : '';
+  openModal(`<h2>품목·수량 조정</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${o.cat} · 공급사 견적 ${money(o.quote.amount)}</div>
+    <div class="note">공급사가 제출한 내역을 바탕으로 수량을 고치거나 품목을 빼고 넣을 수 있습니다. 단가는 표준 단가를 따르며, 원 견적과 조정 사유는 기록으로 남아 공급사도 볼 수 있습니다.</div>
+    <label>수량산출 내역</label>
+    <div id="oqRows"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" style="flex:1.6" onclick="oqPick('${id}')">＋ 표준 품목 추가</button>
+      <button class="btn sec2" style="flex:1" onclick="oqAdd()">＋ 직접 입력</button>
+    </div>
+    ${oqFreight?`<div class="kv" style="margin-top:8px"><b>운반비</b>${esc(oqFreight.area||'')} ${money(oqFreight.amount)} <span style="color:var(--sub);font-size:12px">(변경 없음)</span></div>`:''}
+    <div class="kv" style="margin-top:12px;font-size:16px"><b>조정 후 금액</b><strong id="oqTotal">0원</strong></div>
+    <label>조정 사유 <span style="font-weight:500">(필수 · 공급사에게 보입니다)</span></label>
+    <textarea id="oaWhy" rows="2" placeholder="예) 현장 실측 결과 홀 조명 2개소 감소, 주방 타일 로스율 재산정">${esc(keepWhy)}</textarea>
+    <button class="btn blk" onclick="oAdjustSave('${id}')">조정 저장</button>`);
+  setTimeout(()=>{ oqRender(); }, 30);
+}
+async function oAdjustSave(id){
+  const o = O(id); if(!o || !canAdjustQuote(o)) return;
+  const why = (document.getElementById('oaWhy').value||'').trim();
+  if(!why){ toast('조정 사유를 입력해주세요'); return; }
+  const items = oQItems.filter(x=>x.name && +x.qty>0 && +x.price>0).map(x=>{
+    const it = {name:x.name, spec:x.spec, unit:x.unit||'EA', qty:+x.qty, price:+x.price, amount:(+x.qty)*(+x.price)};
+    if(x.code){ it.code=x.code; it.brand=x.brand||''; it.img=x.img||''; }
+    if(x.maker) it.maker=x.maker; if(x.kelvin) it.kelvin=x.kelvin; if(x.size) it.size=x.size; if(x.cut) it.cut=x.cut;
+    return it;
+  });
+  if(!items.length){ toast('품목을 1개 이상 남겨주세요'); return; }
+  const itemsTotal = items.reduce((a,x)=>a+x.amount,0);
+  const amount = itemsTotal + (oqFreight ? oqFreight.amount : 0);
+  const q = o.quote;
+  const quote = { ...q, items, itemsTotal, amount,
+    orig: q.orig || { items:q.items, itemsTotal:q.itemsTotal||0, amount:q.amount, ts:q.ts },
+    adjustments: (q.adjustments||[]).concat([{ by:actorLabel(), at:now(), reason:why, from:q.amount, to:amount, n:items.length }]) };
+  const patch = { quote };
+  if(o.confirm && o.confirm.finalAmount!=null) patch.confirm = {...o.confirm, finalAmount:amount};
+  oqAdjustFor = null;
+  try{
+    await store.updateOrder(id, patch, oEntry(`${role()==='hq'?'본사':'시공사'} 품목·수량 조정 (${money(q.amount)} → ${money(amount)} · ${items.length}개 품목) — ${why}`));
+    closeModal(); toast('조정 내용이 저장되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function oOrigQuoteModal(id){
+  const o = O(id); if(!o || !o.quote || !o.quote.orig) return;
+  const g = o.quote.orig;
+  openModal(`<h2>공급사 원 견적</h2><div class="sub">${o.id} · ${esc(o.supplier)} · ${fmtD(g.ts||o.quote.ts)}</div>
+    <div class="kv"><b>원 견적금액</b><strong>${money(g.amount)}</strong></div>
+    ${itemsTable(g.items||[], o.quote.freight)}
+    <div class="note" style="margin-top:8px"><b>조정 내역</b><br>${(o.quote.adjustments||[]).map(a=>`${fmtDT(a.at)} · ${esc(a.by)} · ${money(a.from)} → ${money(a.to)} · ${esc(a.reason)}`).join('<br>')}</div>
+    <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
 }
 function oqAdd(){ oQItems.push({name:'',spec:'',unit:'EA',qty:'',price:''}); oqRender(); }
 function oqDel(i){ oQItems.splice(i,1); oqRender(); }
@@ -5770,7 +5874,7 @@ function oqRender(){
       <div style="display:flex;gap:6px;margin-top:6px;align-items:center">
         <input placeholder="단위" value="${esc(x.unit)}" oninput="oqSet(${i},'unit',this.value)" style="width:64px"${std?' readonly':''}>
         <input type="number" inputmode="numeric" placeholder="수량" value="${x.qty}" oninput="oqSet(${i},'qty',this.value)" style="flex:1">
-        <input type="number" inputmode="numeric" placeholder="단가" value="${x.price}" oninput="oqSet(${i},'price',this.value)" style="flex:1.3">
+        <input type="number" inputmode="numeric" placeholder="단가" value="${x.price}" oninput="oqSet(${i},'price',this.value)" style="flex:1.3${oqAdjustFor?';background:var(--gray-bg)':''}"${oqAdjustFor?' readonly title="조정 시 단가는 바꿀 수 없습니다"':''}>
       </div>
     </div>`;
   }).join('');
