@@ -442,7 +442,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.09.28';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.09.30';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -2143,6 +2143,33 @@ function switchApp(a){
   render(); window.scrollTo(0,0);
 }
 const DEPTS = ['인테리어팀','산업안전팀','잘모르겠음'];
+/* 담당부서 변경 — 본사담당(인천공항 건은 지점도), 완료·중단 전까지 (2026-09-29) */
+function canChangeDept(r){ return !!r && canManage(r) && !['DONE','DROPPED'].includes(r.stage); }
+function mDept(id){
+  const r = R(id); if(!canChangeDept(r)) return;
+  const cur = r.dept || '잘모르겠음';
+  openModal(`<h2>담당부서 변경</h2><div class="sub">${id} · ${esc(r.store)} · ${esc(r.title)}</div>
+    <div class="kv"><b>현재</b>${deptBadge(cur)}${r.deptVendor&&r.deptVendor!==cur?` <span class="badge b-red">업체 판단: ${esc(r.deptVendor)}</span>`:''}</div>
+    <label>변경할 부서</label>
+    <div style="display:flex;gap:8px">${['인테리어팀','산업안전팀'].map(d=>`<label style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 8px;border:1.5px solid var(--line);border-radius:10px;font-weight:800;cursor:pointer"><input type="radio" name="dpSel" value="${d}" ${d===cur?'checked':''} style="width:18px;height:18px;margin:0">${d==='산업안전팀'?'🦺 ':'🛠 '}${d}</label>`).join('')}</div>
+    <label>사유 <span style="font-weight:500">(관계자 전체에 공개 · 이관 시 권장)</span></label>
+    <textarea id="dpWhy" rows="2" placeholder="예) 소방·전기 안전 설비 건으로 산업안전팀 이관"></textarea>
+    <button class="btn blk" onclick="doDept('${id}')">변경</button>`);
+}
+async function doDept(id){
+  const r = R(id); if(!canChangeDept(r)) return;
+  const sel = document.querySelector('input[name="dpSel"]:checked');
+  if(!sel){ toast('부서를 선택해주세요'); return; }
+  const to = sel.value, from = r.dept || '잘모르겠음';
+  if(to === from){ toast('현재와 같은 부서입니다'); return; }
+  const why = (document.getElementById('dpWhy').value||'').trim();
+  const rec = { from, to, by:actorLabel(), at:now(), reason:why };
+  try{
+    await store.updateRequest(id, { dept:to, deptLog:(r.deptLog||[]).concat([rec]) },
+      {ts:now(), actor:actorLabel(), action:`담당부서 변경: ${from==='잘모르겠음'?'미지정':from} → ${to}${why?` (${why})`:''}`});
+    closeModal(); toast(to==='산업안전팀' ? '산업안전팀으로 이관했습니다' : `${to}(으)로 변경했습니다`);
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 function deptBadge(d){
   if(!d) return '';
   const cls = d==='인테리어팀'?'b-blue':d==='산업안전팀'?'b-amber':'b-gray';
@@ -2316,12 +2343,13 @@ function reqCardsHtml(){
   else if(state.filter==='OPENREQ') rs = rs.filter(r=>r.kind==='open');
   else if(state.filter==='MINE') rs = rs.filter(r=>r.store===state.user.store);
   else if(state.filter==='UNSIGNED') rs = rs.filter(unsignedDone);
+  else if(state.filter==='SAFETY') rs = rs.filter(r=>r.dept==='산업안전팀');
   else if(state.filter!=='ALL') rs = rs.filter(r=>r.stage===state.filter);
   if(state.q) rs = rs.filter(r=>(r.title+r.store+r.id+(r.desc||'')+(r.dept||'')).toLowerCase().includes(String(state.q).toLowerCase()));
   return rs.length? rs.map(reqCard).join('') : '<div class="empty">조건에 맞는 접수 건이 없습니다</div>';
 }
 function vList(){
-  const chips = [['ALL','전체'],['OPEN','진행중'],['OPENREQ','🏗 오픈 직후'],['MINE','내 점포'],['OVER','⚠ 기한초과'],['UNSIGNED','✍ 서명 대기'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
+  const chips = [['ALL','전체'],['OPEN','진행중'],['OPENREQ','🏗 오픈 직후'],['MINE','내 점포'],['OVER','⚠ 기한초과'],['UNSIGNED','✍ 서명 대기'],['SAFETY','🦺 산업안전팀'],...STAGES.map(s=>[s,STAGE_NM[s]]),['DROPPED','⛔ 중단']];
   const useChips = role()==='store' ? chips : chips.filter(c=>c[0]!=='MINE');
   return roleNote()+`
     <div class="search"><input id="listSq" placeholder="🔍 점포명·공사내용·접수번호 검색" value="${esc(state.q)}" oninput="state.q=this.value;const el=document.getElementById('reqList');if(el)el.innerHTML=reqCardsHtml()"></div>
@@ -2515,7 +2543,8 @@ function vDetail(){
       <div class="kv"><b>오픈 시공사</b>${r.builder?esc(r.builder):'<span style="color:var(--sub)">미지정</span>'}</div>
       ${openDays!=null&&openDays<=30?`<div class="note warn">🏗 오픈 후 30일 이내 요청입니다. ${r.builder?`<b>${esc(r.builder)}</b>의 `:''}시공 하자 여부를 먼저 확인해주세요.</div>`:''}`:''}
     <div class="kv"><b>긴급도</b>${r.urgency==='긴급'?'<span class="badge urgent">긴급</span>':'보통'}</div>
-    <div class="kv"><b>담당부서</b>${deptBadge(r.dept)||'미지정'}${r.deptVendor&&r.dept&&r.deptVendor!==r.dept?` <span class="badge b-red">⚠ 업체 판단: ${r.deptVendor}</span>`:''}</div>
+    <div class="kv"><b>담당부서</b>${deptBadge(r.dept)||'미지정'}${r.deptVendor&&r.dept&&r.deptVendor!==r.dept?` <span class="badge b-red">⚠ 업체 판단: ${r.deptVendor}</span>`:''}${canChangeDept(r)?` <button style="font-size:11.5px;color:var(--sub);text-decoration:underline;font-weight:700" onclick="mDept('${r.id}')">변경</button>`:''}</div>
+    ${(r.deptLog||[]).length?`<div class="kv"><b>부서 변경</b><span style="font-size:12px;color:var(--sub)">${esc(r.deptLog[r.deptLog.length-1].from||'미지정')} → ${esc(r.deptLog[r.deptLog.length-1].to)} · ${esc(r.deptLog[r.deptLog.length-1].by)} · ${fmtD(r.deptLog[r.deptLog.length-1].at)}${r.deptLog[r.deptLog.length-1].reason?` · ${esc(r.deptLog[r.deptLog.length-1].reason)}`:''}</span></div>`:''}
     <div class="kv"><b>${isDefect(r)?'A/S 시공사':'시공업체'}</b><span class="badge ${isDefect(r)?'b-purple':reqVendor(r)==='우리아이엔티'?'b-blue':'b-gray'}">${esc(reqFixer(r)||'-')}</span>${!isDefect(r)&&rl==='hq'&&r.stage!=='DONE'&&r.stage!=='DROPPED'?` <button style="font-size:11.5px;color:var(--sub);text-decoration:underline;font-weight:700" onclick="switchVendor('${r.id}')">변경</button>`:''}</div>
     ${asJudgeHtml(r)}
     <div class="kv"><b>공사내용</b>${esc(r.desc)}</div>
@@ -5207,6 +5236,8 @@ function vODetail(){
     <div class="kv"><b>공급사</b>${esc(o.supplier)}</div>
     <div class="kv"><b>시공사</b>${esc(o.builder)}</div>
     <div class="kv"><b>GRS 담당</b>${esc(o.manager||'-')}</div>
+    <div class="kv"><b>현장소장</b>${o.siteMgr?telLinkify(o.siteMgr):'<span style="color:var(--sub)">미입력</span>'}${canEditOrderMemo(o)?` <button style="font-size:11.5px;color:var(--sub);text-decoration:underline;font-weight:700" onclick="oMemoModal('${o.id}')">수정</button>`:''}</div>
+    ${o.memo?`<div class="kv"><b>메모</b><span style="white-space:pre-wrap">${telLinkify(o.memo)}</span></div>`:''}
     <div class="kv"><b>오픈 예정</b>${o.openPlan?fmtD(o.openPlan):'-'}</div>
     <div class="kv"><b>도면</b>${[o.drawingCount?`${o.drawingCount}매 첨부`:'', oDwLinks(o).length?`링크 ${oDwLinks(o).length}건`:'']
       .filter(Boolean).join(' · ') || '미제공'}</div>
@@ -5458,6 +5489,10 @@ function vONew(){
     <input id="oOpen" type="date" value="${tsToDateInput(now()+14*DAY)}">
     <label>GRS 담당자</label>
     <input id="oMgr" value="${esc(role()==='hq'?(state.user.name||''):'')}" placeholder="예) 김본사">
+    <label>현장소장 · 연락처 <span style="font-weight:500">(공급사·본사와 공유됩니다)</span></label>
+    <input id="oSiteMgr" placeholder="예) 홍길동 소장 010-1234-5678" autocomplete="off">
+    <label>메모 <span style="font-weight:500">(납품 조건·현장 출입 등)</span></label>
+    <textarea id="oMemo" rows="3" placeholder="예) 야간 납품만 가능(22시 이후) · 지하2층 하역장 이용 · 도착 30분 전 소장에게 연락"></textarea>
     <label>도면 첨부 (사진·PDF) <span style="font-weight:500">— 1개당 ${Math.round(MAX_FILE_CHARS/1024/1.37)}KB 이하</span></label>
     <input type="file" id="oNewF" accept="image/*,.pdf" multiple style="display:none" onchange="oPickDrawings(this)">
     <button class="file-add" onclick="document.getElementById('oNewF').click()">📐 도면 추가 (여러 장 가능)</button>
@@ -5514,6 +5549,8 @@ async function submitOrder(){
     id, type, cat, supplier:SUPPLIER_OF[cat], builder:document.getElementById('oBuilder').value,
     site, openPlan:new Date(document.getElementById('oOpen').value+'T12:00:00').getTime(),
     manager:document.getElementById('oMgr').value.trim()||state.user.name,
+    siteMgr:(document.getElementById('oSiteMgr')||{}).value?.trim()||'',
+    memo:(document.getElementById('oMemo')||{}).value?.trim()||'',
     createdAt:now(), stage:'DRAWING', stageAt:now(), drawingCount:oNewDrawings.length, comments:[],
     drawingLinks: link ? [{url:link, label:'', by:actorLabel(), ts:now()}] : [],
     history:[{ts:now(), actor:actorLabel(),
@@ -6003,6 +6040,37 @@ async function oResume(id){
     await store.updateOrder(id, {stage:back, stageAt:now(), cancelReason:null, cancelNote:null, cancelBy:null, cancelAt:null},
       oEntry(`중단 취소 → ${O_NM[back]} 단계로 복귀`));
     toast('중단이 취소되었습니다');
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+/* 전화번호를 누르면 바로 걸리게 (010-1234-5678 / 01012345678 / 02-123-4567 등) */
+function telLinkify(t){
+  return esc(t).replace(/(0\d{1,2})[-.\s]?(\d{3,4})[-.\s]?(\d{4})/g, (m,a,b,c)=>`<a href="tel:${a}${b}${c}" style="color:var(--blue,#2B6CB0);font-weight:800;text-decoration:underline;margin-left:3px;white-space:nowrap">📞 ${m}</a>`);
+}
+/* 현장소장·메모 수정 — 본사담당, 그 건의 시공사 (정산·중단 전) */
+function canEditOrderMemo(o){
+  if(!o || ['SETTLED','CANCEL'].includes(o.stage)) return false;
+  return role()==='hq' || (role()==='builder' && o.builder===myCo());
+}
+function oMemoModal(id){
+  const o = O(id); if(!canEditOrderMemo(o)) return;
+  openModal(`<h2>현장소장 · 메모</h2><div class="sub">${o.id} · ${esc(o.site)} · 공급사(${esc(o.supplier)})·본사·시공사가 함께 봅니다</div>
+    <label>현장소장 · 연락처</label>
+    <input id="omSiteMgr" value="${esc(o.siteMgr||'')}" placeholder="예) 홍길동 소장 010-1234-5678" autocomplete="off">
+    <label>메모</label>
+    <textarea id="omMemo" rows="4" placeholder="납품 조건·현장 출입 등">${esc(o.memo||'')}</textarea>
+    <button class="btn blk" onclick="oMemoSave('${id}')">저장</button>`);
+}
+async function oMemoSave(id){
+  const o = O(id); if(!canEditOrderMemo(o)) return;
+  const siteMgr = document.getElementById('omSiteMgr').value.trim();
+  const memo = document.getElementById('omMemo').value.trim();
+  const chg = [];
+  if(siteMgr!==(o.siteMgr||'')) chg.push('현장소장 연락처');
+  if(memo!==(o.memo||'')) chg.push('메모');
+  if(!chg.length){ closeModal(); toast('변경된 내용이 없습니다'); return; }
+  try{
+    await store.updateOrder(id, {siteMgr, memo}, oEntry(`${chg.join('·')} 수정`));
+    closeModal(); toast('저장되었습니다');
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 function oEditModal(id){
