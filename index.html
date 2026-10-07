@@ -442,7 +442,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.02b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.07';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -5154,8 +5154,9 @@ async function srModal(fromPick){
     <div id="srPrev"></div>
     ${!isHq?`<label>관련 발주 <span style="font-weight:500">(선택)</span></label>
     <select id="srOrder"><option value="">없음</option>${myOrders.map(o=>`<option value="${o.id}">${o.id} · ${esc(o.site)}</option>`).join('')}</select>`:''}
-    <label>${isHq?'메모':'요청 사유 *'}</label>
+    <label>${isHq?'등록 사유 *':'요청 사유 *'}</label>
     <textarea id="srWhy" rows="2" placeholder="예) 엔제리너스 신규 디자인 매장 펜던트 — 표준표에 없음"></textarea>
+    ${isHq?srAttInputHtml():''}
     <button class="btn blk" onclick="srSubmit('${cat}')">${isHq?'등록 — 품목표에 바로 반영':'본사에 승인 요청'}</button>
     ${srFromPick?`<button class="btn sec2 blk" onclick="oqPickRender()">← 품목 선택으로</button>`:''}`);
 }
@@ -5180,12 +5181,15 @@ async function srSubmit(cat){
   const why = ((document.getElementById('srWhy')||{}).value||'').trim();
   if(!it.n){ toast('품명을 입력해주세요'); return; }
   if(!(it.p>0)){ toast('단가를 입력해주세요'); return; }
-  if(role()!=='hq' && !why){ toast('요청 사유를 입력해주세요'); return; }
+  if(!why){ toast(role()==='hq'?'등록 사유를 입력해주세요':'요청 사유를 입력해주세요'); return; }
   try{
     if(role()==='hq'){
       const c = srSuggestCode(cat, it.b);
-      const item = { ...it, c, img:srPhoto||'', add:true, by:actorLabel(), at:now(), note:why };
+      const iid = 'SA'+Date.now().toString(36);
+      const item = { ...it, id:iid, c, img:srPhoto||'', add:true, by:actorLabel(), at:now(), note:why,
+                     apvReason:why, attN:srAtt.length };
       await store.saveSpecAdd([...(state.specAdd||[]), item]);
+      await srSaveAtt(iid);
       toast(`${c} 등록 — 품목표에 반영되었습니다`);
     } else {
       const req = { id:'SR'+Date.now().toString(36), status:'요청', co:myCo(), by:actorLabel(), at:now(),
@@ -5197,7 +5201,38 @@ async function srSubmit(cat){
     if(srFromPick && oqPickFor){ srFromPick=false; oqPickRender(); } else { closeModal(); render(); }
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
-/* 본사 승인 — 코드·단가 등을 확정 */
+/* ── 승인 근거 첨부 (견적서·카탈로그 등) — orders/SPEC-{품목id}/files 에 보관 (규칙 변경 없이 쓰는 경로) ── */
+let srAtt = [];
+const srAttKey = x => 'O:SPEC-' + (x.id || x.reqId || x.c);
+function srAttInputHtml(){
+  srAtt = [];
+  return `<label>첨부파일 <span style="font-weight:500">(견적서·카탈로그·협의 메일 캡처 등 · 여러 개 가능)</span></label>
+    <input type="file" id="srAttF" accept="image/*,.pdf,.xlsx,.xls" multiple style="display:none" onchange="srPickAtt(this)">
+    <button class="file-add" onclick="document.getElementById('srAttF').click()">📎 첨부파일 추가</button>
+    <div id="srAttList" class="note" style="display:none"></div>`;
+}
+async function srPickAtt(inp){
+  for(const f of [...inp.files]){
+    try{
+      const d = f.type.startsWith('image/') ? await compressImage(f,1600,0.72) : await readSmallFile(f);
+      srAtt.push({name:f.name, data:d});
+    }catch(e){ toast(`${f.name} — 용량이 커서 첨부할 수 없습니다 (약 650KB 이하)`); }
+  }
+  inp.value='';
+  const el = document.getElementById('srAttList');
+  if(el){ el.style.display = srAtt.length?'block':'none';
+    el.innerHTML = srAtt.map((a,i)=>`${FILE_ICON(a.name)} ${esc(a.name)} <button style="color:var(--red-dark);font-weight:800" onclick="srAtt.splice(${i},1);srPickAtt({files:[],value:''})">✕</button>`).join('<br>'); }
+}
+async function srSaveAtt(itemId){
+  let n=0;
+  for(const a of srAtt){
+    try{ await store.addFile('O:SPEC-'+itemId, {kind:'specdoc', name:a.name, data:a.data, ts:now(), by:actorLabel()}); n++; }
+    catch(e){ toast(`${a.name} 첨부 실패: `+(e.code||e.message)); }
+  }
+  srAtt = [];
+  return n;
+}
+/* 본사 승인 — 코드·단가 확정 + 승인 사유·근거 첨부 */
 async function srApproveModal(id){
   const r = (state.specReqs||[]).find(x=>x.id===id); if(!r || role()!=='hq') return;
   await loadSpec();
@@ -5205,6 +5240,7 @@ async function srApproveModal(id){
   openModal(`<h2>신규 품목 승인</h2><div class="sub">${esc(r.co)} · ${esc(r.by)} · ${fmtDT(r.at)}${r.orderId?` · 관련 ${esc(r.orderId)}`:''}</div>
     ${r.img?`<img src="${r.img}" style="width:110px;height:110px;object-fit:cover;border-radius:10px">`:''}
     <div class="note">요청 사유: ${esc(r.reason||'-')}</div>
+    ${(r.log||[]).length?`<div class="note warn">${r.log.map(l=>`${fmtDT(l.at)} · ${esc(l.by)} · ${esc(l.what)}`).join('<br>')}</div>`:''}
     <label>품목 코드 <span style="font-weight:500">(자동 제안 · 수정 가능)</span></label>
     <input id="saCode" value="${srSuggestCode(cat, it.b)}">
     <label>품명</label><input id="saName" value="${esc(it.n||'')}">
@@ -5214,6 +5250,9 @@ async function srApproveModal(id){
       <div style="flex:1"><label>확정 단가 (원)</label><input id="saPrice" type="number" inputmode="numeric" value="${it.p||0}"></div>
     </div>
     <div class="note">요청 단가 ${money(it.p)} — 협의 후 바꾸면 확정 단가로 반영됩니다.</div>
+    <label>승인 사유 * <span style="font-weight:500">(요청 업체에도 보입니다)</span></label>
+    <textarea id="saWhy" rows="2" placeholder="예) 엔제리너스 신규 디자인 표준 펜던트로 채택 · 단가 협의 완료(10/7)"></textarea>
+    ${srAttInputHtml()}
     <button class="btn blk grn" onclick="srApprove('${id}')">✅ 승인 — 품목표에 반영</button>
     <button class="btn sec2 blk" onclick="srRejectModal('${id}')">반려</button>`);
 }
@@ -5224,15 +5263,19 @@ async function srApprove(id){
   const n = document.getElementById('saName').value.trim();
   const u = document.getElementById('saUnit').value.trim() || 'EA';
   const p = Number(document.getElementById('saPrice').value)||0;
+  const why = (document.getElementById('saWhy').value||'').trim();
   if(!c){ toast('품목 코드를 입력해주세요'); return; }
   if(specAll().some(x=>x.c===c && x.g===it.g)){ toast(`${c} 코드가 이미 있습니다`); return; }
   if(!n || !(p>0)){ toast('품명과 단가를 확인해주세요'); return; }
-  const item = { ...it, c, n, u, p, img:r.img||'', add:true, by:actorLabel(), at:now(), reqId:id, reqCo:r.co };
-  reqs[i] = { ...r, status:'승인', code:c, price:p, decidedBy:actorLabel(), decidedAt:now(), img:'' };
+  if(!why){ toast('승인 사유를 입력해주세요'); return; }
+  const item = { ...it, id, c, n, u, p, img:r.img||'', add:true, by:actorLabel(), at:now(), reqId:id, reqCo:r.co,
+                 reqPrice:it.p, apvReason:why, attN:srAtt.length };
+  reqs[i] = { ...r, status:'승인', code:c, price:p, apvReason:why, decidedBy:actorLabel(), decidedAt:now(), img:'' };
   try{
     await store.saveSpecAdd([...(state.specAdd||[]), item]);
     await store.saveSpecReqs(reqs);
-    closeModal(); toast(`${c} 승인 — 모든 견적 화면 품목표에 반영되었습니다`); render();
+    const nAtt = await srSaveAtt(id);
+    closeModal(); toast(`${c} 승인 — 품목표에 반영되었습니다${nAtt?` · 첨부 ${nAtt}건`:''}`); render();
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 function srRejectModal(id){
@@ -5250,11 +5293,125 @@ async function srReject(id){
   try{ await store.saveSpecReqs(reqs); closeModal(); toast('반려했습니다'); render(); }
   catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
+/* ── 추가 품목 상세 · 수정 · 승인 취소 (2026-10-07) ── */
+const srIdx = (code, cat) => (state.specAdd||[]).findIndex(x=>x.c===code && x.g===cat);
+async function srItemModal(code, cat){
+  const x = (state.specAdd||[])[srIdx(code,cat)]; if(!x) return;
+  const key = srAttKey(x);
+  const isHq = role()==='hq';
+  const body = () => `<h2>${esc(x.c)} ${x.off?'<span class="badge b-gray">숨김</span>':''}</h2>
+    <div class="sub">${esc(x.g)} · ${esc(x.b||'')} · ${x.reqCo?`요청 ${esc(x.reqCo)} · `:''}승인 ${esc(x.by||'')} · ${x.at?fmtDT(x.at):''}</div>
+    ${x.img?`<img src="${x.img}" style="width:110px;height:110px;object-fit:cover;border-radius:10px">`:''}
+    <div class="kv"><b>품명</b>${esc(x.n)}</div>
+    <div class="kv"><b>규격</b>${esc(oqSpecLine(x))||'-'}</div>
+    ${x.pl?`<div class="kv"><b>사용 위치</b>${esc(x.pl)}</div>`:''}
+    <div class="kv"><b>단가</b><strong>${money(x.p)}</strong> / ${esc(x.u||'EA')}${x.reqPrice&&x.reqPrice!==x.p?` <span style="color:var(--sub);font-size:12px">(요청 ${money(x.reqPrice)})</span>`:''}</div>
+    <div class="kv"><b>승인 사유</b>${esc(x.apvReason||x.note||'-')}</div>
+    ${fileListHtml(key, ['specdoc'], '📎 승인 근거 첨부') || (filesLoaded[key]?'<div class="note">첨부파일 없음</div>':'<div class="note"><span class="spin dk"></span> 첨부 불러오는 중…</div>')}
+    ${(x.edits||[]).length?`<div class="note warn"><b>수정 이력</b><br>${x.edits.map(e=>`${fmtDT(e.at)} · ${esc(e.by)} · ${esc(e.changes)}${e.reason?` — ${esc(e.reason)}`:''}`).join('<br>')}</div>`:''}
+    ${isHq?`<div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn" style="flex:1;margin:0" onclick="srEditModal('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">✏ 수정</button>
+      <button class="btn sec2" style="flex:1;margin:0" onclick="srToggleOff('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">${x.off?'다시 표시':'숨기기'}</button>
+    </div>
+    <button class="btn sec2 blk" style="color:var(--red-dark)" onclick="srRevokeModal('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">↩ 승인 취소 (품목표에서 제거)</button>`:''}
+    <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`;
+  openModal(body());
+  if(!filesLoaded[key]){ await store.getFiles(key, true); if(modalOpen() && document.getElementById('modalIn').innerHTML.includes(esc(x.c))) openModal(body()); }
+}
+function srEditModal(code, cat){
+  const x = (state.specAdd||[])[srIdx(code,cat)]; if(!x || role()!=='hq') return;
+  srPhoto = null;
+  const f = (id,lb,v,ph='') => `<div style="flex:1"><label>${lb}</label><input id="${id}" value="${esc(v||'')}" placeholder="${ph}"></div>`;
+  openModal(`<h2>추가 품목 수정</h2><div class="sub">${esc(x.c)} · ${esc(x.g)} · 수정 내용은 이력에 남습니다</div>
+    <div style="display:flex;gap:6px">${f('seCode','품목 코드',x.c)}
+      <div style="flex:1"><label>브랜드</label><select id="seBrand">${Object.keys(SPEC_BRAND_PREFIX).map(b=>`<option${b===x.b?' selected':''}>${esc(b)}</option>`).join('')}</select></div></div>
+    <label>품명</label><input id="seName" value="${esc(x.n||'')}">
+    ${x.g==='조명'
+      ? `<div style="display:flex;gap:6px">${f('seK','색온도',x.k,'4000K')}${f('seW','소비전력',x.w,'12W')}</div>
+         <div style="display:flex;gap:6px">${f('seSz','외경',x.sz,'Ø120')}${f('seCut','타공',x.cut,'Ø100')}</div>`
+      : `<div style="display:flex;gap:6px">${f('seSz','규격',x.sz)}${f('seMat','재질',x.mat)}</div>`}
+    <label>사용 위치</label><input id="sePl" value="${esc(x.pl||'')}">
+    <div style="display:flex;gap:6px">
+      <div style="width:110px"><label>단위</label><select id="seUnit">${[...new Set([x.u||'EA',...SPEC_UNITS])].map(u=>`<option${u===x.u?' selected':''}>${esc(u)}</option>`).join('')}</select></div>
+      <div style="flex:1"><label>단가 (원)</label><input id="sePrice" type="number" inputmode="numeric" value="${x.p||0}"></div>
+    </div>
+    <label>제품 사진 <span style="font-weight:500">(바꿀 때만)</span></label>
+    <input type="file" id="srF" accept="image/*" style="display:none" onchange="srPickPhoto(this)">
+    <button class="file-add" onclick="document.getElementById('srF').click()"><span id="srFn">📷 사진 교체</span></button>
+    <div id="srPrev">${x.img?`<img src="${x.img}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;margin-top:6px">`:''}</div>
+    <label>수정 사유 *</label>
+    <textarea id="seWhy" rows="2" placeholder="예) 승인 시 단가 오기입 — 협의 단가 22,000원으로 정정"></textarea>
+    ${srAttInputHtml()}
+    <button class="btn blk" onclick="srEditSave('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">수정 저장</button>
+    <button class="btn sec2 blk" onclick="srItemModal('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">← 취소</button>`);
+}
+async function srEditSave(code, cat){
+  const items = (state.specAdd||[]).slice(); const i = srIdx(code,cat); if(i<0) return;
+  const x = items[i];
+  const g = id => ((document.getElementById(id)||{}).value||'').trim();
+  const why = g('seWhy');
+  if(!why){ toast('수정 사유를 입력해주세요'); return; }
+  const nx = { ...x, c:g('seCode'), b:g('seBrand'), n:g('seName'), pl:g('sePl'), u:g('seUnit')||'EA', p:Number(g('sePrice'))||0 };
+  if(cat==='조명'){ nx.k=g('seK'); nx.w=g('seW'); nx.sz=g('seSz'); nx.cut=g('seCut'); } else { nx.sz=g('seSz'); nx.mat=g('seMat'); }
+  if(srPhoto) nx.img = srPhoto;
+  if(!nx.c){ toast('품목 코드를 입력해주세요'); return; }
+  if(nx.c!==x.c && specAll().some(y=>y.c===nx.c && y.g===cat)){ toast(`${nx.c} 코드가 이미 있습니다`); return; }
+  if(!nx.n || !(nx.p>0)){ toast('품명과 단가를 확인해주세요'); return; }
+  const NM = {c:'코드',b:'브랜드',n:'품명',k:'색온도',w:'소비전력',sz:x.g==='조명'?'외경':'규격',cut:'타공',mat:'재질',pl:'사용위치',u:'단위',p:'단가'};
+  const chg = Object.keys(NM).filter(k=>(nx[k]||'')!==(x[k]||'')).map(k=>k==='p'?`단가 ${money(x.p)}→${money(nx.p)}`:`${NM[k]} ${x[k]||'-'}→${nx[k]||'-'}`);
+  if(srPhoto) chg.push('사진 교체');
+  if(srAtt.length) chg.push(`첨부 ${srAtt.length}건 추가`);
+  if(!chg.length){ toast('바뀐 내용이 없습니다'); return; }
+  Object.keys(nx).forEach(k=>{ if(nx[k]==='') delete nx[k]; });
+  nx.edits = (x.edits||[]).concat([{ by:actorLabel(), at:now(), reason:why, changes:chg.join(', ') }]);
+  if(srAtt.length) nx.attN = (x.attN||0) + srAtt.length;
+  items[i] = nx;
+  try{
+    await store.saveSpecAdd(items);
+    await srSaveAtt(x.id || x.reqId || x.c);
+    if(x.reqId){
+      const reqs = (state.specReqs||[]).slice(); const j = reqs.findIndex(r=>r.id===x.reqId);
+      if(j>=0){ reqs[j] = { ...reqs[j], code:nx.c, price:nx.p, log:(reqs[j].log||[]).concat([{by:actorLabel(), at:now(), what:`승인 내용 수정: ${chg.join(', ')} — ${why}`}]) }; await store.saveSpecReqs(reqs); }
+    }
+    srPhoto = null;
+    toast('수정되었습니다'); srItemModal(nx.c, cat);
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+function srRevokeModal(code, cat){
+  const x = (state.specAdd||[])[srIdx(code,cat)]; if(!x || role()!=='hq') return;
+  openModal(`<h2>승인 취소</h2><div class="sub">${esc(x.c)} · ${esc(x.n)}</div>
+    <div class="note warn">품목표에서 이 품목이 <b>빠집니다</b>. 이미 작성된 견적의 품목은 그대로 남습니다.
+      ${x.reqId?`<br>요청 건(${esc(x.reqCo||'')})은 <b>「승인 대기」로 되돌아가</b> 다시 승인하거나 반려할 수 있습니다.`:'<br>본사 직접 등록 품목이라 목록에서 삭제됩니다.'}</div>
+    <label>취소 사유 *</label>
+    <textarea id="svWhy" rows="2" placeholder="예) 실수로 승인 — 단가 재협의 후 다시 승인"></textarea>
+    <button class="btn blk" style="background:var(--red-dark)" onclick="srRevoke('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">승인 취소</button>
+    <button class="btn sec2 blk" onclick="srItemModal('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">← 돌아가기</button>`);
+}
+async function srRevoke(code, cat){
+  const why = (document.getElementById('svWhy').value||'').trim();
+  if(!why){ toast('취소 사유를 입력해주세요'); return; }
+  const items = (state.specAdd||[]).slice(); const i = srIdx(code,cat); if(i<0) return;
+  const x = items[i]; items.splice(i,1);
+  try{
+    await store.saveSpecAdd(items);
+    if(x.reqId){
+      const reqs = (state.specReqs||[]).slice(); const j = reqs.findIndex(r=>r.id===x.reqId);
+      if(j>=0){
+        const back = { g:x.g, b:x.b, n:x.n, u:x.u, p:x.reqPrice||x.p, sz:x.sz, pl:x.pl, k:x.k, w:x.w, cut:x.cut, mat:x.mat };
+        Object.keys(back).forEach(k=>{ if(back[k]==null||back[k]==='') delete back[k]; });
+        reqs[j] = { ...reqs[j], status:'요청', img:x.img||'', item:back, code:null, price:null,
+                    log:(reqs[j].log||[]).concat([{by:actorLabel(), at:now(), what:`승인 취소(${x.c}) — ${why}`}]) };
+        await store.saveSpecReqs(reqs);
+      }
+    }
+    closeModal(); toast(x.reqId ? '승인을 취소했습니다 — 승인 대기로 되돌아갔습니다' : '품목을 삭제했습니다'); render();
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 async function srToggleOff(code, cat){
   const items = (state.specAdd||[]).map(x=> (x.c===code && x.g===cat) ? {...x, off:!x.off} : x);
   const t = items.find(x=>x.c===code && x.g===cat);
   if(!confirm(t.off ? `${code} 를 품목표에서 숨길까요? (이미 작성된 견적은 그대로)` : `${code} 를 다시 품목표에 표시할까요?`)) return;
-  try{ await store.saveSpecAdd(items); toast(t.off?'숨겼습니다':'다시 표시합니다'); render(); }
+  try{ await store.saveSpecAdd(items); toast(t.off?'숨겼습니다':'다시 표시합니다'); if(modalOpen()) srItemModal(code, cat); else render(); }
   catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 function specReqCardHtml(){
@@ -5269,7 +5426,7 @@ function specReqCardHtml(){
       <div class="note" style="margin:0 0 8px">표준 품목표에 없는 품목은 여기서 요청하세요. 본사 승인 후 견적 품목 선택에 「신규」로 나옵니다. 승인 전에는 견적서에 「직접 입력」으로 넣으면 됩니다.</div>
       <button class="btn blk" style="margin-top:0" onclick="srModal(false)">＋ 신규 품목 요청</button>
       ${mine.slice(0,8).map(r=>`<div class="dayrow"><span style="flex:1"><b>${esc(r.item.n)}</b> <span style="color:var(--sub);font-size:12px">${esc(r.item.b||'')} · ${money(r.item.p)}/${esc(r.item.u||'')}</span>
-        <br><span style="font-size:12px;color:var(--sub)">${fmtD(r.at)}${r.status==='승인'?` → 코드 <b>${esc(r.code)}</b> · 확정 ${money(r.price)}`:''}${r.status==='반려'?` · ${esc(r.rejectReason||'')}`:''}</span></span>${st(r.status)}</div>`).join('')}
+        <br><span style="font-size:12px;color:var(--sub)">${fmtD(r.at)}${r.status==='승인'?` → 코드 <b>${esc(r.code)}</b> · 확정 ${money(r.price)}${r.apvReason?` · ${esc(r.apvReason)}`:''}`:''}${r.status==='반려'?` · ${esc(r.rejectReason||'')}`:''}${(r.log||[]).length?`<br>↻ ${esc(r.log[r.log.length-1].what)}`:''}</span></span>${st(r.status)}</div>`).join('')}
     </div>`;
   }
   const pend = srPending().filter(r=>!cat || r.item.g===cat);
@@ -5287,8 +5444,8 @@ function specReqCardHtml(){
       <button class="btn sec2" style="flex:1;margin:0" onclick="state.srShowAdded=!state.srShowAdded;render()">${state.srShowAdded?'추가 품목 닫기':'추가 품목 보기'}</button>
     </div>
     ${state.srShowAdded ? (added.length ? added.map(x=>`<div class="dayrow" style="${x.off?'opacity:.45':''}">
-        <span style="flex:1"><b>${esc(x.c)}</b> ${esc(x.n)} <span style="color:var(--sub);font-size:12px">· ${money(x.p)}/${esc(x.u||'')}${x.reqCo?` · 요청 ${esc(x.reqCo)}`:''} · ${fmtD(x.at)}</span></span>
-        <button class="btn sm sec2" style="margin:0" onclick="srToggleOff('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">${x.off?'다시 표시':'숨기기'}</button></div>`).join('') : '<div class="note">아직 추가된 품목이 없습니다.</div>') : ''}
+        <span style="flex:1"><b>${esc(x.c)}</b> ${esc(x.n)} <span style="color:var(--sub);font-size:12px">· ${money(x.p)}/${esc(x.u||'')}${x.reqCo?` · 요청 ${esc(x.reqCo)}`:''} · ${fmtD(x.at)}${(x.edits||[]).length?` · 수정 ${x.edits.length}회`:''}${x.attN?` · 📎${x.attN}`:''}${x.off?' · 숨김':''}</span></span>
+        <button class="btn sm sec2" style="margin:0" onclick="srItemModal('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">상세·수정</button></div>`).join('') : '<div class="note">아직 추가된 품목이 없습니다.</div>') : ''}
   </div>`;
 }
 function vODash(){
