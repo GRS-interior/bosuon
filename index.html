@@ -442,7 +442,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.07b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.12';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -564,6 +564,7 @@ function oWait(o){
   const s = o.stage;
   if(s==='CANCEL') return '취소됨';
   if(s==='DRAWING') return '공급사 수량산출·견적 대기';
+  if(s==='QUOTE' && o.reqRequote) return '공급사 물량 수정 대기 (승인 철회)';
   if(!o.builder && (s==='HQAPV' || (s==='QUOTE' && !oIsDir(o) && o.quote))) return '시공사 지정 대기 (입찰 전)';
   if(s==='QUOTE')   return oIsDir(o) ? '본사 승인 대기' : '시공사 승인 대기';
   if(s==='HQAPV')   return '시공사 승인 대기';
@@ -5698,6 +5699,13 @@ function vODetail(){
     if(!o.builder && rl==='hq' && o.quote && !['SETTLED','CANCEL'].includes(o.stage))
       s += `<button class="btn blk" onclick="oAssignBldModal('${o.id}')">🏗 시공사 지정</button>`;
   }
+  if((o.apvRevokes||[]).length){
+    s += `<div class="note warn">↩ <b>승인 철회 ${o.apvRevokes.length}회</b><br>` + o.apvRevokes.map(v=>
+      `${fmtDT(v.at)} · ${esc(v.by)} · ${money(v.prevAmount)} — ${esc(v.reason)}`).join('<br>')
+      + (o.stage==='QUOTE' ? `<br><b>→ 공급사 물량 수정 후 다시 ${oIsDir(o)?'본사·시공사':'시공사'} 승인</b>을 받습니다.` : '') + `</div>`;
+  }
+  if(canRevokeOApv(o))
+    s += `<button class="btn sec2 blk" onclick="oRevokeModal('${o.id}')">↩ 승인 철회 · 물량 수정</button>`;
   if(oCanAct(o, oIsDir(o)?'HQAPV':'QUOTE'))
     s += `<div class="note">아래 물량과 금액에 이의가 없으면 승인해주세요. 승인 후에는 이 내용으로 납품이 진행됩니다.</div>
       <button class="btn blk grn" onclick="oBldConfirmModal('${o.id}')">✅ 시공사 승인 처리</button>`;
@@ -6372,6 +6380,7 @@ async function oQuoteSave(id){
               note:document.getElementById('oqNote').value.trim(),
               analysis: oqAnalysis || null };
   const patch = { quote };
+  if(o.reqRequote) patch.reqRequote = false;
   if(o.stage==='DRAWING'){ patch.stage='QUOTE'; patch.stageAt=now(); }
   const fd = oqFileData, fn = oqFileName;
   oqFileData=null; oqFileName=null; oqAnalysis=null; oqFreight=null;
@@ -6596,6 +6605,40 @@ async function oBldConfirmSave(id){
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
+/* ── 시공사 승인 철회 → 물량 수정 (2026-10-12) ──
+   시공사 승인 후 납품 전(납품일 협의·납품 대기)에 수량이 바뀌면 승인을 되돌려 공급사가 다시 산출한다.
+   납품 후 변동은 기존 「반품」으로 처리. */
+function canRevokeOApv(o){
+  if(!o || !o.bldConfirm || o.receipt) return false;
+  if(!['APPROVED','SCHED'].includes(o.stage)) return false;
+  return role()==='hq' || (role()==='builder' && o.builder===myCo());
+}
+function oRevokeModal(id){
+  const o = O(id); if(!canRevokeOApv(o)) return;
+  openModal(`<h2>승인 철회 · 물량 수정</h2>
+    <div class="sub">${o.id} · ${esc(o.site)} · ${esc(oBld(o))}</div>
+    <div class="note">현재 확정 — <b>${money(oAmount(o))}</b> · 시공사 승인 ${esc(o.bldConfirm.by)} · ${fmtDT(o.bldConfirm.at)}</div>
+    <div class="note warn">철회하면 <b>「견적」 단계로 되돌아가</b> ${esc(o.supplier)}가 물량을 다시 산출합니다.
+      ${oIsDir(o)?'<br>직영 방식이라 수정된 견적은 <b>본사 승인 → 시공사 승인</b>을 다시 거칩니다.':'<br>수정된 견적은 <b>시공사 승인</b>을 다시 받습니다.'}
+      ${o.sched?`<br>잡혀 있던 <b>납품일(${fmtD(o.sched.planDate)})은 취소</b>되고, 다시 승인된 뒤 새로 협의합니다.`:''}
+      <br>기존 견적·승인 기록은 이력에 그대로 남습니다.</div>
+    <label>철회 사유 · 변동 내용 * <span style="font-weight:500">(공급사에게 보입니다)</span></label>
+    <textarea id="orvWhy" rows="3" placeholder="예) 도면 변경으로 홀 다운라이트 12EA → 16EA, 주방 평판 2EA 삭제"></textarea>
+    <button class="btn blk" onclick="oRevokeSave('${id}')">승인 철회 — 공급사에 물량 수정 요청</button>`);
+}
+async function oRevokeSave(id){
+  const o = O(id); if(!canRevokeOApv(o)) return;
+  const why = (document.getElementById('orvWhy').value||'').trim();
+  if(!why){ toast('철회 사유·변동 내용을 입력해주세요'); return; }
+  const rec = { at:now(), by:actorLabel(), reason:why, fromStage:o.stage, prevAmount:oAmount(o),
+                prevBldConfirm:o.bldConfirm||null, prevConfirm:o.confirm||null, prevSched:o.sched||null };
+  const patch = { stage:'QUOTE', stageAt:now(), bldConfirm:null, confirm:null, sched:null, reqRequote:true,
+                  apvRevokes:(o.apvRevokes||[]).concat([rec]) };
+  try{
+    await store.updateOrder(id, patch, oEntry(`승인 철회 → 물량 수정 요청 (${money(rec.prevAmount)}) — ${why}`));
+    closeModal(); toast(`승인을 철회했습니다 — ${o.supplier}에 물량 수정을 요청했습니다`);
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 function oSchedModal(id){
   const o = O(id); if(!o) return;
   const sc = o.sched||{};
