@@ -298,6 +298,57 @@ window.addEventListener('appinstalled', ()=>{ window.deferredPrompt=null; try{ t
   /* 로그인 화면 위에서 여는 모달·토스트(앱 설치 안내 등)는 로그인 레이어보다 위에 */
   #login.open ~ .modal.open{z-index:310}
   #login.open ~ .toast{z-index:320}
+  /* ===== 모션 (2026-10-13) — 눌림 반응 · 화면 전환 · 시트 올라오기 =====
+     화면 전환 효과는 사용자가 이동할 때(go)만 붙인다. 실시간 갱신으로 다시 그려질 때는 움직이지 않는다. */
+  :root{ --ease-out:cubic-bezier(.22,.8,.24,1); --ease-spring:cubic-bezier(.34,1.3,.5,1); }
+  html{-webkit-tap-highlight-color:transparent}
+  button, .card, .tile, .req, .specrow, .stagebar, .chips button, nav button{
+    transition: transform .16s var(--ease-out), background-color .18s ease, box-shadow .18s ease, color .18s ease, opacity .18s ease; }
+  button:active:not(:disabled), .req:active{ transform:scale(.97) }
+  .btn:active:not(:disabled){ transform:scale(.96) }
+  button.card:active, .req:active{ transform:scale(.985); box-shadow:0 1px 2px rgba(0,0,0,.06) }
+  nav button:active, .chips button:active{ transform:scale(.94) }
+  nav button.on{ transition:color .2s ease, border-color .25s var(--ease-out) }
+
+  /* 화면 전환 — 앞으로 가기(상세)는 오른쪽에서, 나머지는 아래에서 살짝 */
+  #main.vt-fwd{ animation:vtFwd .3s var(--ease-out) both }
+  #main.vt-up { animation:vtUp  .3s var(--ease-out) both }
+  #main.vt-back{ animation:vtBack .28s var(--ease-out) both }
+  @keyframes vtFwd { from{ opacity:0; transform:translateX(22px) } to{ opacity:1; transform:none } }
+  @keyframes vtBack{ from{ opacity:0; transform:translateX(-18px) } to{ opacity:1; transform:none } }
+  @keyframes vtUp  { from{ opacity:0; transform:translateY(10px) } to{ opacity:1; transform:none } }
+  /* 카드가 차례로 올라온다 (처음 8개만) */
+  #main.vt-up > .card, #main.vt-up > .tiles, #main.vt-up > button.card, #main.vt-up > .req{ animation:cardIn .38s var(--ease-out) both }
+  #main.vt-up > :nth-child(2){animation-delay:.03s} #main.vt-up > :nth-child(3){animation-delay:.06s}
+  #main.vt-up > :nth-child(4){animation-delay:.09s} #main.vt-up > :nth-child(5){animation-delay:.12s}
+  #main.vt-up > :nth-child(6){animation-delay:.15s} #main.vt-up > :nth-child(7){animation-delay:.18s}
+  #main.vt-up > :nth-child(n+8){animation-delay:.2s}
+  @keyframes cardIn{ from{ opacity:0; transform:translateY(12px) } to{ opacity:1; transform:none } }
+
+  /* 바텀시트 모달 */
+  .modal.open{ animation:fadeIn .22s ease both }
+  .modal.open .modal-in{ animation:sheetUp .34s var(--ease-out) both }
+  @media (min-width:700px){ .modal.open .modal-in{ animation:popIn .26s var(--ease-out) both } }
+  .modal.closing{ display:flex; pointer-events:none; animation:fadeOut .2s ease both }
+  .modal.closing .modal-in{ animation:sheetDown .22s ease-in both }
+  @keyframes fadeIn{ from{ background-color:rgba(15,18,25,0) } }
+  @keyframes fadeOut{ to{ background-color:rgba(15,18,25,0) } }
+  @keyframes sheetUp{ from{ transform:translateY(100%) } to{ transform:none } }
+  @keyframes sheetDown{ to{ transform:translateY(100%) } }
+  @keyframes popIn{ from{ opacity:0; transform:translateY(14px) scale(.98) } to{ opacity:1; transform:none } }
+  /* 알림 패널 — 오른쪽에서 밀려 나온다 */
+  .panel.open{ animation:fadeIn .2s ease both }
+  .panel.open .panel-in{ animation:panelIn .3s var(--ease-out) both }
+  @keyframes panelIn{ from{ transform:translateX(100%) } to{ transform:none } }
+  /* 토스트 */
+  .toast{ animation:toastIn .32s var(--ease-spring) both }
+  @keyframes toastIn{ from{ opacity:0; transform:translate(-50%,14px) scale(.96) } to{ opacity:1; transform:translate(-50%,0) } }
+  /* 진행 막대가 채워지듯 */
+  #main.vt-up .stagebar .fl, #main.vt-up .minibar > *{ animation:barGrow .6s var(--ease-out) both; transform-origin:left }
+  @keyframes barGrow{ from{ transform:scaleX(0) } to{ transform:none } }
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{ animation-duration:.01ms !important; animation-delay:0s !important; transition-duration:.01ms !important }
+  }
   .login-card{background:#fff;border-radius:20px;padding:28px 22px;width:100%;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
   .login-card .lg{text-align:center;margin-bottom:6px;font-size:24px;font-weight:800;color:var(--red-dark);letter-spacing:-.5px}
   .login-card .ds{text-align:center;font-size:13px;color:var(--sub);margin-bottom:18px}
@@ -486,7 +537,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.13';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.14';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -1982,15 +2033,40 @@ function go(v,id){
   if(v==='chat') ensureRooms();
   if(v==='cal') ensureIcnCal();
   if((v==='board'||v==='post') && LIVE && state.postsLazy && !state.unsubPosts) subscribePosts(null, true);
+  const prevView = state._lastView; state._lastView = v;
   render(); window.scrollTo(0,0);
+  playViewTransition(prevView, v);
   if(v==='detail'&&id) loadDetailFiles(id);
   if(v==='odetail'&&state.orderId) loadDetailFiles('O:'+state.orderId);
   if(v==='chatroom') renderChatMsgs();
 }
 function goOrder(id){ go('odetail', id); }
+/* 화면 전환 효과 — 상세로 들어가면 오른쪽에서, 상세에서 나오면 왼쪽에서, 탭 이동은 아래에서 */
+const DETAIL_VIEWS = ['detail','odetail','post','chatroom','deptrep'];
+function playViewTransition(from, to){
+  const m = document.getElementById('main'); if(!m) return;
+  let cls = 'vt-up';
+  if(DETAIL_VIEWS.includes(to) && from!==to) cls = 'vt-fwd';
+  else if(DETAIL_VIEWS.includes(from) && !DETAIL_VIEWS.includes(to)) cls = 'vt-back';
+  m.classList.remove('vt-up','vt-fwd','vt-back'); void m.offsetWidth; m.classList.add(cls);
+  clearTimeout(m._vt); m._vt = setTimeout(()=>m.classList.remove(cls), 700);
+}
 function togglePanel(open){ document.getElementById('panel').classList.toggle('open',open); if(open) renderNotis(); }
-function closeModal(){ document.getElementById('modal').classList.remove('open'); render(); }
-function openModal(html){ document.getElementById('modalIn').innerHTML=html; document.getElementById('modal').classList.add('open'); }
+function closeModal(){
+  const md = document.getElementById('modal');
+  const wasOpen = md.classList.contains('open');
+  md.classList.remove('open');
+  if(wasOpen && !matchMedia('(prefers-reduced-motion: reduce)').matches){
+    md.classList.add('closing'); clearTimeout(md._ct);
+    md._ct = setTimeout(()=>md.classList.remove('closing'), 230);
+  }
+  render();
+}
+function openModal(html){
+  const md = document.getElementById('modal');
+  clearTimeout(md._ct); md.classList.remove('closing');
+  document.getElementById('modalIn').innerHTML=html; md.classList.add('open');
+}
 function modalOpen(){ return document.getElementById('modal').classList.contains('open'); }
 const R = id => state.reqs.find(x=>x.id===id);
 function waitLabel(r){
@@ -2088,6 +2164,7 @@ function render(){
      실시간 갱신·1분 타이머가 돌아도 입력 중인 내용이 날아가지 않도록 */
   else if(state.view==='new'){ if(!document.getElementById('nTitle')){ m.innerHTML = vNew(); setTimeout(warrantyHint,0); } }
   else if(state.view==='set') m.innerHTML = vSet();
+  else if(state.view==='deptrep') m.innerHTML = vDeptRep();
   else if(state.view==='chat') m.innerHTML = vChat();
   else if(state.view==='cal') m.innerHTML = vCal();
   else if(state.view==='chatroom') m.innerHTML = vChatRoom();
@@ -2342,9 +2419,157 @@ function vDash(){
     </div>
     <div class="card"><div class="h2">단계별 현황 <span style="font-size:10.5px;color:var(--sub);font-weight:600">터치하면 해당 목록으로 이동</span></div>${bars}</div>
     ${asDashCard(rs)}
+    ${deptDashCard(rs)}
     ${isMgr()?VENDORS.filter(v=>!isBranch()||v==='우리아이엔티').map(v=>partnerCard(rs.filter(r=>!isDefect(r)&&reqVendor(r)===v), v)).join(''):''}
     <div class="h2" style="margin:16px 2px 10px">⚠️ 기한초과 — 조치 필요 <span class="badge b-red">${over.length}건</span></div>
     ${overList}`;
+}
+
+/* ===== 부서별 담당 현황 (본사, 2026-10-13) =====
+   「산업안전팀 일이 늘었다」는 말에 데이터로 답하기 위한 화면.
+   담당부서가 어떻게 정해졌는지(점포 선택 / 업체 판단 / 본사 이관)를 구분하고,
+   월별·주별 추이와 전체 대비 비율, 진행 상태, 본사 이관의 양방향 건수를 보여준다. */
+const SAFE = '산업안전팀', INT = '인테리어팀';
+const LAUNCH_TS = new Date('2026-09-01T00:00:00').getTime();
+function deptOrigin(r){
+  const log = r.deptLog || [];
+  const lastIn = [...log].reverse().find(x=>x.to===r.dept);
+  if(lastIn) return 'hq';
+  if(r.deptOrig && r.deptOrig===r.dept) return 'store';
+  if(r.deptVendor && r.deptVendor===r.dept) return 'vendor';
+  return 'store';
+}
+const ORIGIN_NM = { store:'점포 접수 시 선택', vendor:'업체 판단 (견적 시)', hq:'본사 이관' };
+function weekStart(ts){ const d=new Date(ts); d.setHours(0,0,0,0); const w=(d.getDay()+6)%7; d.setDate(d.getDate()-w); return d.getTime(); }
+function deptStats(rs){
+  const all = rs.filter(r=>r.createdAt>=LAUNCH_TS);
+  const safe = all.filter(r=>r.dept===SAFE);
+  const intr = all.filter(r=>r.dept===INT);
+  const unk  = all.filter(r=>!r.dept || r.dept==='잘모르겠음');
+  const months = {};
+  all.forEach(r=>{ const k=ymOf(r.createdAt); const m=months[k]=months[k]||{all:0,safe:0,intr:0}; m.all++; if(r.dept===SAFE)m.safe++; if(r.dept===INT)m.intr++; });
+  const wk0 = weekStart(now());
+  const weeks = [];
+  for(let i=7;i>=0;i--){
+    const a = wk0 - i*7*DAY, b = a + 7*DAY;
+    const inW = all.filter(r=>r.createdAt>=a && r.createdAt<b);
+    weeks.push({a, all:inW.length, safe:inW.filter(r=>r.dept===SAFE).length});
+  }
+  const origin = {store:0, vendor:0, hq:0};
+  safe.forEach(r=>origin[deptOrigin(r)]++);
+  const moves = all.flatMap(r=>(r.deptLog||[]).map(x=>({...x, id:r.id, store:r.store, title:r.title})));
+  const toSafe = moves.filter(x=>x.to===SAFE), fromSafe = moves.filter(x=>x.from===SAFE && x.to!==SAFE);
+  const vendorSafeButHq = all.filter(r=>r.deptVendor===SAFE && r.dept!==SAFE);
+  const st = list => ({ open:list.filter(r=>!['DONE','DROPPED'].includes(r.stage)).length,
+                        done:list.filter(r=>r.stage==='DONE').length,
+                        drop:list.filter(r=>r.stage==='DROPPED').length,
+                        over:list.filter(isOver).length });
+  const lastAmt = r => { const e=(r.estimates||[]); const ok=[...e].reverse().find(x=>x.status==='승인'); return (ok||e[e.length-1]||{}).amount||0; };
+  const durs = safe.filter(r=>r.stage==='DONE'&&r.completedAt).map(r=>(r.completedAt-r.createdAt)/DAY);
+  return { all, safe, intr, unk, months, weeks, origin, toSafe, fromSafe, vendorSafeButHq,
+           sSafe:st(safe), sIntr:st(intr),
+           amtSafe: safe.reduce((a,r)=>a+lastAmt(r),0), amtAll: all.reduce((a,r)=>a+lastAmt(r),0),
+           avgDur: durs.length ? Math.round(durs.reduce((a,b)=>a+b,0)/durs.length) : null,
+           capped: rs.length>=500 };
+}
+const pct = (a,b) => b ? Math.round(a/b*1000)/10 : 0;
+function deptDashCard(rs){
+  if(role()!=='hq') return '';
+  const S = deptStats(rs);
+  if(!S.all.length) return '';
+  const thisM = ymOf(now()), prevM = ymOf(new Date(new Date().getFullYear(), new Date().getMonth()-1, 15).getTime());
+  const m1 = S.months[thisM]||{all:0,safe:0}, m0 = S.months[prevM]||{all:0,safe:0};
+  return `<button class="card" style="width:100%;text-align:left" onclick="go('deptrep')">
+    <div class="h2">🦺 산업안전팀 담당 현황 <span class="badge b-amber">${S.safe.length}건 · ${pct(S.safe.length,S.all.length)}%</span></div>
+    <div class="kv"><b>이번 달</b>${m1.safe}건 / 전체 ${m1.all}건 (${pct(m1.safe,m1.all)}%)</div>
+    <div class="kv"><b>지난 달</b>${m0.safe}건 / 전체 ${m0.all}건 (${pct(m0.safe,m0.all)}%)</div>
+    <div class="kv"><b>본사 이관</b>안전팀으로 ${S.toSafe.length}건 · 안전팀에서 ${S.fromSafe.length}건</div>
+    <div style="font-size:12.5px;color:var(--sub);font-weight:700;margin-top:6px">부서별 현황 자세히 보기 ›</div>
+  </button>`;
+}
+function vDeptRep(){
+  if(role()!=='hq') return '<div class="empty">본사담당만 볼 수 있습니다</div>';
+  const S = deptStats(visibleReqs());
+  const first = S.all.length ? Math.min(...S.all.map(r=>r.createdAt)) : now();
+  const mRows = Object.keys(S.months).sort().map(k=>{ const m=S.months[k];
+    return `<tr><td>${k}</td><td class="num">${m.all}</td><td class="num"><b>${m.safe}</b></td><td class="num">${pct(m.safe,m.all)}%</td><td class="num">${m.intr}</td></tr>`; }).join('');
+  const wMax = Math.max(1, ...S.weeks.map(w=>w.all));
+  const wBars = S.weeks.map(w=>{ const d=new Date(w.a);
+    return `<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12.5px">
+      <span style="width:46px;color:var(--sub)">${d.getMonth()+1}/${d.getDate()}~</span>
+      <div style="flex:1;height:16px;background:var(--gray-bg);border-radius:6px;position:relative;overflow:hidden">
+        <div style="position:absolute;inset:0 auto 0 0;width:${w.all/wMax*100}%;background:#D9DEE6;border-radius:6px"></div>
+        <div style="position:absolute;inset:0 auto 0 0;width:${w.safe/wMax*100}%;background:var(--amber);border-radius:6px"></div>
+      </div>
+      <span style="width:72px;text-align:right"><b>${w.safe}</b> / ${w.all}건</span></div>`; }).join('');
+  const oTot = S.safe.length || 1;
+  const oRow = k => `<div style="display:flex;align-items:center;gap:10px;margin:7px 0;font-size:13.5px">
+      <span style="flex:1;font-weight:700">${ORIGIN_NM[k]}</span>
+      <div style="width:38%;height:10px;background:var(--gray-bg);border-radius:6px;overflow:hidden"><div style="height:100%;width:${pct(S.origin[k],oTot)}%;background:${k==='hq'?'var(--red)':'var(--amber)'};border-radius:6px"></div></div>
+      <span style="width:84px;text-align:right"><b>${S.origin[k]}건</b> <span style="color:var(--sub)">${pct(S.origin[k],oTot)}%</span></span></div>`;
+  const stage = {}; S.safe.forEach(r=>{ stage[r.stage]=(stage[r.stage]||0)+1; });
+  const stRows = [...STAGES,'DROPPED'].filter(k=>stage[k]).map(k=>`<span class="badge b-gray" style="margin:2px">${STAGE_NM[k]} ${stage[k]}</span>`).join('');
+  const mvRow = x => `<div style="font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line)"><b>${fmtD(x.at)}</b> ${esc(x.from||'미지정')} → ${esc(x.to)} · <button style="text-decoration:underline;font-weight:700" onclick="go('detail','${x.id}')">${esc(x.store)}</button> ${esc(x.title||'')}${x.reason?`<div style="color:var(--sub)">사유: ${esc(x.reason)}</div>`:''}</div>`;
+  const list = S.safe.slice().sort((a,b)=>b.createdAt-a.createdAt);
+  return `<div class="card">
+    <div class="h2">🦺 부서별 담당 현황 <span style="font-size:11px;color:var(--sub);font-weight:600">${fmtD(first)} ~ ${fmtD(now())} 접수분${S.capped?' · 최근 500건 기준':''}</span></div>
+    <div class="tiles" style="margin-top:6px">
+      <div class="tile"><div class="n">${S.all.length}</div><div class="t">전체 접수</div></div>
+      <div class="tile"><div class="n" style="color:var(--amber)">${S.safe.length}</div><div class="t">산업안전팀 (${pct(S.safe.length,S.all.length)}%)</div></div>
+      <div class="tile"><div class="n">${S.intr.length}</div><div class="t">인테리어팀 (${pct(S.intr.length,S.all.length)}%)</div></div>
+      <div class="tile"><div class="n" style="color:var(--sub)">${S.unk.length}</div><div class="t">미지정</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="h2">월별 접수 — 산업안전팀 비율</div>
+    <div class="tscroll"><table class="itab"><thead><tr><th>월</th><th class="num">전체</th><th class="num">안전팀</th><th class="num">비율</th><th class="num">인테리어팀</th></tr></thead><tbody>${mRows}</tbody></table></div>
+  </div>
+  <div class="card">
+    <div class="h2">주별 추이 (최근 8주) <span style="font-size:11px;color:var(--sub);font-weight:600"><span style="color:var(--amber)">■</span> 안전팀 · <span style="color:#B8C0CC">■</span> 전체</span></div>
+    ${wBars}
+  </div>
+  <div class="card">
+    <div class="h2">안전팀 담당이 정해진 경로</div>
+    ${oRow('store')}${oRow('vendor')}${oRow('hq')}
+    <div class="note" style="margin-top:8px">본사가 안전팀으로 넘긴 건 <b>${S.toSafe.length}건</b>, 안전팀 건을 인테리어팀으로 가져온 건 <b>${S.fromSafe.length}건</b>입니다.
+      ${S.vendorSafeButHq.length?`<br>업체가 안전팀이라고 판단했지만 현재 다른 부서가 맡은 건: <b>${S.vendorSafeButHq.length}건</b>`:''}
+      <br><span style="color:var(--sub)">※ 10/13 이전 접수 중 점포 선택과 업체 판단이 같은 건은 「업체 판단」으로 집계됩니다.</span></div>
+    ${S.toSafe.length||S.fromSafe.length?`<div style="margin-top:8px">${[...S.toSafe,...S.fromSafe].sort((a,b)=>b.at-a.at).map(mvRow).join('')}</div>`:''}
+  </div>
+  <div class="card">
+    <div class="h2">안전팀 건 진행 상태</div>
+    <div class="kv"><b>진행중</b>${S.sSafe.open}건${S.sSafe.over?` · <span style="color:var(--red-dark);font-weight:700">기한초과 ${S.sSafe.over}건</span>`:''}</div>
+    <div class="kv"><b>완료</b>${S.sSafe.done}건${S.avgDur!=null?` · 평균 처리 ${S.avgDur}일`:''}</div>
+    <div class="kv"><b>중단</b>${S.sSafe.drop}건</div>
+    <div class="kv"><b>견적 규모</b>${money(S.amtSafe)} <span style="color:var(--sub)">(전체 ${money(S.amtAll)}의 ${pct(S.amtSafe,S.amtAll)}%)</span></div>
+    <div style="margin-top:6px">${stRows}</div>
+    <div class="note" style="margin-top:8px">비교 — 인테리어팀: 진행중 ${S.sIntr.open} · 완료 ${S.sIntr.done} · 중단 ${S.sIntr.drop}</div>
+  </div>
+  <div class="card">
+    <div class="h2">안전팀 담당 건 목록 <span class="badge b-amber">${list.length}건</span></div>
+    ${list.map(r=>`<button style="display:block;width:100%;text-align:left;padding:8px 0;border-bottom:1px solid var(--line)" onclick="go('detail','${r.id}')">
+      <div style="font-size:13.5px;font-weight:800">${esc(r.store)} <span style="font-weight:600;color:var(--sub)">· ${fmtD(r.createdAt)}</span></div>
+      <div style="font-size:12.5px">${esc(r.title)}</div>
+      <div style="margin-top:3px"><span class="badge b-gray">${STAGE_NM[r.stage]||r.stage}</span> <span class="badge ${deptOrigin(r)==='hq'?'b-red':'b-blue'}">${ORIGIN_NM[deptOrigin(r)]}</span></div>
+    </button>`).join('') || '<div class="empty">안전팀 담당 건이 없습니다</div>'}
+    <button class="btn sec2 blk" onclick="exportDeptCSV()">⬇ 안전팀 건 엑셀(CSV) 내려받기</button>
+  </div>
+  <button class="btn sec2 blk" onclick="go('dash')">← 대시보드로</button>`;
+}
+function exportDeptCSV(){
+  const S = deptStats(visibleReqs());
+  const head = ['접수번호','접수일','점포','공사내용','현재 단계','담당 지정 경로','점포 선택(접수)','업체 판단','본사 이관 이력','견적금액','완료일'];
+  const rows = S.safe.map(r=>{
+    const e=(r.estimates||[]); const amt=(([...e].reverse().find(x=>x.status==='승인'))||e[e.length-1]||{}).amount||'';
+    return [r.id, fmtD(r.createdAt), r.store, r.title, STAGE_NM[r.stage]||r.stage, ORIGIN_NM[deptOrigin(r)],
+      r.deptOrig||'', r.deptVendor||'', (r.deptLog||[]).map(x=>`${fmtD(x.at)} ${x.from||'미지정'}→${x.to}${x.reason?' ('+x.reason+')':''}`).join('; '),
+      amt, r.completedAt?fmtD(r.completedAt):''];
+  });
+  const csv = '﻿'+[head,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = '산업안전팀_담당현황.csv'; a.click();
+  toast('CSV 파일이 다운로드되었습니다');
 }
 
 /* ===== 오픈 하자 A/S 현황 ===== */
@@ -3103,7 +3328,7 @@ async function submitNew(){
   const isOpen = newDraft.kind==='open';
   const openTs = isOpen && newDraft.openDate ? new Date(newDraft.openDate+'T12:00:00').getTime() : null;
   const elapsed = openTs!=null ? Math.floor((now()-openTs)/DAY) : null;
-  const r = { id, store:storeNm, title, desc, urgency:newDraft.urg||'보통', dept:newDraft.dept||'잘모르겠음', vendorCo:storeVendor(storeNm),
+  const r = { id, store:storeNm, title, desc, urgency:newDraft.urg||'보통', dept:newDraft.dept||'잘모르겠음', deptOrig:newDraft.dept||'잘모르겠음', vendorCo:storeVendor(storeNm),
     kind: isOpen?'open':'fix',
     createdAt:now(), stage:'SURVEY', stageAt:now(), estimates:[], comments:[], photoCount:photos.length,
     history:[{ts:now(),actor:actorLabel(),
