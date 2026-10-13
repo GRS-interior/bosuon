@@ -486,7 +486,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.12b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.13';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -2048,6 +2048,7 @@ function render(){
   const oCmtVal = oCmtEl ? oCmtEl.value : '';
   const chatEl = document.getElementById('chatIn');
   const chatVal = chatEl ? chatEl.value : '';
+  const focusedId = document.activeElement ? document.activeElement.id : '';
 
   const sys = document.getElementById('sysbar');
   if(!LIVE) { sys.className='sysbar'; sys.textContent='데모 모드 — 데이터가 저장되지 않습니다. 운영하려면 파일 상단에 Firebase 설정을 넣어주세요.'; sys.style.display='block'; }
@@ -2105,8 +2106,11 @@ function render(){
   if(oCmtEl2 && oCmtVal) oCmtEl2.value = oCmtVal;
   const chatEl2 = document.getElementById('chatIn');
   if(chatEl2 && chatVal) chatEl2.value = chatVal;
+  /* 검색창에 입력 중이었다면(실시간 갱신으로 다시 그려진 경우) 커서를 그 자리로 되돌린다 */
+  if(focusedId && SEARCH_IDS.includes(focusedId)) refocusSearch(focusedId);
   if(state.view==='chatroom') renderChatMsgs();
 }
+const SEARCH_IDS = ['oq','listSq','roomSq','setSq'];
 /* ===== 미확인 채팅 =====
    방 문서의 누적 메시지 수(msgN)와 내가 마지막으로 본 지점(seenN)을 비교해 개수를 센다.
    msgN이 없는 예전 방은 시각으로만 판단해 개수 대신 '새 글'로 표시한다(-1). */
@@ -5717,7 +5721,8 @@ function oRow(o){
     <div class="row2"><div class="minibar">${bar}</div>${o.stage==='SETTLED'?'<span class="badge b-green">정산완료</span>':oDdayBadge(o)}</div>
   </button>`;
 }
-function vOList(){
+/* 검색 결과 부분만 — 입력 중 화면 전체를 다시 그리면 한글 조합(자음·모음)이 끊기므로 이 부분만 갱신한다 (2026-10-13) */
+function oListRowsHtml(){
   let list = visibleOrders();
   if(state.oFilter==='ALL') list = list.filter(O_LIVE);          // 중단건은 「⛔ 중단」에서만
   else if(state.oFilter==='NOBLD') list = list.filter(o=>O_LIVE(o) && !o.builder);
@@ -5726,11 +5731,14 @@ function vOList(){
   const q = (state.oq||'').trim().toLowerCase();
   if(q) list = list.filter(o=>[o.id,o.site,o.builder,o.supplier].join(' ').toLowerCase().includes(q));
   list = list.slice().sort((a,b)=>b.createdAt-a.createdAt);
-
+  return `<div style="font-size:12.5px;color:var(--sub);margin-bottom:8px">${list.length}건</div>
+    ${list.map(oRow).join('') || '<div class="empty">해당하는 발주 건이 없습니다</div>'}`;
+}
+function vOList(){
   const chip = (v,label,cur,fn) => `<button class="${cur===v?'on':''}" onclick="${fn}('${v}')">${label}</button>`;
   return oRoleNote()+`<div class="card">
     <input id="oq" placeholder="🔍 현장·시공사·발주번호 검색" value="${esc(state.oq||'')}"
-      oninput="state.oq=this.value;render();refocusSearch('oq')">
+      oninput="state.oq=this.value;const el=document.getElementById('oList');if(el)el.innerHTML=oListRowsHtml()">
     <div class="chips" style="margin-top:10px">
       ${chip('ALL','전체',state.oFilter,'oSetFilter')}
       ${O_STAGES.map(s=>chip(s,O_NM[s],state.oFilter,'oSetFilter')).join('')}
@@ -5742,8 +5750,7 @@ function vOList(){
       ${chip('조명','💡 조명',state.oCat,'oSetCat')}
       ${chip('타일','🧱 타일',state.oCat,'oSetCat')}
     </div>
-    <div style="font-size:12.5px;color:var(--sub);margin-bottom:8px">${list.length}건</div>
-    ${list.map(oRow).join('') || '<div class="empty">해당하는 발주 건이 없습니다</div>'}
+    <div id="oList">${oListRowsHtml()}</div>
   </div>`;
 }
 function oSetFilter(v){ state.oFilter=v; render(); }
@@ -6325,24 +6332,8 @@ function oqPick(orderId){
   oqPickFor = orderId; oqPickCat = o.cat; oqPickBrand='전체'; oqPickQ='';
   oqPickRender();
 }
-function oqPickRender(){
-  const ordr = O(oqPickFor);
-  const list = specListAt(oqPickCat, oRefTs(ordr));
-  const brands = ['전체', ...Array.from(new Set(list.map(x=>x.b)))];
-  let rows = list;
-  if(oqPickBrand!=='전체') rows = rows.filter(x=>x.b===oqPickBrand);
-  const q = oqPickQ.trim().toLowerCase();
-  if(q) rows = rows.filter(x=>[x.c,x.n,x.sz,x.pl,x.b].join(' ').toLowerCase().includes(q));
-  openModal(`<h2>표준 품목 선택</h2>
-    <div class="sub">${oqPickCat} · ${rows.length}종 · 단가는 부가세 별도</div>
-    ${oPrevPrice(ordr)?`<div class="note warn">💡 ${prevPriceNote()}</div>`:''}
-    <input id="oqPq" placeholder="🔍 코드·품명·규격 검색" value="${esc(oqPickQ)}"
-      oninput="oqPickQ=this.value;oqPickRender();setTimeout(()=>refocusSearch('oqPq'),0)">
-    <div class="chips" style="margin-top:10px">
-      ${brands.map(b=>`<button class="${oqPickBrand===b?'on':''}" onclick="oqPickBrand='${esc(b).replace(/'/g,"\\'")}';oqPickRender()">${esc(b)}</button>`).join('')}
-    </div>
-    <div style="max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch">
-      ${rows.length? rows.map(x=>`
+function oqPickRowsHtml(rows){
+  return rows.length? rows.map(x=>`
         <button class="specrow" onclick="oqPickAdd('${esc(x.c).replace(/'/g,"\\'")}')">
           <img src="${x.img}" alt="">
           <span class="si">
@@ -6351,8 +6342,31 @@ function oqPickRender(){
             <span class="sm">${esc(oqSpecLine(x))}</span>
           </span>
           <span class="sp">${x.p?money(x.p):'단가 미정'}<small>/${esc(x.u||'EA')}</small></span>
-        </button>`).join('') : '<div class="empty">검색 결과가 없습니다</div>'}
+        </button>`).join('') : '<div class="empty">검색 결과가 없습니다</div>';
+}
+function oqPickRender(){
+  const ordr = O(oqPickFor);
+  const list = specListAt(oqPickCat, oRefTs(ordr));
+  const brands = ['전체', ...Array.from(new Set(list.map(x=>x.b)))];
+  let rows = list;
+  if(oqPickBrand!=='전체') rows = rows.filter(x=>x.b===oqPickBrand);
+  const q = oqPickQ.trim().toLowerCase();
+  if(q) rows = rows.filter(x=>[x.c,x.n,x.sz,x.pl,x.b].join(' ').toLowerCase().includes(q));
+  /* 입력 중에는 결과 목록만 갱신 (검색창을 다시 만들면 한글 조합이 끊김) */
+  if(document.getElementById('oqPq') && document.getElementById('oqPickRows') && modalOpen() && document.activeElement && document.activeElement.id==='oqPq'){
+    document.getElementById('oqPickRows').innerHTML = oqPickRowsHtml(rows);
+    const n = document.getElementById('oqPickN'); if(n) n.textContent = rows.length;
+    return;
+  }
+  openModal(`<h2>표준 품목 선택</h2>
+    <div class="sub">${oqPickCat} · <span id="oqPickN">${rows.length}</span>종 · 단가는 부가세 별도</div>
+    ${oPrevPrice(ordr)?`<div class="note warn">💡 ${prevPriceNote()}</div>`:''}
+    <input id="oqPq" placeholder="🔍 코드·품명·규격 검색" value="${esc(oqPickQ)}"
+      oninput="oqPickQ=this.value;oqPickRender()">
+    <div class="chips" style="margin-top:10px">
+      ${brands.map(b=>`<button class="${oqPickBrand===b?'on':''}" onclick="oqPickBrand='${esc(b).replace(/'/g,"\\'")}';oqPickRender()">${esc(b)}</button>`).join('')}
     </div>
+    <div id="oqPickRows" style="max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch">${oqPickRowsHtml(rows)}</div>
     ${role()==='supplier'?`<button class="btn blk" style="background:#2B6CB0" onclick="srModal(true)">🆕 찾는 품목이 없나요? 신규 품목 등록 요청</button>`
       : role()==='hq'?`<button class="btn sec2 blk" onclick="srModal(true)">🆕 신규 품목 바로 등록 (본사)</button>`:''}
     <button class="btn sec2 blk" onclick="oqBackToQuote()">닫기</button>`);
@@ -7584,7 +7598,7 @@ function exportCSV(){
   if(isOrderApp(state.app) && state.view==='dash') state.view='odash';
   render();
   // 1분마다 D-day/기한초과 재계산
-  setInterval(()=>{ if(state.user && !modalOpen()) render(); }, 60000);
+  setInterval(()=>{ if(!state.user || modalOpen()) return; const ae=document.activeElement; if(ae && /^(INPUT|TEXTAREA)$/.test(ae.tagName)) return; /* 입력 중엔 건너뜀 */ render(); }, 60000);
   /* 앱이 화면 뒤로 가면 3분 뒤 서버 구독을 모두 끊고, 다시 앞으로 오면 잇는다 (2026-09-16).
      뒤에 열어둔 화면이 모든 변경을 계속 받아 읽기를 소모하던 것을 막는다. */
   document.addEventListener('visibilitychange', ()=>{
