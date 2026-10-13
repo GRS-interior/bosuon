@@ -15,7 +15,47 @@ if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
 }
 window.deferredPrompt=null;
 window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); window.deferredPrompt=e; try{render()}catch(err){} });
-function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt(); window.deferredPrompt=null; } }
+/* 앱 설치 — 안드로이드/크롬/엣지는 설치창을 바로 띄우고, 아이폰 등은 단계 안내를 보여준다 */
+function isStandaloneApp(){ try{ return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true; }catch(e){ return false; } }
+function installGuideHtml(){
+  const ua = navigator.userAgent||'';
+  const ios = /iPhone|iPad|iPod/.test(ua) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  const android = /Android/.test(ua);
+  const safari = ios && !/CriOS|FxiOS|EdgiOS/.test(ua);
+  const step = (n,t)=>`<div style="display:flex;gap:10px;align-items:flex-start;margin:8px 0"><b style="flex:none;width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;text-align:center;line-height:24px;font-size:13px">${n}</b><div style="line-height:1.5">${t}</div></div>`;
+  let body = '';
+  if(ios){
+    body = (safari ? '' : `<div class="note" style="margin-bottom:8px">⚠ 아이폰은 <b>Safari</b>로 열어야 설치됩니다. 지금 브라우저에서는 주소를 복사해 Safari 에서 여세요.</div>`)
+      + step(1,'화면 아래(또는 위) <b>공유 버튼 ⬆</b>을 누릅니다')
+      + step(2,'목록에서 <b>「홈 화면에 추가」</b>를 찾아 누릅니다')
+      + step(3,'오른쪽 위 <b>「추가」</b> → 홈 화면에 보수ON 아이콘이 생깁니다');
+  } else if(android){
+    body = step(1,'브라우저 오른쪽 위 <b>메뉴(⋮)</b>를 누릅니다')
+      + step(2,'<b>「홈 화면에 추가」</b> 또는 <b>「앱 설치」</b>를 누릅니다')
+      + step(3,'<b>「설치」</b> → 홈 화면에 보수ON 아이콘이 생깁니다')
+      + `<div class="note" style="margin-top:8px">삼성 인터넷은 메뉴(≡) → 「현재 페이지 추가」 → 「홈 화면」</div>`;
+  } else {
+    body = step(1,'크롬·엣지 주소창 오른쪽 끝의 <b>설치 아이콘(⊕ 또는 🖥)</b>을 누릅니다')
+      + step(2,'아이콘이 없으면 <b>메뉴(⋮)</b> → <b>「앱 설치」</b> 또는 <b>「GRS 보수ON 설치」</b>')
+      + step(3,'바탕화면·시작 메뉴에 보수ON 이 생기고, 창으로 바로 실행됩니다');
+  }
+  return `<h3 style="margin-top:0">📲 앱으로 설치하기</h3>
+    <div class="note" style="margin-bottom:10px">설치하면 홈 화면 아이콘으로 바로 열리고, 주소창 없이 앱처럼 씁니다. 접수 내용·접속코드는 그대로입니다.</div>
+    ${body}
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn sec2" style="flex:1" onclick="closeModal()">닫기</button>
+    </div>`;
+}
+function installApp(){
+  if(isStandaloneApp()){ toast('이미 앱으로 실행 중입니다'); return; }
+  if(window.deferredPrompt){
+    const p = window.deferredPrompt; window.deferredPrompt=null;
+    try{ p.prompt(); }catch(e){ openModal(installGuideHtml()); }
+    return;
+  }
+  openModal(installGuideHtml());
+}
+window.addEventListener('appinstalled', ()=>{ window.deferredPrompt=null; try{ toast('설치되었습니다 — 홈 화면 아이콘으로 열어주세요'); }catch(e){} });
 </script>
 <style>
   :root{
@@ -255,6 +295,9 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
   /* ===== 로그인 ===== */
   #login{position:fixed;inset:0;background:linear-gradient(160deg,var(--red) 0%,#A32218 100%);z-index:300;display:none;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
   #login.open{display:flex}
+  /* 로그인 화면 위에서 여는 모달·토스트(앱 설치 안내 등)는 로그인 레이어보다 위에 */
+  #login.open ~ .modal.open{z-index:310}
+  #login.open ~ .toast{z-index:320}
   .login-card{background:#fff;border-radius:20px;padding:28px 22px;width:100%;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,.25)}
   .login-card .lg{text-align:center;margin-bottom:6px;font-size:24px;font-weight:800;color:var(--red-dark);letter-spacing:-.5px}
   .login-card .ds{text-align:center;font-size:13px;color:var(--sub);margin-bottom:18px}
@@ -385,6 +428,7 @@ function installApp(){ if(window.deferredPrompt){ window.deferredPrompt.prompt()
     </div>
 
     <a class="btn sec2 blk" style="text-decoration:none" href="./manual.pdf?v=20260831" target="_blank" rel="noopener">📖 사용 매뉴얼 내려받기 (PDF)</a>
+    <button class="btn sec2 blk" id="lgInstall" style="margin-top:8px" onclick="installApp()">📲 휴대폰·PC에 앱으로 설치</button>
 
     <div class="kakao">
       <div class="kk-t">📱 장비 M/T 접수 관련 아래 링크 참고</div>
@@ -442,7 +486,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.12';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.12b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -992,7 +1036,9 @@ const store = {
           if(Array.isArray(c.labor)&&c.labor.length) state.cfg.labor=c.labor.map(x=>Array.isArray(x)?[String(x[0]),+x[1]]:[String(x.j),+x.r]);
           if(c.laborNote) state.cfg.laborNote=c.laborNote;
           state.cfg.notice = c.notice || null;
-          if(state.user) showNoticeIfAny();
+          state.cfg.migrate = c.migrate || null;
+          applyMigrate();
+          if(state.user){ showMigrateIfAny(); showNoticeIfAny(); }
         }
         state.cfgLoaded = true;
         fillStoreList(); if(state.ready) render();
@@ -1761,6 +1807,7 @@ function saveChatPrefs(){
 function logout(){ state.user=null; if(state.unsubReqs){ try{state.unsubReqs()}catch(e){} state.unsubReqs=null; } state.roomsSubbed=false; state.roomsInit=false; state.prevRoomTs={}; state.prevReqSig={}; state.reqsInit=false; state.prevOrderSig={}; state.ordersInit=false;
   if(state.unsubOrders){ try{state.unsubOrders()}catch(e){} state.unsubOrders=null; }
   if(state.unsubPosts){ try{state.unsubPosts()}catch(e){} state.unsubPosts=null; }
+  if(state.unsubAccess){ try{state.unsubAccess()}catch(e){} state.unsubAccess=null; }
   state.orders=[]; state.posts=[]; stopDetailFiles(); clearDraft(); try{ localStorage.removeItem('bosuon_session'); }catch(e){} showLogin(); }
 
 let pickedRole=null;
@@ -1849,7 +1896,8 @@ function doLogin(){
   document.getElementById('login').classList.remove('open');
   if(LIVE){ state.ready=false; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); }
   loadChatPrefs(); ensureRooms();
-  setTimeout(showNoticeIfAny, 300);
+  logAccess();
+  setTimeout(()=>{ showMigrateIfAny(); showNoticeIfAny(); }, 300);
   /* 로그인 1단계에서 고른 업무로 바로 들어간다 (본사담당은 탭 전환으로 오갈 수 있음) */
   const apps = myApps();
   const want = pickedGate==='order' ? apps.find(isOrderApp) : apps.find(a=>a==='bosu');
@@ -1860,6 +1908,8 @@ function showLogin(){
   fillStoreList();
   const lv = document.getElementById('lgVer');
   if(lv) lv.innerHTML = `앱 버전 ${APP_VERSION} · 화면이 이상하면 <a href="#" onclick="hardReload();return false" style="color:var(--sub);text-decoration:underline">최신 버전으로 새로고침</a>`;
+  const li = document.getElementById('lgInstall');
+  if(li) li.style.display = isStandaloneApp() ? 'none' : '';
   backGate();
   document.getElementById('login').classList.add('open');
   document.getElementById('main').innerHTML='';
@@ -2008,9 +2058,10 @@ function render(){
     else if(ec.includes('permission-denied')) msg='⚠ 접근 권한 오류 — Firestore 보안 규칙이 게시되었는지 확인하세요';
     else if(ec.includes('unavailable')||ec.includes('network')) msg='⚠ 네트워크 오류 — 인터넷 연결을 확인하세요';
     else if(ec.includes('resource-exhausted')) msg='⚠ 서버 무료 사용량(하루 한도)을 넘었습니다 — 매일 오후 4시(미국 태평양 자정)에 자동 복구됩니다. 그 전까지 조회·저장이 안 될 수 있습니다';
-    sys.className='sysbar err'; sys.textContent=msg; sys.style.display='block';
+    sys.className='sysbar err'; sys.textContent=msg; sys.style.display='block'; sys.onclick=null; sys.style.cursor='';
   }
-  else sys.style.display='none';
+  else if(migBarHtml()){ sys.className='sysbar'; sys.innerHTML=migBarHtml(); sys.style.display='block'; sys.style.cursor='pointer'; sys.onclick=()=>showMigrateIfAny(true); }
+  else { sys.style.display='none'; sys.onclick=null; }
 
   const who = document.getElementById('whoami');
   const rs = document.getElementById('roleSel');
@@ -3807,7 +3858,7 @@ async function sendChat(){
 function pauseLive(){
   if(!LIVE || !state.user || state.livePaused) return;
   state.livePaused = true;
-  ['unsubReqs','unsubOrders','unsubPosts','unsubMsgs','unsubIcnCal','unsubSpecAdd','unsubSpecReqs'].forEach(k=>{ if(state[k]){ try{state[k]()}catch(e){} state[k]=null; } });
+  ['unsubReqs','unsubOrders','unsubPosts','unsubMsgs','unsubIcnCal','unsubSpecAdd','unsubSpecReqs','unsubAccess'].forEach(k=>{ if(state[k]){ try{state[k]()}catch(e){} state[k]=null; } });
   if(state.unsubRooms){ try{state.unsubRooms()}catch(e){} state.unsubRooms=null; }
   state.roomsSubbed = false;
   stopDetailFiles();
@@ -4592,7 +4643,7 @@ function vSet(){
       <span style="width:110px;font-weight:700;font-size:14px">${CODE_NM[rk]}</span>
       <input value="${esc(state.cfg.codes[rk]||'')}" onchange="updCode('${rk}',this.value)">
     </div>`).join('');
-  return roleNote()+noticeSetHtml()+`<div class="card">
+  return roleNote()+noticeSetHtml()+migrateSetHtml()+`<div class="card">
     <div class="h2">🗑 테스트 데이터 정리</div>
     <div class="note" style="margin:0 0 10px">테스트로 만든 접수건·발주건을 골라서 <b>완전 삭제</b>합니다. 첨부 사진·견적서까지 서버에서 지워지고 되돌릴 수 없습니다.
       실제 진행 건은 삭제하지 말고 「중단 처리」를 써 주세요.</div>
@@ -4776,6 +4827,138 @@ function previewNotice(){
 async function endNotice(){
   if(!confirm('공지를 종료(삭제)할까요?')) return;
   try{ await store.saveConfig({notice:null}); toast('공지를 종료했습니다'); render(); }
+  catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+
+/* ===== 주소 이관 (GitHub Pages → Firebase Hosting, 2026-10-12) =====
+   두 주소가 같은 서버(Firestore)를 보므로 데이터는 하나다. 이 블록은
+   1) 접속 현황: 어느 주소로 들어왔는지 하루 1회·기기당 1회 집계 (config/access)
+   2) 계도기간: 기존 주소(github.io)로 들어온 사용자에게 새 주소 안내 팝업·상단 띠
+   3) 차단일: 그날부터 기존 주소는 새 주소로 자동 이동
+   설정값은 config/app.migrate = {on, url, from:'YYYY-MM-DD', cutoff:'YYYY-MM-DD', text} */
+const HOST_NEW_DEFAULT = 'https://grs-bosu.web.app/';
+function hostKey(){
+  const h = location.hostname||'';
+  if(/\.web\.app$|\.firebaseapp\.com$/.test(h)) return 'new';
+  if(/\.github\.io$/.test(h)) return 'old';
+  return 'etc';
+}
+const HOST_NM = { old:'기존 주소 (github.io)', new:'새 주소 (web.app)', etc:'기타' };
+function migCfg(){ return state.cfg.migrate || null; }
+function migOn(){ const m=migCfg(); return !!(LIVE && m && m.on && m.url && hostKey()==='old'); }
+function migPhase(){
+  if(!migOn()) return null;
+  const m = migCfg(), t = dkey(now());
+  if(m.cutoff && t >= m.cutoff) return 'block';
+  if(m.from && t >= m.from) return 'notice';
+  return null;
+}
+/* 접속 집계 — 기기당 하루 1회만 서버에 +1 (쓰기 1건) */
+function logAccess(){
+  if(!LIVE || !state.user) return;
+  const hk = hostKey(); if(hk==='etc') return;
+  const day = dkey(now()), key = day+'|'+hk+'|'+state.user.role;
+  try{ if(localStorage.getItem('bosuon_acc') === key) return; }catch(e){}
+  const patch = { d: { [day]: { [hk]: FB.increment(1), [hk+'_'+state.user.role]: FB.increment(1) } }, updatedAt: now() };
+  FB.setDoc(FB.doc(fs,'config','access'), patch, {merge:true})
+    .then(()=>{ try{ localStorage.setItem('bosuon_acc', key); }catch(e){} })
+    .catch(e=>console.warn('access', e));
+}
+function ensureAccess(){
+  if(!LIVE || !state.user || state.user.role!=='hq') return;
+  if(state.unsubAccess) return;
+  state.unsubAccess = ()=>{};
+  state.unsubAccess = FB.onSnapshot(FB.doc(fs,'config','access'), d=>{ state.access = d.exists() ? (d.data().d||{}) : {}; if(state.view==='set' && !modalOpen()) render(); }, err=>console.warn('access', err));
+}
+/* 차단일 이후 기존 주소: 전체 화면 안내 후 새 주소로 이동 (설치형 앱이면 5초, 브라우저면 즉시) */
+function applyMigrate(){
+  if(migPhase()!=='block') return;
+  if(document.getElementById('migBlock')) return;
+  const m = migCfg();
+  const sa = isStandaloneApp();
+  const el = document.createElement('div');
+  el.id = 'migBlock';
+  el.style.cssText = 'position:fixed;inset:0;z-index:400;background:#fff;padding:40px 20px;text-align:center;font-size:15px;line-height:1.6;overflow:auto';
+  el.innerHTML = `<h2 style="color:var(--red)">GRS 보수ON 주소가 바뀌었습니다</h2>
+    <p>${fmtD(new Date(m.cutoff).getTime()||now())}부터 새 주소로만 접속됩니다.<br>새 주소: <b>${esc(m.url.replace(/^https?:\/\//,'').replace(/\/$/,''))}</b><br>접속코드·접수 내역은 모두 그대로입니다. (한 번만 다시 로그인)</p>
+    ${sa?`<div style="background:#fff4f3;border:1px solid #f3c9c5;border-radius:12px;padding:14px;margin:16px auto;max-width:420px;text-align:left">
+      <b>홈 화면 아이콘을 새로 추가해 주세요</b><br>① 아래 버튼으로 새 주소 열기 → 로그인<br>② 새 주소 로그인 화면의 「📲 앱으로 설치」<br>③ 예전 아이콘은 삭제</div>`:''}
+    <a href="${esc(m.url)}" ${sa?'target="_blank" rel="noopener"':''} style="display:inline-block;background:var(--red);color:#fff;font-weight:800;font-size:18px;padding:14px 28px;border-radius:10px;text-decoration:none;margin-top:8px">새 주소로 이동</a>
+    <p id="migCnt" style="color:#777;font-size:13px;margin-top:14px">${sa?'5초 뒤 자동으로 이동합니다.':'잠시 후 자동으로 이동합니다.'}</p>`;
+  document.body.appendChild(el);
+  try{ if(navigator.serviceWorker){ navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister())); } }catch(e){}
+  if(!sa){ setTimeout(()=>location.replace(m.url), 800); }
+  else { let n=5; const t=setInterval(()=>{ n--; const c=document.getElementById('migCnt'); if(n<=0){ clearInterval(t); location.href=m.url; } else if(c) c.textContent=n+'초 뒤 자동으로 이동합니다.'; },1000); }
+}
+/* 계도기간 팝업 — 하루 1회 */
+function showMigrateIfAny(force){
+  if(migPhase()!=='notice') return;
+  if(modalOpen() && !force) return;
+  const m = migCfg();
+  if(!force){ try{ if(localStorage.getItem('bosuon_mig_skip') === dkey(now())) return; }catch(e){} }
+  const cut = m.cutoff ? fmtD(new Date(m.cutoff).getTime()) : '';
+  openModal(`<div style="text-align:center;font-size:30px;margin-bottom:4px">📍</div>
+    <h2 style="text-align:center">보수ON 주소가 바뀝니다</h2>
+    <div style="white-space:pre-wrap;line-height:1.6;font-size:14.5px;margin:14px 0 6px;padding:12px 14px;background:var(--gray-bg);border-radius:10px">${esc(m.text||'')}${m.text?'\n\n':''}새 주소: <b>${esc(m.url)}</b>${cut?`\n<b style="color:var(--red)">${cut}부터는 새 주소로만 접속됩니다.</b>`:''}\n접속코드·접수 내역은 그대로이며, 새 주소에서 한 번만 다시 로그인하면 됩니다.</div>
+    <div class="note">새 주소 로그인 화면의 「📲 앱으로 설치」를 누르면 홈 화면 아이콘이 새로 생깁니다. 예전 아이콘은 지워 주세요.</div>
+    <a class="btn blk" style="text-decoration:none" href="${esc(m.url)}" target="_blank" rel="noopener">새 주소로 이동</a>
+    <button class="btn sec2 blk" onclick="try{localStorage.setItem('bosuon_mig_skip','${dkey(now())}')}catch(e){};closeModal()">오늘은 그만 보기</button>`);
+}
+function migBarHtml(){
+  if(migPhase()!=='notice') return '';
+  const m = migCfg();
+  const cut = m.cutoff ? fmtD(new Date(m.cutoff).getTime())+'부터 ' : '';
+  return `📍 주소가 바뀝니다 — ${cut}새 주소로만 접속됩니다 · <u>자세히</u>`;
+}
+/* 설정 화면 (본사담당) */
+function migrateSetHtml(){
+  if(!LIVE || state.user.role!=='hq') return '';
+  ensureAccess();
+  const m = migCfg() || {};
+  const hk = hostKey();
+  const d = state.access || {};
+  const days = []; for(let i=0;i<30;i++){ days.push(dkey(now()-i*864e5)); }
+  const sum = (ds, k) => ds.reduce((a,x)=>a+((d[x]||{})[k]||0),0);
+  const roleSum = (ds, hkey) => Object.keys(ROLE_NM).map(r=>[ROLE_NM[r], sum(ds, hkey+'_'+r)]).filter(x=>x[1]>0).map(x=>`${x[0]} ${x[1]}`).join(' · ') || '없음';
+  const d7 = days.slice(0,7), d30 = days;
+  const o7=sum(d7,'old'), n7=sum(d7,'new'), o30=sum(d30,'old'), n30=sum(d30,'new');
+  const rows = days.slice(0,14).map(x=>`<tr><td>${x.slice(5)}</td><td style="text-align:right">${(d[x]||{}).old||0}</td><td style="text-align:right">${(d[x]||{}).new||0}</td></tr>`).join('');
+  const verdict = (o7===0 && n7>0) ? `<b style="color:var(--green,#1a7f37)">최근 7일 기존 주소 접속 0건 — GitHub 주소를 닫아도 됩니다.</b>`
+                : (o7>0 ? `최근 7일 기존 주소 접속 <b>${o7}건</b> (${roleSum(d7,'old')}) — 아직 기존 주소를 쓰는 사용자가 있습니다. 계도기간을 유지·연장하세요.` : '아직 집계된 접속이 없습니다. (이 버전을 올린 뒤부터 집계됩니다)');
+  return `<div class="card">
+    <div class="h2">🔀 주소 이관 (GitHub → Firebase)</div>
+    <div class="note" style="margin:0 0 10px">지금 이 화면은 <b>${HOST_NM[hk]}</b>로 접속 중입니다. 두 주소는 같은 서버를 보므로 데이터는 하나이고, 이 설정은 <b>기존 주소(github.io)로 들어온 사용자에게만</b> 적용됩니다.</div>
+    <label>새 주소</label>
+    <input id="mgUrl" value="${esc(m.url||HOST_NEW_DEFAULT)}" placeholder="https://grs-bosu.web.app/">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label>안내 시작일 (팝업·상단 띠)</label><input id="mgFrom" type="date" value="${esc(m.from||dkey(now()))}"></div>
+      <div style="flex:1"><label>차단일 (이날부터 자동 이동)</label><input id="mgCut" type="date" value="${esc(m.cutoff||dkey(now()+30*864e5))}"></div>
+    </div>
+    <label>안내 문구 (선택)</label>
+    <textarea id="mgText" rows="3" placeholder="예) 본사 PC 접속 문제로 보수ON 주소를 옮깁니다. 아래 새 주소로 접속해 주세요.">${esc(m.text||'')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn" style="flex:2;margin:0" onclick="saveMigrate(true)">${m.on?'수정 저장':'계도기간 시작'}</button>
+      ${m.on?`<button class="btn sec2" style="flex:1;margin:0" onclick="saveMigrate(false)">끄기</button>`:''}
+    </div>
+    ${m.on?`<div class="note" style="margin-top:8px">현재 상태: <b>${migCfg().cutoff && dkey(now())>=migCfg().cutoff?'차단 중 (기존 주소 → 새 주소 자동 이동)':(dkey(now())>=(migCfg().from||'')?'계도기간 (안내 중)':'대기 (안내 시작일 전)')}</b> · 차단일을 뒤로 미루면 계도기간이 연장됩니다.</div>`:''}
+    <div class="h2" style="margin-top:16px">📊 주소별 접속 현황 <span class="badge b-gray">기기당 하루 1회 집계</span></div>
+    <div class="kv"><b>최근 7일</b><strong>기존 ${o7} · 새주소 ${n7}</strong></div>
+    <div class="kv"><b>최근 30일</b><strong>기존 ${o30} · 새주소 ${n30}</strong></div>
+    <div class="note" style="margin:6px 0 10px">${verdict}<br>최근 30일 기존 주소 사용: ${roleSum(d30,'old')}</div>
+    <table style="width:100%;font-size:13px;border-collapse:collapse"><tr style="color:var(--sub)"><th style="text-align:left">날짜</th><th style="text-align:right">기존</th><th style="text-align:right">새주소</th></tr>${rows}</table>
+  </div>`;
+}
+async function saveMigrate(on){
+  const url = (document.getElementById('mgUrl').value||'').trim();
+  const from = document.getElementById('mgFrom').value, cutoff = document.getElementById('mgCut').value;
+  const text = (document.getElementById('mgText').value||'').trim();
+  if(on){
+    if(!/^https:\/\/.+/.test(url)){ toast('새 주소는 https:// 로 시작해야 합니다'); return; }
+    if(!from){ toast('안내 시작일을 입력하세요'); return; }
+    if(cutoff && cutoff < from){ toast('차단일은 안내 시작일 이후여야 합니다'); return; }
+    if(cutoff && !confirm(`${cutoff}부터 기존 주소(github.io)로 들어온 사용자는 새 주소로 자동 이동됩니다.\n새 주소가 열리는지 먼저 확인하셨나요?`)) return;
+  } else if(!confirm('이관 안내를 끌까요? (팝업·자동 이동이 모두 중단됩니다)')) return;
+  try{ await store.saveConfig({migrate:{on:!!on, url, from, cutoff, text, by:state.user.name, at:now()}}); toast(on?'저장했습니다':'이관 안내를 껐습니다'); render(); }
   catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 async function updSla(s,v){ const sla={...state.cfg.sla}; sla[s]=Math.max(1,Number(v)||1); try{ await store.saveConfig({sla}); toast('저장되었습니다'); render(); }catch(e){ toast('저장 실패'); } }
@@ -7392,7 +7575,7 @@ function exportCSV(){
   loadDraft();   // 작성 중이던 신규 접수 내용 복원
   if(LIVE){
     const sess = loadSession();
-    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); loadChatPrefs(); ensureRooms(); setTimeout(showNoticeIfAny, 800); }
+    if(sess && sess.role){ state.user = sess; subscribeReqs(state._onReqs); subscribeOrders(); subscribePosts(); loadChatPrefs(); ensureRooms(); logAccess(); setTimeout(()=>{ showMigrateIfAny(); showNoticeIfAny(); }, 800); }
   } else {
     state.user = {role:'hq', name:'본사담당', store:'', co:''}; // 데모: 본사 화면으로 시작
     loadChatPrefs(); ensureRooms();
