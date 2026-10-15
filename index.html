@@ -537,7 +537,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.15b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.15c';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -5755,7 +5755,82 @@ function specSetCardHtml(){
       <button class="btn sec2" style="flex:1;margin:0" onclick="specListModal('조명')">💡 조명 목록 보기 <span style="color:var(--sub)">${n('조명')}</span></button>
       <button class="btn sec2" style="flex:1;margin:0" onclick="specListModal('타일')">🧱 타일 목록 보기 <span style="color:var(--sub)">${n('타일')}</span></button>
     </div>
+    <button class="btn sec2 blk" onclick="useStatModal('조명')">📊 품목별 발주 수량 집계</button>
   </div>`;
+}
+/* ===== 품목별 발주 수량 집계 (2026-10-15, 본사담당) =====
+   견적이 제출된 모든 발주(중단 제외)의 현재 견적 품목을 코드별로 합산한다.
+   「확정」 = 시공사 승인 이후(APPROVED~SETTLED), 「진행」 = 견적·본사승인 대기·재견적 중. */
+const O_FIXED = ['APPROVED','SCHED','DELIVERED','SREQ','SETTLED'];
+let usCat = '조명', usQ = '', usOpen = null;
+function useStat(cat){
+  const by = {}, noCode = [];
+  (state.orders||[]).filter(o=>o.cat===cat && o.quote && O_LIVE(o)).forEach(o=>{
+    (o.quote.items||[]).forEach(it=>{
+      /* 코드가 비어 있어도 품명·규격에 코드가 적혀 있으면 그 코드로 본다 (직접 입력·엑셀 업로드분) */
+      const code = it.code || (String((it.name||'')+' '+(it.spec||'')).toUpperCase().match(/\b[A-Z]{2,4}-(LT|TL)-\d{2}\b/)||[])[0];
+      if(!code){ noCode.push({o, it}); return; }
+      const b = by[code] = by[code] || { code, name:((window.SPEC_MASTER&&specFind(cat,code))||{}).n || it.name, unit:it.unit, n:0, qty:0, amt:0, fixQty:0, pendQty:0, rows:[] };
+      const q = +it.qty||0, a = +it.amount || q*(+it.price||0);
+      b.n++; b.qty += q; b.amt += a;
+      if(O_FIXED.includes(o.stage)) b.fixQty += q; else b.pendQty += q;
+      b.rows.push({ id:o.id, site:o.site, stage:o.stage, builder:oBld(o), qty:q, price:+it.price||0, amt:a, at:o.createdAt });
+    });
+  });
+  const list = Object.values(by).sort((a,b)=>b.qty-a.qty);
+  const nOrders = (state.orders||[]).filter(o=>o.cat===cat && o.quote && O_LIVE(o)).length;
+  return { list, noCode, nOrders };
+}
+function usRowsHtml(S){
+  const q = usQ.trim().toLowerCase();
+  const list = q ? S.list.filter(b=>(b.code+' '+b.name).toLowerCase().includes(q)) : S.list;
+  if(!list.length) return '<div class="empty">해당 품목의 발주가 없습니다</div>';
+  return list.map(b=>`
+    <button style="display:block;width:100%;text-align:left;padding:10px 2px;border-bottom:1px solid var(--line)" onclick="usOpen=usOpen==='${esc(b.code)}'?null:'${esc(b.code)}';useStatModal(null,true)">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
+        <span style="font-weight:800;font-size:14px">${esc(b.code)} <span style="font-weight:600;color:var(--sub);font-size:12.5px">${esc(b.name||'')}</span></span>
+        <span style="font-weight:800;font-size:15px;white-space:nowrap">${b.qty.toLocaleString('ko-KR')} ${esc(b.unit||'EA')}</span>
+      </div>
+      <div style="font-size:12.5px;color:var(--sub);margin-top:2px">${b.n}개 현장 · 확정 ${b.fixQty.toLocaleString('ko-KR')} · 진행 중 ${b.pendQty.toLocaleString('ko-KR')} · ${money(b.amt)}</div>
+    </button>
+    ${usOpen===b.code?`<div style="background:var(--gray-bg);border-radius:10px;padding:6px 10px;margin:6px 0 10px">
+      ${b.rows.sort((x,y)=>y.at-x.at).map(r=>`<div style="display:flex;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);font-size:12.5px">
+        <span style="flex:1;min-width:0"><b>${esc(r.site)}</b><br><span style="color:var(--sub)">${r.id} · ${esc(r.builder)} · ${fmtD(r.at)}</span></span>
+        <span class="badge ${O_FIXED.includes(r.stage)?'b-green':'b-blue'}">${O_SHORT[r.stage]||r.stage}</span>
+        <span style="width:62px;text-align:right"><b>${r.qty.toLocaleString('ko-KR')}</b><br><span style="color:var(--sub)">${money(r.price)}</span></span>
+      </div>`).join('')}
+    </div>`:''}`).join('');
+}
+function useStatModal(cat, keep){
+  if(role()!=='hq') return;
+  if(!keep){ usCat = cat||'조명'; usQ=''; usOpen=null; }
+  const S = useStat(usCat);
+  const tQty = S.list.reduce((a,b)=>a+b.qty,0), tAmt = S.list.reduce((a,b)=>a+b.amt,0);
+  openModal(`<h2>📊 품목별 발주 수량</h2>
+    <div class="sub">견적이 제출된 ${usCat} 발주 ${S.nOrders}건 기준 (중단 제외) · 현재 견적 수량 · 품목을 누르면 현장별 내역</div>
+    <div class="chips" style="margin-top:10px">
+      <button class="${usCat==='조명'?'on':''}" onclick="useStatModal('조명')">💡 조명</button>
+      <button class="${usCat==='타일'?'on':''}" onclick="useStatModal('타일')">🧱 타일</button>
+    </div>
+    <div class="note" style="margin:0 0 8px"><b>확정</b> = 시공사 승인 이후(납품일 협의·납품·정산) · <b>진행 중</b> = 견적 제출·본사 승인 대기·재견적
+      ${S.noCode.length?`<br>코드 없이 직접 입력한 품목 ${S.noCode.length}줄은 집계에서 빠졌습니다.`:''}</div>
+    <input id="usQ" placeholder="🔍 코드·품명 검색 (예: RIA-LT-10)" value="${esc(usQ)}"
+      oninput="usQ=this.value;document.getElementById('usRows').innerHTML=usRowsHtml(useStat(usCat))">
+    <div id="usRows" style="max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch;margin-top:6px">${usRowsHtml(S)}</div>
+    <div class="kv" style="margin-top:8px"><b>합계</b>${S.list.length}개 품목 · ${money(tAmt)}</div>
+    <button class="btn sec2 blk" onclick="useStatCSV()">⬇ 엑셀(CSV) — 품목·현장별 내역</button>
+    <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
+}
+function useStatCSV(){
+  const S = useStat(usCat);
+  const head = ['품목코드','품명','단위','발주번호','현장','시공사','단계','구분','수량','단가','금액','등록일'];
+  const rows = [];
+  S.list.forEach(b=>b.rows.forEach(r=>rows.push([b.code,b.name,b.unit,r.id,r.site,r.builder,O_NM[r.stage]||r.stage,O_FIXED.includes(r.stage)?'확정':'진행 중',r.qty,r.price,r.amt,fmtD(r.at)])));
+  const csv = '\uFEFF'+[head,...rows].map(row=>row.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = `품목별발주_${usCat}.csv`; a.click();
+  toast('CSV 파일이 다운로드되었습니다');
 }
 function splAllItems(cat){
   return specMasterAll(true).filter(x=>x.g===cat)
@@ -5820,6 +5895,7 @@ function specEditModal(cat, code){
   openModal(`<h2>${esc(code)} ${o&&o.off?'<span class="badge b-gray">숨김</span>':''}${o&&!o.off?'<span class="badge b-blue">수정됨</span>':''}</h2>
     <div class="sub">${esc(cat)} · ${esc(x.b||'')} · 표준 품목 · 수정 내용은 이력에 남습니다</div>
     ${!(x.p>0)?`<div class="note warn">현재 <b>단가 미정</b> 품목입니다. 확정된 품명·규격·단가를 입력하면 같은 코드(${esc(code)})로 바로 견적에 쓸 수 있습니다.</div>`:''}
+    ${(()=>{ const b = useStat(cat).list.find(y=>y.code===code); return b?`<button class="note" style="display:block;width:100%;text-align:left" onclick="usCat='${cat}';usQ='${esc(code)}';usOpen='${esc(code)}';useStatModal(null,true)">📊 발주 ${b.n}개 현장 · ${b.qty.toLocaleString('ko-KR')} ${esc(b.unit||'EA')} (확정 ${b.fixQty.toLocaleString('ko-KR')}) — 현장별 보기 ›</button>`:''; })()}
     <label>품명</label><input id="smName" value="${esc(x.n||'')}">
     ${cat==='조명'
       ? `<div style="display:flex;gap:6px">${f('smK','색온도',x.k,'4000K')}${f('smW','소비전력',x.w,'12W')}</div>
@@ -6073,7 +6149,7 @@ function vODash(){
   const tile = (v,label,val,cls) => `<button class="tile ${cls||''}" onclick="oGoList('${v}')">
     <div class="n">${val}</div><div class="t">${label} ›</div></button>`;
 
-  return oRoleNote()+specReqCardHtml()+`
+  return oRoleNote()+specReqCardHtml()+(role()==='hq'?`<button class="btn sec2 blk" style="margin:0 0 12px" onclick="useStatModal(appCat(state.app)||'조명')">📊 품목별 발주 수량 집계</button>`:'')+`
   <div class="card">
     <div class="h2">📦 발주 진행 현황</div>
     <div class="tiles">
