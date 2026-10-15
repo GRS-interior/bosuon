@@ -537,7 +537,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.14';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.15b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -704,8 +704,17 @@ function loadSpec(){
   return specLoading;
 }
 /* 본사 승인으로 추가된 품목(config/specAdd)을 표준 품목표 뒤에 붙인다 (2026-10-02) */
-const specAddList = () => (state.specAdd||[]).filter(x=>!x.off);
-const specAll = () => (window.SPEC_MASTER||[]).concat(specAddList());
+const specAddList = () => (state.specAdd||[]).filter(x=>!x.off && !x.ovr);
+/* 표준 품목 수정 (2026-10-15) — specAdd 안의 {ovr:true, c, g, …} 항목이 같은 코드의 표준 품목을 덮어쓴다.
+   off:true 면 표준 품목을 숨긴다. 이미 제출된 견적은 품목을 복사해 두므로 영향 없음. */
+const SPEC_META = ['ovr','edits','by','at','id','reqId','reqCo','reqPrice','apvReason','attN','note','off'];
+function specOverrides(){ const m={}; (state.specAdd||[]).forEach(x=>{ if(x.ovr) m[x.g+'|'+x.c]=x; }); return m; }
+function specApply(m, o){ const r={...m}; Object.keys(o).forEach(k=>{ if(!SPEC_META.includes(k)) r[k]=o[k]; }); r.mod=true; return r; }
+function specMasterAll(includeOff){
+  const ov = specOverrides();
+  return (window.SPEC_MASTER||[]).map(m=>{ const o=ov[m.g+'|'+m.c]; if(!o) return m; if(o.off) return includeOff?{...specApply(m,o), off:true}:null; return specApply(m,o); }).filter(Boolean);
+}
+const specAll = () => specMasterAll(false).concat(specAddList());
 const specList = cat => specAll().filter(x=>x.g===cat);
 const specFind = (cat, code) => specAll().find(x=>x.g===cat && x.c===code);
 
@@ -4914,6 +4923,7 @@ function vSet(){
     </div>
     <button class="btn sec2 blk" onclick="allBuilderCodes()">📋 접속코드 전체 보기 (엑셀 복사용)</button>
   </div>
+  ${specSetCardHtml()}
   <div class="card">
     <div class="h2">📦 조명·타일 공급사</div>
     <div class="note" style="margin:0 0 10px">품목별 공급사는 각 1개사로 고정되어 있습니다.</div>
@@ -5544,10 +5554,10 @@ function srSuggestCode(cat, brand){
 }
 let srFromPick = false, srPhoto = null;
 /* 요청(공급사) / 바로 등록(본사) 공통 입력창 */
-async function srModal(fromPick){
+async function srModal(fromPick, catOv){
   srFromPick = !!fromPick;
   await loadSpec();
-  const cat = role()==='supplier' ? supCat() : (fromPick ? oqPickCat : (appCat(state.app)||'조명'));
+  const cat = role()==='supplier' ? supCat() : (catOv || (fromPick ? oqPickCat : (appCat(state.app)||'조명')));
   if(!cat){ toast('조명·타일 공급사 계정에서만 요청할 수 있습니다'); return; }
   srPhoto = null;
   const brands = Object.keys(SPEC_BRAND_PREFIX);
@@ -5684,9 +5694,24 @@ async function srApprove(id){
   const p = Number(document.getElementById('saPrice').value)||0;
   const why = (document.getElementById('saWhy').value||'').trim();
   if(!c){ toast('품목 코드를 입력해주세요'); return; }
-  if(specAll().some(x=>x.c===c && x.g===it.g)){ toast(`${c} 코드가 이미 있습니다`); return; }
+  const ex = specAll().find(x=>x.c===c && x.g===it.g);
+  const fillTbd = ex && !ex.add && !(ex.p>0);
+  if(ex && !fillTbd){ toast(`${c} 코드가 이미 있습니다`); return; }
   if(!n || !(p>0)){ toast('품명과 단가를 확인해주세요'); return; }
   if(!why){ toast('승인 사유를 입력해주세요'); return; }
+  if(fillTbd){
+    if(!confirm(`${c} 는 표준 품목표에 「단가 미정」으로 등록된 품목입니다.\n이 요청 내용으로 ${c} 를 확정할까요? (새 코드를 만들지 않고 기존 품목을 채웁니다)`)) return;
+    const fields = { ...it, n, u, p }; delete fields.g;
+    if(r.img) fields.img = r.img;
+    try{
+      await specSaveOverride(it.g, c, fields, `미정 품목 확정 (요청 ${r.co||''})`, why, { reqId:id, reqCo:r.co, apvReason:why });
+      reqs[i] = { ...r, status:'승인', code:c, price:p, apvReason:why, decidedBy:actorLabel(), decidedAt:now(), img:'' };
+      await store.saveSpecReqs(reqs);
+      const nAtt = await srSaveAtt(id);
+      closeModal(); toast(`${c} 확정 — 미정이던 품목에 반영되었습니다${nAtt?` · 첨부 ${nAtt}건`:''}`); render();
+    }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+    return;
+  }
   const item = { ...it, id, c, n, u, p, img:r.img||'', add:true, by:actorLabel(), at:now(), reqId:id, reqCo:r.co,
                  reqPrice:it.p, apvReason:why, attN:srAtt.length };
   reqs[i] = { ...r, status:'승인', code:c, price:p, apvReason:why, decidedBy:actorLabel(), decidedAt:now(), img:'' };
@@ -5712,8 +5737,174 @@ async function srReject(id){
   try{ await store.saveSpecReqs(reqs); closeModal(); toast('반려했습니다'); render(); }
   catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
+
+/* ===== 설정 — 조명·타일 품목표 보기·수정 (2026-10-15, 본사담당) ===== */
+let splCat = null, splQ = '', splBrand = '전체';
+function specSetCardHtml(){
+  if(role()!=='hq') return '';
+  if(!window.SPEC_MASTER){ loadSpec().then(ok=>{ if(ok && state.view==='set' && !modalOpen()) render(); }); }
+  const n = cat => window.SPEC_MASTER ? specAll().filter(x=>x.g===cat).length : '…';
+  const mods = (state.specAdd||[]).filter(x=>x.ovr).length;
+  const tbd = window.SPEC_MASTER ? specAll().filter(x=>!(x.p>0)).length : 0;
+  return `<div class="card">
+    <div class="h2">🗂 조명·타일 품목표</div>
+    <div class="note" style="margin:0 0 10px">견적 화면의 「표준 품목 선택」에 나오는 목록입니다. 품목을 눌러 품명·규격·단가·사진을 고칠 수 있고,
+      고친 내용은 <b>이후 작성하는 견적부터</b> 적용됩니다(이미 제출된 견적은 그대로).
+      ${mods?`<br>수정된 표준 품목 <b>${mods}건</b>`:''}${tbd?` · 단가 미정 <b style="color:var(--amber)">${tbd}건</b>`:''}</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn sec2" style="flex:1;margin:0" onclick="specListModal('조명')">💡 조명 목록 보기 <span style="color:var(--sub)">${n('조명')}</span></button>
+      <button class="btn sec2" style="flex:1;margin:0" onclick="specListModal('타일')">🧱 타일 목록 보기 <span style="color:var(--sub)">${n('타일')}</span></button>
+    </div>
+  </div>`;
+}
+function splAllItems(cat){
+  return specMasterAll(true).filter(x=>x.g===cat)
+    .concat((state.specAdd||[]).filter(x=>!x.ovr && x.g===cat));
+}
+function splRowsHtml(rows){
+  return rows.length ? rows.map(x=>`
+    <button class="specrow" style="${x.off?'opacity:.5':''}" onclick="specEditOpen('${x.g}','${esc(x.c).replace(/'/g,"\\'")}')">
+      ${x.img?`<img src="${x.img}" alt="">`:`<span style="width:46px;height:46px;border:1px solid var(--line);border-radius:8px;flex-shrink:0"></span>`}
+      <span class="si">
+        <b>${esc(x.c)} <span style="color:var(--sub);font-weight:600">${esc(x.b||'')}</span>
+          ${x.add?' <span class="badge b-green" style="font-size:10px">신규</span>':''}${x.mod?' <span class="badge b-blue" style="font-size:10px">수정</span>':''}${x.off?' <span class="badge b-gray" style="font-size:10px">숨김</span>':''}</b>
+        <span>${esc(x.n||'')}</span>
+        <span class="sm">${esc(oqSpecLine(x))}</span>
+      </span>
+      <span class="sp">${x.p>0?money(x.p):'<b style="color:var(--amber)">단가 미정</b>'}<small>/${esc(x.u||'EA')}</small></span>
+    </button>`).join('') : '<div class="empty">검색 결과가 없습니다</div>';
+}
+function splFiltered(){
+  let rows = splAllItems(splCat);
+  if(splBrand==='미정') rows = rows.filter(x=>!(x.p>0));
+  else if(splBrand==='수정') rows = rows.filter(x=>x.mod||x.add);
+  else if(splBrand!=='전체') rows = rows.filter(x=>x.b===splBrand);
+  const q = splQ.trim().toLowerCase();
+  if(q) rows = rows.filter(x=>[x.c,x.n,x.sz,x.pl,x.b,x.mat,x.k].join(' ').toLowerCase().includes(q));
+  return rows;
+}
+async function specListModal(cat, keep){
+  if(role()!=='hq') return;
+  if(!keep){ splCat = cat; splQ=''; splBrand='전체'; }
+  if(!window.SPEC_MASTER){ openModal('<div class="empty"><span class="spin dk"></span> 품목표 불러오는 중…</div>'); const ok = await loadSpec(); if(!ok){ openModal('<div class="empty">품목표(spec.js)를 불러오지 못했습니다</div><button class="btn sec2 blk" onclick="closeModal()">닫기</button>'); return; } }
+  const all = splAllItems(splCat);
+  const brands = ['전체', ...Array.from(new Set(all.map(x=>x.b).filter(Boolean)))];
+  const extra = [['미정', `단가 미정 ${all.filter(x=>!(x.p>0)).length}`], ['수정', `신규·수정 ${all.filter(x=>x.mod||x.add).length}`]];
+  const rows = splFiltered();
+  openModal(`<h2>${splCat==='조명'?'💡':'🧱'} ${splCat} 품목표</h2>
+    <div class="sub"><span id="splN">${rows.length}</span>종 · 누르면 수정 · 단가는 부가세 별도</div>
+    <input id="splQ" placeholder="🔍 코드·품명·규격 검색" value="${esc(splQ)}" style="margin-top:10px"
+      oninput="splQ=this.value;const r=splFiltered();document.getElementById('splRows').innerHTML=splRowsHtml(r);document.getElementById('splN').textContent=r.length">
+    <div class="chips" style="margin-top:10px">
+      ${brands.map(b=>`<button class="${splBrand===b?'on':''}" onclick="splBrand='${esc(b).replace(/'/g,"\\'")}';specListModal(null,true)">${esc(b)}</button>`).join('')}
+      ${extra.map(([k,l])=>`<button class="${splBrand===k?'on':''}" onclick="splBrand='${k}';specListModal(null,true)">${l}</button>`).join('')}
+    </div>
+    <div id="splRows" style="max-height:58vh;overflow-y:auto;-webkit-overflow-scrolling:touch">${splRowsHtml(rows)}</div>
+    <button class="btn blk" onclick="srModal(false, '${splCat}')">＋ 새 품목 등록</button>
+    <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`);
+}
+/* 추가 품목은 기존 상세(승인 근거·승인 취소 포함)로, 표준 품목은 아래 수정 화면으로 */
+function specEditOpen(cat, code){
+  const added = (state.specAdd||[]).find(x=>!x.ovr && x.g===cat && x.c===code);
+  if(added) return srItemModal(code, cat);
+  specEditModal(cat, code);
+}
+function specEditModal(cat, code){
+  if(role()!=='hq') return;
+  const m = (window.SPEC_MASTER||[]).find(x=>x.g===cat && x.c===code); if(!m) return;
+  const o = specOverrides()[cat+'|'+code];
+  const x = o ? specApply(m, o) : m;
+  srPhoto = null;
+  const f = (id,lb,v,ph='') => `<div style="flex:1"><label>${lb}</label><input id="${id}" value="${esc(v||'')}" placeholder="${ph}"></div>`;
+  const back = `specListModal(null,true)`;
+  openModal(`<h2>${esc(code)} ${o&&o.off?'<span class="badge b-gray">숨김</span>':''}${o&&!o.off?'<span class="badge b-blue">수정됨</span>':''}</h2>
+    <div class="sub">${esc(cat)} · ${esc(x.b||'')} · 표준 품목 · 수정 내용은 이력에 남습니다</div>
+    ${!(x.p>0)?`<div class="note warn">현재 <b>단가 미정</b> 품목입니다. 확정된 품명·규격·단가를 입력하면 같은 코드(${esc(code)})로 바로 견적에 쓸 수 있습니다.</div>`:''}
+    <label>품명</label><input id="smName" value="${esc(x.n||'')}">
+    ${cat==='조명'
+      ? `<div style="display:flex;gap:6px">${f('smK','색온도',x.k,'4000K')}${f('smW','소비전력',x.w,'12W')}</div>
+         <div style="display:flex;gap:6px">${f('smSz','외경',x.sz,'Ø120')}${f('smCut','타공',x.cut,'Ø100')}</div>
+         <div style="display:flex;gap:6px">${f('smLm','광량',x.lm)}${f('smAng','조사각도',x.ang)}</div>`
+      : `<div style="display:flex;gap:6px">${f('smSz','규격',x.sz,'600X1200X10T')}${f('smMat','재질',x.mat,'자기질')}</div>
+         <div style="display:flex;gap:6px">${f('smAb','흡수율',x.ab)}${f('smSl','미끄럼저항',x.sl)}</div>`}
+    <label>사용 위치</label><input id="smPl" value="${esc(x.pl||'')}">
+    <div style="display:flex;gap:6px">
+      <div style="width:110px"><label>단위</label><select id="smUnit">${[...new Set([x.u||'EA',...SPEC_UNITS])].map(u=>`<option${u===(x.u||'EA')?' selected':''}>${esc(u)}</option>`).join('')}</select></div>
+      <div style="flex:1"><label>단가 (원, VAT 별도)</label><input id="smPrice" type="number" inputmode="numeric" value="${x.p||''}" placeholder="0 = 미정"></div>
+    </div>
+    <label>제품 사진 <span style="font-weight:500">(바꿀 때만)</span></label>
+    <input type="file" id="srF" accept="image/*" style="display:none" onchange="srPickPhoto(this)">
+    <button class="file-add" onclick="document.getElementById('srF').click()"><span id="srFn">📷 사진 교체</span></button>
+    <div id="srPrev">${x.img?`<img src="${x.img}" style="width:90px;height:90px;object-fit:contain;border-radius:8px;margin-top:6px;border:1px solid var(--line)">`:''}</div>
+    <label>수정 사유 *</label>
+    <textarea id="smWhy" rows="2" placeholder="${!(x.p>0)?'예) KKD 타일 규격·단가 확정 (우석타일 협의 10/15)':'예) 단가 인상 협의 반영 (2027년 단가)'}"></textarea>
+    ${o&&(o.edits||[]).length?`<div class="note"><b>수정 이력</b><br>${o.edits.map(e=>`${fmtDT(e.at)} · ${esc(e.by)} · ${esc(e.changes)}${e.reason?` — ${esc(e.reason)}`:''}`).join('<br>')}</div>`:''}
+    <button class="btn blk" onclick="specEditSave('${cat}','${esc(code).replace(/'/g,"\\'")}')">수정 저장</button>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn sec2" style="flex:1;margin:0" onclick="specToggleHide('${cat}','${esc(code).replace(/'/g,"\\'")}')">${o&&o.off?'다시 표시':'목록에서 숨기기'}</button>
+      ${o?`<button class="btn sec2" style="flex:1;margin:0" onclick="specResetOverride('${cat}','${esc(code).replace(/'/g,"\\'")}')">원래 값으로</button>`:''}
+    </div>
+    <button class="btn sec2 blk" onclick="${back}">← 목록으로</button>`);
+}
+/* 표준 품목 덮어쓰기 저장 — 바뀐 필드만 남긴다 */
+async function specSaveOverride(cat, code, fields, changes, reason, extra){
+  const m = (window.SPEC_MASTER||[]).find(x=>x.g===cat && x.c===code); if(!m) throw new Error('표준 품목을 찾을 수 없습니다');
+  const items = (state.specAdd||[]).slice();
+  const i = items.findIndex(x=>x.ovr && x.g===cat && x.c===code);
+  const cur = i>=0 ? items[i] : { ovr:true, g:cat, c:code };
+  const nx = { ...cur, ...(extra||{}) };
+  Object.keys(fields).forEach(k=>{
+    if(SPEC_META.includes(k) || k==='c' || k==='g') return;
+    const v = fields[k];
+    if((v??'') === (m[k]??'')) delete nx[k]; else nx[k] = v;
+  });
+  nx.edits = (cur.edits||[]).concat([{ by:actorLabel(), at:now(), reason, changes }]);
+  if(i>=0) items[i] = nx; else items.push(nx);
+  await store.saveSpecAdd(items);
+}
+async function specEditSave(cat, code){
+  const m = (window.SPEC_MASTER||[]).find(x=>x.g===cat && x.c===code); if(!m) return;
+  const o = specOverrides()[cat+'|'+code];
+  const x = o ? specApply(m, o) : m;
+  const g = id => ((document.getElementById(id)||{}).value||'').trim();
+  const why = g('smWhy');
+  if(!why){ toast('수정 사유를 입력해주세요'); return; }
+  const nx = { n:g('smName'), pl:g('smPl'), u:g('smUnit')||'EA', p:Number(g('smPrice'))||0, sz:g('smSz') };
+  if(cat==='조명'){ nx.k=g('smK'); nx.w=g('smW'); nx.cut=g('smCut'); nx.lm=g('smLm'); nx.ang=g('smAng'); }
+  else { nx.mat=g('smMat'); nx.ab=g('smAb'); nx.sl=g('smSl'); }
+  if(srPhoto) nx.img = srPhoto;
+  if(!nx.n){ toast('품명을 입력해주세요'); return; }
+  const NM = {n:'품명',k:'색온도',w:'소비전력',sz:cat==='조명'?'외경':'규격',cut:'타공',lm:'광량',ang:'조사각도',mat:'재질',ab:'흡수율',sl:'미끄럼저항',pl:'사용위치',u:'단위',p:'단가'};
+  const chg = Object.keys(NM).filter(k=>String(nx[k]??'')!==String(x[k]??'')).map(k=>k==='p'?`단가 ${x.p>0?money(x.p):'미정'}→${nx.p>0?money(nx.p):'미정'}`:`${NM[k]} ${x[k]||'-'}→${nx[k]||'-'}`);
+  if(srPhoto) chg.push('사진 교체');
+  if(!chg.length){ toast('바뀐 내용이 없습니다'); return; }
+  if(!(nx.p>0) && !confirm('단가가 비어 있어 「단가 미정」으로 저장됩니다. 계속할까요?')) return;
+  const full = { ...x, ...nx }; delete full.mod; delete full.off;
+  try{
+    await specSaveOverride(cat, code, full, chg.join(', '), why);
+    srPhoto = null; toast(`${code} 수정되었습니다`); specListModal(null, true);
+  }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function specToggleHide(cat, code){
+  const o = specOverrides()[cat+'|'+code];
+  const hide = !(o && o.off);
+  if(!confirm(hide ? `${code} 를 견적 품목 선택에서 숨길까요? (이미 작성된 견적은 그대로)` : `${code} 를 다시 표시할까요?`)) return;
+  const items = (state.specAdd||[]).slice();
+  const i = items.findIndex(x=>x.ovr && x.g===cat && x.c===code);
+  const ent = { by:actorLabel(), at:now(), reason:'', changes: hide?'숨김':'다시 표시' };
+  if(i>=0) items[i] = { ...items[i], off:hide, edits:(items[i].edits||[]).concat([ent]) };
+  else items.push({ ovr:true, g:cat, c:code, off:hide, edits:[ent] });
+  try{ await store.saveSpecAdd(items); toast(hide?'숨겼습니다':'다시 표시합니다'); specEditModal(cat, code); }
+  catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
+async function specResetOverride(cat, code){
+  if(!confirm(`${code} 의 수정 내용을 모두 지우고 spec.js 원래 값으로 되돌릴까요?`)) return;
+  const items = (state.specAdd||[]).filter(x=>!(x.ovr && x.g===cat && x.c===code));
+  try{ await store.saveSpecAdd(items); toast('원래 값으로 되돌렸습니다'); specEditModal(cat, code); }
+  catch(e){ toast('저장 실패: '+(e.code||e.message)); }
+}
 /* ── 추가 품목 상세 · 수정 · 승인 취소 (2026-10-07) ── */
-const srIdx = (code, cat) => (state.specAdd||[]).findIndex(x=>x.c===code && x.g===cat);
+const srIdx = (code, cat) => (state.specAdd||[]).findIndex(x=>x.c===code && x.g===cat && !x.ovr);
 async function srItemModal(code, cat){
   const x = (state.specAdd||[])[srIdx(code,cat)]; if(!x) return;
   const key = srAttKey(x);
@@ -5733,7 +5924,7 @@ async function srItemModal(code, cat){
       <button class="btn sec2" style="flex:1;margin:0" onclick="srToggleOff('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">${x.off?'다시 표시':'숨기기'}</button>
     </div>
     <button class="btn sec2 blk" style="color:var(--red-dark)" onclick="srRevokeModal('${esc(x.c).replace(/'/g,"\\'")}','${x.g}')">↩ 승인 취소 (품목표에서 제거)</button>`:''}
-    <button class="btn sec2 blk" onclick="closeModal()">닫기</button>`;
+    <button class="btn sec2 blk" onclick="${state.view==='set'&&splCat?'specListModal(null,true)':'closeModal()'}">${state.view==='set'&&splCat?'← 목록으로':'닫기'}</button>`;
   openModal(body());
   if(!filesLoaded[key]){ await store.getFiles(key, true); if(modalOpen() && document.getElementById('modalIn').innerHTML.includes(esc(x.c))) openModal(body()); }
 }
@@ -5827,8 +6018,8 @@ async function srRevoke(code, cat){
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 async function srToggleOff(code, cat){
-  const items = (state.specAdd||[]).map(x=> (x.c===code && x.g===cat) ? {...x, off:!x.off} : x);
-  const t = items.find(x=>x.c===code && x.g===cat);
+  const items = (state.specAdd||[]).map(x=> (x.c===code && x.g===cat && !x.ovr) ? {...x, off:!x.off} : x);
+  const t = items.find(x=>x.c===code && x.g===cat && !x.ovr);
   if(!confirm(t.off ? `${code} 를 품목표에서 숨길까요? (이미 작성된 견적은 그대로)` : `${code} 를 다시 품목표에 표시할까요?`)) return;
   try{ await store.saveSpecAdd(items); toast(t.off?'숨겼습니다':'다시 표시합니다'); if(modalOpen()) srItemModal(code, cat); else render(); }
   catch(e){ toast('저장 실패: '+(e.code||e.message)); }
@@ -5849,7 +6040,7 @@ function specReqCardHtml(){
     </div>`;
   }
   const pend = srPending().filter(r=>!cat || r.item.g===cat);
-  const added = (state.specAdd||[]).filter(x=>!cat || x.g===cat);
+  const added = (state.specAdd||[]).filter(x=>!x.ovr && (!cat || x.g===cat));
   return `<div class="card"${pend.length?' style="border:2px solid var(--red)"':''}>
     <div class="h2">🆕 신규 품목 ${pend.length?`<span class="badge b-red">승인 대기 ${pend.length}</span>`:''} <span class="badge b-gray">추가 품목 ${added.filter(x=>!x.off).length}종</span></div>
     ${pend.length ? pend.map(r=>`<button class="dayrow" style="width:100%;text-align:left;background:none;border-left:0;border-right:0;border-top:0;cursor:pointer" onclick="srApproveModal('${r.id}')">
@@ -6115,12 +6306,13 @@ function vODetail(){
       s += `<button class="btn blk" onclick="oAssignBldModal('${o.id}')">🏗 시공사 지정</button>`;
   }
   if((o.apvRevokes||[]).length){
+    const MODE_NM = { bld:'시공사 승인 취소', hq:'본사 승인 취소', requote:'물량 수정 요청' };
     s += `<div class="note warn">↩ <b>승인 철회 ${o.apvRevokes.length}회</b><br>` + o.apvRevokes.map(v=>
-      `${fmtDT(v.at)} · ${esc(v.by)} · ${money(v.prevAmount)} — ${esc(v.reason)}`).join('<br>')
-      + (o.stage==='QUOTE' ? `<br><b>→ 공급사 물량 수정 후 다시 ${oIsDir(o)?'본사·시공사':'시공사'} 승인</b>을 받습니다.` : '') + `</div>`;
+      `${fmtDT(v.at)} · ${esc(v.by)} · ${MODE_NM[v.mode||'requote']} · ${money(v.prevAmount)} — ${esc(v.reason)}`).join('<br>')
+      + (o.reqRequote ? `<br><b>→ 공급사 물량 수정 후 다시 ${oIsDir(o)?'본사·시공사':'시공사'} 승인</b>을 받습니다.` : '') + `</div>`;
   }
   if(canRevokeOApv(o))
-    s += `<button class="btn sec2 blk" onclick="oRevokeModal('${o.id}')">↩ 승인 철회 · 물량 수정</button>`;
+    s += `<button class="btn sec2 blk" onclick="oRevokeModal('${o.id}')">↩ 승인 철회</button>`;
   if(oCanAct(o, oIsDir(o)?'HQAPV':'QUOTE'))
     s += `<div class="note">아래 물량과 금액에 이의가 없으면 승인해주세요. 승인 후에는 이 내용으로 납품이 진행됩니다.</div>
       <button class="btn blk grn" onclick="oBldConfirmModal('${o.id}')">✅ 시공사 승인 처리</button>`;
@@ -7027,38 +7219,69 @@ async function oBldConfirmSave(id){
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 
-/* ── 시공사 승인 철회 → 물량 수정 (2026-10-12) ──
-   시공사 승인 후 납품 전(납품일 협의·납품 대기)에 수량이 바뀌면 승인을 되돌려 공급사가 다시 산출한다.
+/* ── 승인 철회 (2026-10-12 시공사 승인 철회 → 2026-10-15 본사 승인까지 확대) ──
+   납품(수령 확인) 전이라면 본사담당은 본사·시공사 승인을, 시공사는 자기 승인을 되돌릴 수 있다.
+   되돌리는 방식 3가지:
+     bld     — 시공사 승인만 취소: 견적 그대로, 시공사가 다시 확인(필요하면 품목·수량 조정)
+     hq      — 본사 승인 취소(직영): 견적 그대로, 본사가 다시 검토 (시공사 승인이 있었으면 함께 취소)
+     requote — 물량 수정 요청: 견적 단계로 돌아가 공급사가 다시 산출
    납품 후 변동은 기존 「반품」으로 처리. */
-function canRevokeOApv(o){
-  if(!o || !o.bldConfirm || o.receipt) return false;
-  if(!['APPROVED','SCHED'].includes(o.stage)) return false;
-  return role()==='hq' || (role()==='builder' && o.builder===myCo());
+function oRevokeOpts(o){
+  if(!o || o.receipt) return [];
+  if(!['HQAPV','APPROVED','SCHED'].includes(o.stage)) return [];
+  const rl = role(), isHq = rl==='hq', myBld = rl==='builder' && o.builder===myCo();
+  const dir = oIsDir(o), opts = [];
+  if(o.bldConfirm && (isHq || myBld))
+    opts.push({k:'bld', t:'시공사 승인만 취소', d:`견적은 그대로 두고 ${esc(oBld(o))}가 다시 확인·승인합니다. 승인할 때 품목·수량을 조정할 수 있습니다.`});
+  if(isHq && dir && o.confirm)
+    opts.push({k:'hq', t:o.bldConfirm?'본사·시공사 승인 모두 취소':'본사 승인 취소', d:'견적은 그대로 두고 본사가 다시 검토·승인합니다(품목·수량 조정 가능). 그다음 시공사 승인을 다시 받습니다.'});
+  if(isHq || (myBld && o.bldConfirm))
+    opts.push({k:'requote', t:'물량 수정 요청 (공급사 재산출)', d:`견적 단계로 돌아가 ${esc(o.supplier)}가 물량을 다시 산출합니다. ${dir?'수정 견적은 본사 승인 → 시공사 승인':'수정 견적은 시공사 승인'}을 다시 거칩니다.`});
+  return opts;
 }
+const canRevokeOApv = o => oRevokeOpts(o).length > 0;
 function oRevokeModal(id){
-  const o = O(id); if(!canRevokeOApv(o)) return;
-  openModal(`<h2>승인 철회 · 물량 수정</h2>
+  const o = O(id); const opts = oRevokeOpts(o); if(!opts.length) return;
+  const apv = [o.confirm?`본사 승인 ${esc(o.confirm.by)} · ${fmtDT(o.confirm.at)}`:'', o.bldConfirm?`시공사 승인 ${esc(o.bldConfirm.by)} · ${fmtDT(o.bldConfirm.at)}`:''].filter(Boolean).join('<br>');
+  openModal(`<h2>승인 철회</h2>
     <div class="sub">${o.id} · ${esc(o.site)} · ${esc(oBld(o))}</div>
-    <div class="note">현재 확정 — <b>${money(oAmount(o))}</b> · 시공사 승인 ${esc(o.bldConfirm.by)} · ${fmtDT(o.bldConfirm.at)}</div>
-    <div class="note warn">철회하면 <b>「견적」 단계로 되돌아가</b> ${esc(o.supplier)}가 물량을 다시 산출합니다.
-      ${oIsDir(o)?'<br>직영 방식이라 수정된 견적은 <b>본사 승인 → 시공사 승인</b>을 다시 거칩니다.':'<br>수정된 견적은 <b>시공사 승인</b>을 다시 받습니다.'}
-      ${o.sched?`<br>잡혀 있던 <b>납품일(${fmtD(o.sched.planDate)})은 취소</b>되고, 다시 승인된 뒤 새로 협의합니다.`:''}
-      <br>기존 견적·승인 기록은 이력에 그대로 남습니다.</div>
-    <label>철회 사유 · 변동 내용 * <span style="font-weight:500">(공급사에게 보입니다)</span></label>
-    <textarea id="orvWhy" rows="3" placeholder="예) 도면 변경으로 홀 다운라이트 12EA → 16EA, 주방 평판 2EA 삭제"></textarea>
-    <button class="btn blk" onclick="oRevokeSave('${id}')">승인 철회 — 공급사에 물량 수정 요청</button>`);
+    <div class="note">현재 금액 <b>${money(oAmount(o))}</b><br>${apv}</div>
+    <label>철회 방식</label>
+    ${opts.map((x,i)=>`<label style="display:flex;gap:10px;align-items:flex-start;padding:12px;border:1.5px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;font-weight:500">
+      <input type="radio" name="orvMode" value="${x.k}" ${i===0?'checked':''} style="width:18px;height:18px;margin:2px 0 0;flex-shrink:0">
+      <span><b>${x.t}</b><span style="display:block;font-size:12.5px;color:var(--sub);margin-top:2px">${x.d}</span></span></label>`).join('')}
+    ${o.sched?`<div class="note warn">잡혀 있던 <b>납품일(${fmtD(o.sched.planDate)})은 취소</b>되고, 다시 승인된 뒤 새로 협의합니다.</div>`:''}
+    <div class="note">기존 견적·승인 기록은 이력에 그대로 남습니다.</div>
+    <label>철회 사유 * <span style="font-weight:500">(관계자 모두에게 보입니다)</span></label>
+    <textarea id="orvWhy" rows="3" placeholder="예) 승인 금액 오기입 / 도면 변경으로 홀 다운라이트 12EA → 16EA"></textarea>
+    <button class="btn blk" onclick="oRevokeSave('${id}')">승인 철회</button>`);
 }
 async function oRevokeSave(id){
-  const o = O(id); if(!canRevokeOApv(o)) return;
+  const o = O(id); const opts = oRevokeOpts(o); if(!opts.length) return;
+  const sel = document.querySelector('input[name="orvMode"]:checked');
+  const mode = sel ? sel.value : opts[0].k;
+  if(!opts.some(x=>x.k===mode)){ toast('이 철회 방식은 권한이 없습니다'); return; }
   const why = (document.getElementById('orvWhy').value||'').trim();
-  if(!why){ toast('철회 사유·변동 내용을 입력해주세요'); return; }
-  const rec = { at:now(), by:actorLabel(), reason:why, fromStage:o.stage, prevAmount:oAmount(o),
+  if(!why){ toast('철회 사유를 입력해주세요'); return; }
+  const dir = oIsDir(o);
+  const rec = { at:now(), by:actorLabel(), reason:why, mode, fromStage:o.stage, prevAmount:oAmount(o),
                 prevBldConfirm:o.bldConfirm||null, prevConfirm:o.confirm||null, prevSched:o.sched||null };
-  const patch = { stage:'QUOTE', stageAt:now(), bldConfirm:null, confirm:null, sched:null, reqRequote:true,
-                  apvRevokes:(o.apvRevokes||[]).concat([rec]) };
+  let patch, msg, toastMsg;
+  if(mode==='bld'){
+    patch = { stage: dir?'HQAPV':'QUOTE', stageAt:now(), bldConfirm:null, sched:null };
+    msg = `시공사 승인 철회 → 시공사 재승인 대기`; toastMsg = `시공사 승인을 취소했습니다 — ${oBld(o)}가 다시 확인합니다`;
+  } else if(mode==='hq'){
+    patch = { stage:'QUOTE', stageAt:now(), confirm:null, bldConfirm:null, sched:null };
+    msg = o.bldConfirm ? '본사·시공사 승인 철회 → 본사 재검토' : '본사 승인 철회 → 본사 재검토';
+    toastMsg = '본사 승인을 취소했습니다 — 다시 검토·승인해주세요';
+  } else {
+    patch = { stage:'QUOTE', stageAt:now(), bldConfirm:null, confirm:null, sched:null, reqRequote:true };
+    msg = '승인 철회 → 물량 수정 요청'; toastMsg = `승인을 철회했습니다 — ${o.supplier}에 물량 수정을 요청했습니다`;
+  }
+  patch.apvRevokes = (o.apvRevokes||[]).concat([rec]);
   try{
-    await store.updateOrder(id, patch, oEntry(`승인 철회 → 물량 수정 요청 (${money(rec.prevAmount)}) — ${why}`));
-    closeModal(); toast(`승인을 철회했습니다 — ${o.supplier}에 물량 수정을 요청했습니다`);
+    await store.updateOrder(id, patch, oEntry(`${msg} (${money(rec.prevAmount)}) — ${why}`));
+    closeModal(); toast(toastMsg);
   }catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
 function oSchedModal(id){
