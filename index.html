@@ -537,7 +537,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.15c';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.25';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -1130,7 +1130,7 @@ const store = {
     const cur = R(id);
     let overdueEntry = null;
     if(cur && patch.stage && patch.stage!==cur.stage && isOver(cur))
-      overdueEntry = {stage:cur.stage, days:-ddays(cur), ts:now()};
+      overdueEntry = {stage:cur.stage, days:-ddays(cur), ts:now(), sla:(state.cfg.sla[cur.stage]||3)};   /* sla = 기록 당시 처리기한(일) — 기한을 늘리면 그만큼 차감하는 기준 */
     if(LIVE){
       const upd = {...patch};
       if(histEntry) upd.history = FB.arrayUnion(histEntry);
@@ -2429,7 +2429,8 @@ function vDash(){
     <div class="card"><div class="h2">단계별 현황 <span style="font-size:10.5px;color:var(--sub);font-weight:600">터치하면 해당 목록으로 이동</span></div>${bars}</div>
     ${asDashCard(rs)}
     ${deptDashCard(rs)}
-    ${isMgr()?VENDORS.filter(v=>!isBranch()||v==='우리아이엔티').map(v=>partnerCard(rs.filter(r=>!isDefect(r)&&reqVendor(r)===v), v)).join(''):''}
+    ${isBranch()?VENDORS.filter(v=>v==='우리아이엔티').map(v=>partnerCard(rs.filter(r=>!isDefect(r)&&reqVendor(r)===v), v)).join(''):''}
+    ${role()==='hq'?`<button class="btn sec2 blk" style="margin:0 0 12px" onclick="go('set');setTimeout(()=>{const h=[...document.querySelectorAll('#main .h2')].find(x=>x.textContent.includes('파트너사 평가'));if(h)h.scrollIntoView({behavior:'smooth'})},350)">🏆 파트너사 평가 현황 — 설정에서 보기 ›</button>`:''}
     <div class="h2" style="margin:16px 2px 10px">⚠️ 기한초과 — 조치 필요 <span class="badge b-red">${over.length}건</span></div>
     ${overList}`;
 }
@@ -4666,6 +4667,35 @@ function buildXlsx(rows, sheetName){
     {name:'xl/worksheets/sheet1.xml', text:sheetXml(rows)}
   ]);
 }
+/* 여러 시트 엑셀 (2026-10-25) — sheets: [{name, rows, widths}] · 첫 행은 굵게·틀 고정 */
+function buildXlsxBook(sheets){
+  const colLetter = i => { let s='', n=i+1; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26); } return s; };
+  const sheetX = sh => {
+    const body = sh.rows.map((row,ri)=>`<row r="${ri+1}">${(row||[]).map((v,ci)=>{
+      const ref = colLetter(ci)+(ri+1), st = ri===0 ? ' s="1"' : '';
+      if(v===''||v===null||v===undefined) return ri===0?`<c r="${ref}"${st}/>`:'';
+      if(typeof v==='number' && isFinite(v)) return `<c r="${ref}"${st}><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"${st}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+    }).join('')}</row>`).join('');
+    const cols = (sh.widths||[]).map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>${cols?`<cols>${cols}</cols>`:''}<sheetData>${body}</sheetData></worksheet>`;
+  };
+  const files = [
+    {name:'[Content_Types].xml', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`},
+    {name:'_rels/.rels', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`},
+    {name:'xl/workbook.xml', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map((sh,i)=>`<sheet name="${xmlEsc(sh.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets></workbook>`},
+    {name:'xl/_rels/workbook.xml.rels', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`},
+    {name:'xl/styles.xml', text:`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="0"/><fonts count="2"><font><sz val="10"/><name val="맑은 고딕"/></font><font><b/><sz val="10"/><name val="맑은 고딕"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEFF1F4"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`},
+    ...sheets.map((sh,i)=>({name:`xl/worksheets/sheet${i+1}.xml`, text:sheetX(sh)}))
+  ];
+  return zipStore(files);
+}
 /* 표준 견적서 양식 내려받기 — kind: 'bosu' | 'order' */
 function downloadQuoteForm(kind, meta){
   const isOrder = kind==='order';
@@ -4905,7 +4935,10 @@ function vSet(){
     <div class="h2">⏱ 단계별 처리기한 (SLA)</div>
     <div class="note" style="margin:0 0 14px">각 단계 진입 후 아래 일수를 초과하면 기한초과 알림이 표시됩니다. ${LIVE?'변경 시 전체 사용자에게 즉시 적용됩니다.':''}</div>
     ${slaRows}
+    ${slaRecalcHtml()}
   </div>
+  <div class="h2" style="margin:18px 2px 10px">🏆 파트너사 평가 현황</div>
+  ${VENDORS.map(v=>partnerCard(visibleReqs().filter(r=>!isDefect(r)&&reqVendor(r)===v), v)).join('')}
   <div class="card">
     <div class="h2">🔑 소속별 접속코드</div>
     <div class="note" style="margin:0 0 14px">코드를 변경하면 이후 로그인부터 적용됩니다. 점포·업체에 새 코드를 공지하세요.</div>
@@ -5200,7 +5233,70 @@ async function saveMigrate(on){
   try{ await store.saveConfig({migrate:{on:!!on, url, from, cutoff, text, by:state.user.name, at:now()}}); toast(on?'저장했습니다':'이관 안내를 껐습니다'); render(); }
   catch(e){ toast('저장 실패: '+(e.code||e.message)); }
 }
-async function updSla(s,v){ const sla={...state.cfg.sla}; sla[s]=Math.max(1,Number(v)||1); try{ await store.saveConfig({sla}); toast('저장되었습니다'); render(); }catch(e){ toast('저장 실패'); } }
+async function updSla(s,v){
+  const old = state.cfg.sla[s]||3;
+  const sla={...state.cfg.sla}; sla[s]=Math.max(1,Number(v)||1);
+  try{
+    await store.saveConfig({sla});
+    /* 처리기한을 늘리면 그 단계의 기존 지연 기록도 늘린 일수만큼 줄인다 (2026-10-25) */
+    if(sla[s] > old && role()==='hq'){
+      const r = await recalcOverduesBySla({[s]:old});
+      toast(r.touched ? `저장 — ${STAGE_NM[s]} 지연 기록 ${r.removed}건 삭제 · ${r.reduced}건 축소` : '저장되었습니다');
+    } else toast('저장되었습니다');
+    render();
+  }catch(e){ toast('저장 실패'); }
+}
+/* 지연 기록 재계산 — 기록 당시 기한(o.sla, 없으면 baseOld[stage]) 대비 현재 기한이 늘어난 만큼 지연일을 줄이고 0 이하면 삭제.
+   기한을 줄인 경우에는 과거 기록을 늘리지 않는다(업체에 불리하게 소급하지 않음). */
+async function recalcOverduesBySla(baseOld, dry){
+  let touched=0, removed=0, reduced=0, fail=0;
+  for(const r of state.reqs){
+    const od = r.overdues||[]; if(!od.length) continue;
+    let changed=false; const next=[];
+    for(const o of od){
+      const before = o.sla!=null ? o.sla : (baseOld ? baseOld[o.stage] : null);
+      const cur = state.cfg.sla[o.stage]||3;
+      if(before==null || cur<=before){ next.push(o); continue; }
+      const days = (o.days||0) - (cur - before);
+      changed = true;
+      if(days<=0){ removed++; continue; }
+      reduced++; next.push({...o, days, sla:cur, adj:(o.adj||0)+(cur-before)});
+    }
+    if(!changed) continue;
+    touched++;
+    if(dry) continue;
+    try{ await store.updateRequest(r.id, {overdues:next}); }catch(e){ fail++; console.warn('sla recalc', r.id, e); }
+  }
+  return {touched, removed, reduced, fail};
+}
+/* 설정 — 이미 기한을 늘려 둔 경우: 기록 당시 기한을 넣고 한 번 재계산 */
+function slaRecalcHtml(){
+  const base = state.slaBase || {...DEFAULT_SLA};
+  const st = Object.keys(state.cfg.sla);
+  const noSla = state.reqs.reduce((a,r)=>a+(r.overdues||[]).filter(o=>o.sla==null).length,0);
+  return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+    <div style="font-weight:800;font-size:14px">↻ 기한을 늘린 만큼 지연 기록 차감</div>
+    <div class="note" style="margin:6px 0 10px">이제부터는 위 기한을 <b>늘리면 자동으로</b> 그 단계의 기존 지연 기록이 늘린 일수만큼 줄어듭니다(0일 이하는 삭제).
+      ${noSla?`<br>이번 기능 전에 쌓인 기록 <b>${noSla}건</b>은 당시 기한이 저장돼 있지 않습니다. 아래에 <b>기록 당시 기한</b>(처음 기본값이 들어 있음)을 확인하고 한 번 실행하세요.`:'<br>모든 기록에 당시 기한이 저장되어 있습니다.'}</div>
+    ${st.map(k=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:13px">
+      <span style="flex:1;font-weight:700">${STAGE_NM[k]}</span>
+      <span style="color:var(--sub)">당시</span><input type="number" min="1" id="sb_${k}" value="${base[k]||3}" style="width:60px;text-align:center" onchange="state.slaBase=state.slaBase||{...DEFAULT_SLA};state.slaBase['${k}']=Math.max(1,+this.value||1)">
+      <span style="color:var(--sub)">→ 현재 <b>${state.cfg.sla[k]}</b>일</span></div>`).join('')}
+    <button class="btn sec2 blk" style="margin-top:4px" onclick="runSlaRecalc()">🔄 지연 기록 재계산 실행</button>
+    <div id="slaRcOut">${state.slaRcMsg?`<div class="note" style="margin-top:8px">${state.slaRcMsg}</div>`:''}</div>
+  </div>`;
+}
+async function runSlaRecalc(){
+  if(role()!=='hq') return;
+  const base = {}; Object.keys(state.cfg.sla).forEach(k=>{ const el=document.getElementById('sb_'+k); base[k]=Math.max(1, +(el&&el.value)||DEFAULT_SLA[k]||3); });
+  state.slaBase = base;
+  const pre = await recalcOverduesBySla(base, true);
+  if(!pre.touched){ state.slaRcMsg='바뀔 기록이 없습니다 (현재 기한이 당시 기한보다 길지 않음).'; render(); return; }
+  if(!confirm(`접수건 ${pre.touched}건의 지연 기록을 고칩니다.\n· 삭제 ${pre.removed}건 · 일수 축소 ${pre.reduced}건\n진행할까요?`)) return;
+  const r = await recalcOverduesBySla(base, false);
+  state.slaRcMsg = `완료 — 접수건 ${r.touched}건 갱신 · 지연 기록 ${r.removed}건 삭제 · ${r.reduced}건 일수 축소${r.fail?` · 실패 ${r.fail}건`:''}`;
+  render();
+}
 async function updCode(rk,v){ if(!v.trim()){ toast('코드는 비울 수 없습니다'); render(); return;} const codes={...state.cfg.codes}; codes[rk]=v.trim(); try{ await store.saveConfig({codes}); toast('접속코드가 변경되었습니다'); }catch(e){ toast('저장 실패'); } }
 async function addStore(){ const v=document.getElementById('addStoreIn').value.trim(); if(!v) return; try{ await store.saveConfig({stores:[...state.cfg.stores,v]}); render(); }catch(e){ toast('저장 실패'); } }
 async function delStore(i){ const arr=state.cfg.stores.slice(); arr.splice(i,1); try{ await store.saveConfig({stores:arr}); render(); }catch(e){ toast('저장 실패'); } }
@@ -7871,7 +7967,68 @@ function vBuilderSettle(){
   </div>`:''}`;
 }
 
-function vSettle(){
+/* 정산 화면 맨 위에 「발주 현황 일괄 엑셀」 카드 (2026-10-25) */
+function vSettle(){ return oXlsxCardHtml() + vSettleBody(); }
+function oXlsxCardHtml(){
+  const sc = state.oxScope || 'tab';
+  const tabCat = appCat(state.app);
+  const n = oExportList(sc).length;
+  const chip = (v,l) => `<button class="${sc===v?'on':''}" onclick="state.oxScope='${v}';render()">${l}</button>`;
+  return `<div class="card">
+    <div class="h2">📥 발주 현황 일괄 엑셀</div>
+    <div class="note" style="margin:0 0 10px">${role()==='hq'?'전체':'우리 회사'} 발주를 한 파일로 내려받습니다 — 시트1 「발주현황」(건별 단계·금액·납품·정산), 시트2 「품목내역」(건별 품목·수량·단가).</div>
+    <div class="chips">${chip('tab', `${tabCat?CAT_ICON[tabCat]+' '+tabCat+'만':'이 탭'}`)}${chip('all','조명+타일')}${chip('month',`정산월 ${ymLabel(state.settleMonth||ymOf(now()))}`)}</div>
+    <button class="btn blk" style="margin-top:0" onclick="exportOrdersXlsx()">⬇ 엑셀 내려받기 (${n}건)</button>
+  </div>`;
+}
+/* 내려받을 발주 — 역할별 열람 범위 안에서 */
+function oExportList(sc){
+  const rl = role();
+  let list = state.orders||[];
+  if(rl==='supplier') list = list.filter(o=>o.supplier===myCo());
+  if(rl==='builder')  list = list.filter(o=>o.builder===myCo());
+  const cat = appCat(state.app);
+  if(sc==='tab' && cat) list = list.filter(o=>o.cat===cat);
+  if(sc==='month'){ const ym = state.settleMonth||ymOf(now()); list = list.filter(o=>(cat?o.cat===cat:true) && ((o.settle&&o.settle.month===ym) || (o.settleReq&&o.settleReq.month===ym))); }
+  return list.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+}
+function exportOrdersXlsx(){
+  const sc = state.oxScope || 'tab';
+  const list = oExportList(sc);
+  if(!list.length){ toast('내려받을 발주가 없습니다'); return; }
+  const d = ts => ts ? fmtD(ts) : '';
+  const num = v => (v==null||v==='') ? '' : Number(v);
+  const head1 = ['발주번호','품목','점포구분','진행방식','현장','시공사','공급사','청구처','현재 단계','등록일','견적 제출일','견적금액','본사 승인일','시공사 승인일','확정금액','납품 예정일','수령일','검수','반품 차감','청구금액(VAT별도)','정산 요청일','정산월','정산일','정산금액','중단 사유'];
+  const rows1 = list.map(o=>[
+    o.id, o.cat||'', o.type||'', oProcNm(o), o.site||'', oBld(o), o.supplier||'', oBillTo(o),
+    O_NM[o.stage]||o.stage, d(o.createdAt), d(o.quote&&o.quote.ts), num(o.quote&&o.quote.amount),
+    d(o.confirm&&o.confirm.at), d(o.bldConfirm&&o.bldConfirm.at), num(oAmount(o)),
+    d(o.sched&&o.sched.planDate), d(o.receipt&&o.receipt.receivedAt),
+    o.receipt ? (o.receipt.allOk===false ? '이상: '+(o.receipt.shortItems||'') : '이상없음') : '',
+    num(oReturnAmt(o)||''), o.receipt?num(oNetAmount(o)):'',
+    d(o.settleReq&&o.settleReq.at), (o.settle&&o.settle.month)||(o.settleReq&&o.settleReq.month)||'', d(o.settle&&o.settle.at), num(o.settle&&o.settle.amount),
+    o.stage==='CANCEL'?(o.cancelReason||''):''
+  ]);
+  const head2 = ['발주번호','현장','품목','현재 단계','품목코드','품명','규격','단위','수량','단가','금액'];
+  const rows2 = [];
+  list.forEach(o=>{
+    ((o.quote&&o.quote.items)||[]).forEach(it=>rows2.push([o.id, o.site||'', o.cat||'', O_NM[o.stage]||o.stage, it.code||'', it.name||'', it.spec||'', it.unit||'', num(it.qty), num(it.price), num(it.amount)]));
+    if(o.quote && o.quote.freight && o.quote.freight.amount) rows2.push([o.id, o.site||'', o.cat||'', O_NM[o.stage]||o.stage, '', '운반비', o.quote.freight.area||'', '식', 1, num(o.quote.freight.amount), num(o.quote.freight.amount)]);
+  });
+  const live = rows1.filter(r=>r[8]!==O_NM.CANCEL);   /* 합계는 중단 건 제외 */
+  const sum = (rows, ci) => live.reduce((a,r)=>a+(typeof r[ci]==='number'?r[ci]:0),0);
+  rows1.push([]); rows1.push(['합계 (중단 제외)','','','','','','','','',`${live.length}건`,'',sum(rows1,11),'','',sum(rows1,14),'','','',sum(rows1,18),sum(rows1,19),'','','',sum(rows1,23),'']);
+  const blob = buildXlsxBook([
+    {name:'발주현황', rows:[head1, ...rows1], widths:[16,6,8,10,26,14,12,14,12,11,11,13,11,11,13,11,11,14,11,14,11,9,11,13,20]},
+    {name:'품목내역', rows:[head2, ...rows2], widths:[16,26,6,12,13,30,30,6,8,11,13]}
+  ]);
+  const scNm = sc==='month' ? `정산월${(state.settleMonth||ymOf(now())).replace('-','')}` : sc==='all' ? '조명타일' : (appCat(state.app)||'전체');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `발주현황_${scNm}_${dkey(now()).replace(/-/g,'')}.xlsx`; a.click();
+  toast(`엑셀 파일이 다운로드되었습니다 (${list.length}건)`);
+}
+function vSettleBody(){
   if(role()==='supplier') return vSupplySettle();
   if(role()==='builder')  return vBuilderSettle();
   const list = visibleOrders();
