@@ -538,7 +538,7 @@ window.dispatchEvent(new Event('fb-ready'));
 </script>
 
 <script>
-const APP_VERSION = '2026.10.26b';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
+const APP_VERSION = '2026.10.26c';   /* 로그인 화면 하단에 표시 — 사용자가 옛 캐시본을 쓰고 있는지 확인용 */
 /* =========================================================================
    GRS 보수ON — 실서비스 버전 (Firebase Firestore 실시간 연동)
 
@@ -763,6 +763,11 @@ function prevPriceNote(){
   return `${esc(P.maker)} 재고 물량 단가 적용 — ${codes.map(c=>`<b>${esc(c)} ${money(P.items[c])}</b>`).join(' · ')}`;
 }
 const FREIGHT_AREAS = ['수도권','충청','전라','경상'];
+/* 프로파일 운임 — 제품 전체 배송 (해피볼트에디션 단가표) */
+const PF_FREIGHT = { note:'제품 전체 배송 (본사 결제)', area:{
+  '수도권 (서울·인천·경기) 화물':150000, '충청 (대전·세종·천안·청주) 화물':220000, '강원 (원주·춘천·강릉) 화물':250000,
+  '호남 (광주·전주·목포·순천) 화물':280000, '영남 (부산·울산·대구·창원) 화물':300000, '택배':50000 } };
+const freightCfg = cat => cat==='프로파일' ? PF_FREIGHT : (window.SPEC_FREIGHT||{})[cat];
 
 /* ═══════ 점포 오픈일 · 하자기간 (stores.js) ═══════
    GRS 하자기간 기준 — 일반공사 1년 / 방수·가스설비 5년.
@@ -983,7 +988,11 @@ const oRetOk      = o => oReturns(o).filter(r=>r.status==='확인');
 const oRetPending = o => oReturns(o).filter(r=>r.status==='요청');
 const oReturnAmt  = o => oRetOk(o).reduce((s,r)=>s+(r.amount||0),0);
 /* 반품 차감 후 실제 정산 대상 금액 */
-const oNetAmount  = o => Math.max(0, (oAmount(o)||0) - oReturnAmt(o));
+/* 프로파일 바(옐로우·아이보리)는 본사가 186m를 일괄 선결제·선제작한 재고 — 발주에서는 소진만 하고 정산(청구)에서 뺀다.
+   부속품·운임은 조명·타일처럼 발주분만큼 본사가 결제한다 (2026-10-26) */
+const PF_PREPAID = ['RIA-PF-01','RIA-PF-02','LO-PF-01','LO-PF-02'];
+const oPrepaid    = o => (o && o.cat==='프로파일' && o.quote) ? ((o.quote.items)||[]).filter(it=>PF_PREPAID.includes(it.code)).reduce((s,it)=>s+(+it.amount||0),0) : 0;
+const oNetAmount  = o => Math.max(0, (oAmount(o)||0) - oReturnAmt(o) - oPrepaid(o));
 const canRetAdd   = o => role()==='builder' && o.builder===myCo() && !!o.receipt && ['DELIVERED','SREQ'].includes(o.stage);
 const canRetOk    = o => role()==='supplier' && o.supplier===myCo();
 const ymOf = ts => { const d=new Date(ts); return `${d.getFullYear()}-${pad2(d.getMonth()+1)}`; };
@@ -6364,9 +6373,9 @@ function vODash(){
   const thisYm = ymOf(now());
   /* 정산 대기 = 납품 완료됐지만 아직 정산 안 된 건 */
   const pending = list.filter(o=>o.stage==='DELIVERED');
-  const pendingAmt = pending.reduce((s,o)=>s+(oAmount(o)||0),0);
+  const pendingAmt = pending.reduce((s,o)=>s+oNetAmount(o),0);
   const doneAmt = list.filter(o=>o.stage==='SETTLED' && o.settle && ymOf(o.settle.at)===thisYm)
-                      .reduce((s,o)=>s+(oAmount(o)||0),0);
+                      .reduce((s,o)=>s+(o.settle.amount!=null?o.settle.amount:oNetAmount(o)),0);
   const badRcpt = list.filter(o=>O_LIVE(o) && o.receipt && o.receipt.allOk===false);
 
   const tile = (v,label,val,cls) => `<button class="tile ${cls||''}" onclick="oGoList('${v}')">
@@ -6547,7 +6556,9 @@ function vODetail(){
   /* 2. 수량산출·견적 */
   s += `<div class="sec"><div class="st">📋 2. 수량산출·견적서 ${oSlaTag(o,'QUOTE')}</div>`;
   if(o.quote){
-    s += `<div class="kv"><b>견적금액</b><strong style="font-size:15px">${money(o.quote.amount)}</strong></div>
+    s += `<div class="kv"><b>견적금액</b><strong style="font-size:15px">${money(o.quote.amount)}</strong></div>`;
+    if(oPrepaid(o)) s += `<div class="note">📏 <b>프로파일 ${money(oPrepaid(o))}</b>은 본사 선결제 재고에서 소진(정산 제외) · 부속품·운임 <b>${money(Math.max(0,(oAmount(o)||0)-oPrepaid(o)))}</b>만 정산합니다.</div>`;
+    s += `
       <div class="kv"><b>견적일</b>${fmtD(o.quote.ts)}</div>
       ${o.quote.readyDate?`<div class="kv"><b>납품 가능일</b><strong>${fmtD(o.quote.readyDate)}</strong></div>`:''}
       ${o.quote.fileName?`<div class="kv"><b>첨부</b>📎 ${esc(o.quote.fileName)}</div>`:''}
@@ -6776,7 +6787,9 @@ function vONew(){
     </div>
     ${cat==='프로파일' ? `<input type="hidden" id="oType" value="직영점">
     <div class="note">📏 프로파일은 <b>직영점 전용</b>입니다 — 직영 방식(본사 승인 → 시공사 승인 → 납품 → GRS 정산)으로 진행되고,
-      <b>시공사 승인 시 선제작 재고에서 소진</b>됩니다.${pfStockLine()}</div>` : `<label>운영 구분</label>
+      <b>시공사 승인 시 선제작 재고에서 소진</b>됩니다.
+      <br>· 프로파일 바(옐로우·아이보리) — 본사 <b>선결제</b> 186m에서 소진, 정산 없음
+      <br>· 부속품·운임 — 필요한 만큼 발주, <b>본사 결제</b>(월 정산)${pfStockLine()}</div>` : `<label>운영 구분</label>
     <select id="oType" onchange="oTypeHint()"><option>직영점</option><option>가맹점</option></select>
     <div class="note" id="oTypeNote">직영점 — 견적 확정은 <b>GRS 공사담당자</b>, 정산은 <b>월단위</b>입니다.</div>`}
     <input type="hidden" id="oCat" value="${cat}">
@@ -7019,7 +7032,7 @@ async function oQuoteModal(id, keep){
     <label>운반비 (납품 지역)</label>
     <select id="oqArea" onchange="oqAreaChange('${o.cat}')">
       <option value="">운반비 없음 / 별도 협의</option>
-      ${FREIGHT_AREAS.map(a=>`<option${oqFreight&&oqFreight.area===a?' selected':''}>${a}</option>`).join('')}
+      ${(o.cat==='프로파일'?Object.keys(PF_FREIGHT.area):FREIGHT_AREAS).map(a=>`<option${oqFreight&&oqFreight.area===a?' selected':''}>${a}</option>`).join('')}
     </select>
     <div id="oqFreightNote" class="note" style="display:none"></div>
     <div class="kv" style="margin-top:12px;font-size:16px"><b>견적금액</b><strong id="oqTotal">0원</strong></div>
@@ -7035,7 +7048,7 @@ function oqAnalysisRender(){
 function oqAreaChange(cat){
   const sel = document.getElementById('oqArea'); if(!sel) return;
   const note = document.getElementById('oqFreightNote');
-  const cfg = (window.SPEC_FREIGHT||{})[cat];
+  const cfg = freightCfg(cat);
   if(!sel.value || !cfg){ oqFreight=null; if(note) note.style.display='none'; oqTotalUpd(); return; }
   const amt = cfg.area[sel.value] || 0;
   oqFreight = { area:sel.value, amount:amt, note:cfg.note };
@@ -7201,7 +7214,8 @@ function oqSet(i,k,v){
 }
 function oqTotalUpd(){
   const t = oQItems.reduce((s,x)=>s+((+x.qty||0)*(+x.price||0)),0) + (oqFreight?oqFreight.amount:0);
-  const el = document.getElementById('oqTotal'); if(el) el.textContent = money(t);
+  const pre = Math.round(oQItems.filter(x=>PF_PREPAID.includes(x.code)).reduce((s,x)=>s+((+x.qty||0)*(+x.price||0)),0));
+  const el = document.getElementById('oqTotal'); if(el) el.innerHTML = money(t) + (pre?`<div style="font-size:12px;font-weight:600;color:var(--sub)">선결제 프로파일 ${money(pre)} 제외 → 정산 대상 <b style="color:var(--ink)">${money(Math.round(t-pre))}</b></div>`:'');
 }
 function oqRender(){
   const box = document.getElementById('oqRows'); if(!box) return;
@@ -7859,6 +7873,7 @@ function oSettleReqModal(id){
       먼저 처리하지 않으면 차감 없이 청구됩니다.</div>`:''}
     <div class="kv"><b>확정 금액</b>${money(gross)}</div>
     <div class="kv"><b>반품 차감</b>${ret?`<span style="color:var(--red-dark)">- ${money(ret)}</span>`:'없음'}</div>
+    ${oPrepaid(o)?`<div class="kv"><b>선결제 프로파일</b><span style="color:var(--sub)">- ${money(oPrepaid(o))} (본사 선결제분, 청구 제외)</span></div>`:''}
     <div class="kv" style="font-size:15px"><b>청구 금액</b><strong>${money(net)}</strong></div>
     <label>청구 귀속월</label>
     <input id="srMonth" type="month" value="${ymOf(now())}">
@@ -7869,7 +7884,7 @@ function oSettleReqModal(id){
 async function oSettleReqSave(id){
   const o = O(id); if(!o) return;
   const req = { at:now(), by:actorLabel(), month:document.getElementById('srMonth').value,
-                gross:oAmount(o)||0, returnAmt:oReturnAmt(o), amount:oNetAmount(o),
+                gross:oAmount(o)||0, returnAmt:oReturnAmt(o), prepaid:oPrepaid(o), amount:oNetAmount(o),
                 note:document.getElementById('srNote').value.trim() };
   try{
     await store.updateOrder(id, {settleReq:req, stage:'SREQ', stageAt:now()},
@@ -7889,7 +7904,8 @@ function oSettleModal(id){
     ${req?`<div class="note">📨 <b>${esc(req.by)}</b> 정산 요청 · ${fmtDT(req.at)} · 귀속월 ${ymLabel(req.month)}${req.note?`<br>${esc(req.note)}`:''}</div>`:''}
     <div class="kv"><b>확정 금액</b>${money(gross)}</div>
     <div class="kv"><b>반품 차감</b>${ret?`<span style="color:var(--red-dark)">- ${money(ret)}</span> (${oRetOk(o).length}건)`:'없음'}</div>
-    <label>정산 금액 <span style="font-weight:500">(반품 차감 반영값)</span></label>
+    ${oPrepaid(o)?`<div class="kv"><b>선결제 프로파일</b><span style="color:var(--sub)">- ${money(oPrepaid(o))} (정산 제외)</span></div>`:''}
+    <label>정산 금액 <span style="font-weight:500">(반품${oPrepaid(o)?'·선결제':''} 차감 반영값)</span></label>
     <input id="stAmt" type="number" inputmode="numeric" value="${net}">
     <label>정산 ${isDir?'귀속월':'지급월'}</label>
     <input id="stMonth" type="month" value="${ymOf(now())}">
@@ -7991,7 +8007,7 @@ async function oBulkSettleReq(billTo){
   let ok=0;
   for(const o of list){
     const req = { at:now(), by:actorLabel(), month, gross:oAmount(o)||0,
-                  returnAmt:oReturnAmt(o), amount:oNetAmount(o), note:'일괄 정산 요청' };
+                  returnAmt:oReturnAmt(o), prepaid:oPrepaid(o), amount:oNetAmount(o), note:'일괄 정산 요청' };
     try{ await store.updateOrder(o.id, {settleReq:req, stage:'SREQ', stageAt:now()},
            oEntry(`정산 요청 (${money(req.amount)} · ${ymLabel(month)})`)); ok++; }
     catch(e){ console.warn('bulk settle req', e); }
@@ -8038,7 +8054,7 @@ function printBill(billTo){
       ${list.map(o=>`<tr>
         <td style="${box}">${esc(o.id)}</td><td style="${box}">${esc(o.site)}</td><td style="${box}">${o.cat}</td>
         <td style="${box}">${esc(o.builder)}</td><td style="${box}">${fmtD(o.receipt.receivedAt)}</td>
-        <td style="${box}text-align:right">${oNetAmount(o).toLocaleString('ko-KR')}${oReturnAmt(o)?`<div style="font-size:8pt;color:#B32B22">반품 -${oReturnAmt(o).toLocaleString('ko-KR')}</div>`:''}</td></tr>`).join('')}
+        <td style="${box}text-align:right">${oNetAmount(o).toLocaleString('ko-KR')}${oReturnAmt(o)?`<div style="font-size:8pt;color:#B32B22">반품 -${oReturnAmt(o).toLocaleString('ko-KR')}</div>`:''}${oPrepaid(o)?`<div style="font-size:8pt;color:#555">선결제 프로파일 ${oPrepaid(o).toLocaleString('ko-KR')} 제외</div>`:''}</td></tr>`).join('')}
       <tr style="font-weight:700"><td style="${box}" colspan="5">공급가액</td><td style="${box}text-align:right">${total.toLocaleString('ko-KR')}</td></tr>
       <tr><td style="${box}" colspan="5">부가세 (10%)</td><td style="${box}text-align:right">${vat.toLocaleString('ko-KR')}</td></tr>
       <tr style="font-weight:800;background:#f8f8f8"><td style="${box}" colspan="5">합계금액</td>
@@ -8133,7 +8149,7 @@ function exportOrdersXlsx(){
   if(!list.length){ toast('내려받을 발주가 없습니다'); return; }
   const d = ts => ts ? fmtD(ts) : '';
   const num = v => (v==null||v==='') ? '' : Number(v);
-  const head1 = ['발주번호','품목','점포구분','진행방식','현장','시공사','공급사','청구처','현재 단계','등록일','견적 제출일','견적금액','본사 승인일','시공사 승인일','확정금액','납품 예정일','수령일','검수','반품 차감','청구금액(VAT별도)','정산 요청일','정산월','정산일','정산금액','중단 사유'];
+  const head1 = ['발주번호','품목','점포구분','진행방식','현장','시공사','공급사','청구처','현재 단계','등록일','견적 제출일','견적금액','본사 승인일','시공사 승인일','확정금액','납품 예정일','수령일','검수','반품 차감','청구금액(VAT별도)','정산 요청일','정산월','정산일','정산금액','중단 사유','선결제 프로파일(정산 제외)'];
   const rows1 = list.map(o=>[
     o.id, o.cat||'', o.type||'', oProcNm(o), o.site||'', oBld(o), o.supplier||'', oBillTo(o),
     O_NM[o.stage]||o.stage, d(o.createdAt), d(o.quote&&o.quote.ts), num(o.quote&&o.quote.amount),
@@ -8142,7 +8158,7 @@ function exportOrdersXlsx(){
     o.receipt ? (o.receipt.allOk===false ? '이상: '+(o.receipt.shortItems||'') : '이상없음') : '',
     num(oReturnAmt(o)||''), o.receipt?num(oNetAmount(o)):'',
     d(o.settleReq&&o.settleReq.at), (o.settle&&o.settle.month)||(o.settleReq&&o.settleReq.month)||'', d(o.settle&&o.settle.at), num(o.settle&&o.settle.amount),
-    o.stage==='CANCEL'?(o.cancelReason||''):''
+    o.stage==='CANCEL'?(o.cancelReason||''):'', num(oPrepaid(o)||'')
   ]);
   const head2 = ['발주번호','현장','품목','현재 단계','품목코드','품명','규격','단위','수량','단가','금액'];
   const rows2 = [];
@@ -8152,9 +8168,9 @@ function exportOrdersXlsx(){
   });
   const live = rows1.filter(r=>r[8]!==O_NM.CANCEL);   /* 합계는 중단 건 제외 */
   const sum = (rows, ci) => live.reduce((a,r)=>a+(typeof r[ci]==='number'?r[ci]:0),0);
-  rows1.push([]); rows1.push(['합계 (중단 제외)','','','','','','','','',`${live.length}건`,'',sum(rows1,11),'','',sum(rows1,14),'','','',sum(rows1,18),sum(rows1,19),'','','',sum(rows1,23),'']);
+  rows1.push([]); rows1.push(['합계 (중단 제외)','','','','','','','','',`${live.length}건`,'',sum(rows1,11),'','',sum(rows1,14),'','','',sum(rows1,18),sum(rows1,19),'','','',sum(rows1,23),'',sum(rows1,25)]);
   const blob = buildXlsxBook([
-    {name:'발주현황', rows:[head1, ...rows1], widths:[16,6,8,10,26,14,12,14,12,11,11,13,11,11,13,11,11,14,11,14,11,9,11,13,20]},
+    {name:'발주현황', rows:[head1, ...rows1], widths:[16,6,8,10,26,14,12,14,12,11,11,13,11,11,13,11,11,14,11,14,11,9,11,13,20,16]},
     {name:'품목내역', rows:[head2, ...rows2], widths:[16,26,6,12,13,30,30,6,8,11,13]}
   ]);
   const scNm = sc==='month' ? `정산월${(state.settleMonth||ymOf(now())).replace('-','')}` : sc==='all' ? '조명타일' : (appCat(state.app)||'전체');
